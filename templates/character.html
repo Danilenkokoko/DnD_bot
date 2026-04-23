@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body { background:#111827; color:white; font-family:sans-serif; padding:20px; }
+.card { background:#1f2937; padding:16px; border-radius:12px; margin:8px; }
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+</style>
+</head>
+
+<body>
+
+<div class="card">
+  <h1>{{ name }}</h1>
+  <p>{{ race }} {{ class_name }} | Level {{ level }}</p>
+</div>
+
+<div class="grid">
+
+<div class="card">
+<h2>Stats</h2>
+<p>STR: {{ stats.STR }}</p>
+<p>DEX: {{ stats.DEX }}</p>
+<p>CON: {{ stats.CON }}</p>
+<p>INT: {{ stats.INT }}</p>
+<p>WIS: {{ stats.WIS }}</p>
+<p>CHA: {{ stats.CHA }}</p>
+</div>
+
+<div class="card">
+<h2>Combat</h2>
+<p>HP: {{ hp }}</p>
+<p>AC: {{ ac }}</p>
+</div>
+
+<div class="card">
+<h2>Skills</h2>
+{% for s in skills %}
+<p>• {{ s }}</p>
+{% endfor %}
+</div>
+
+<div class="card">
+<h2>Equipment</h2>
+{% for e in equipment %}
+<p>• {{ e }}</p>
+{% endfor %}
+</div>
+
+<div class="card" style="grid-column: span 2;">
+<h2>Spells</h2>
+{% if spells %}
+{% for sp in spells %}
+<p>• {{ sp }}</p>
+{% endfor %}
+{% else %}
+<p>No spells</p>
+{% endif %}
+</div>
+
+</div>
+
+</body>
+</html>

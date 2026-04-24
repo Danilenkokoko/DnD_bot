@@ -1,47 +1,11 @@
+# В начале файла bot.py добавьте эти импорты:
 import asyncio
 import os
-import re
-import logging
 import signal
 import sys
+import logging
+import re
 import tempfile
-
-PID_FILE = "bot.pid"
-
-
-def check_pid_file():
-    """Проверяет, не запущен ли уже бот"""
-    if os.path.exists(PID_FILE):
-        try:
-            with open(PID_FILE, 'r') as f:
-                old_pid = int(f.read().strip())
-
-            # Проверяем, существует ли процесс с таким PID
-            try:
-                os.kill(old_pid, 0)
-                print(f"❌ Бот уже запущен с PID {old_pid}")
-                print(f"Убейте процесс командой: kill -9 {old_pid} или удалите файл {PID_FILE}")
-                sys.exit(1)
-            except OSError:
-                # Процесс не существует, можно удалить файл
-                os.remove(PID_FILE)
-        except:
-            pass
-
-    # Записываем текущий PID
-    with open(PID_FILE, 'w') as f:
-        f.write(str(os.getpid()))
-
-
-def cleanup_pid_file():
-    """Удаляет файл PID при выходе"""
-    try:
-        if os.path.exists(PID_FILE):
-            os.remove(PID_FILE)
-    except:
-        pass
-
-
 from aiogram import Bot, Dispatcher, F
 from aiogram.exceptions import TelegramNetworkError
 from aiogram.types import (
@@ -65,6 +29,45 @@ from db import (
 from dnd_logic import calc_hp, calc_ac, CLASS_DATA
 from pdf_generator import generate_pdf
 
+# PID файл для предотвращения двойного запуска
+PID_FILE = "bot.pid"
+
+
+def check_pid_file():
+    """Проверяет, не запущен ли уже бот"""
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE, 'r') as f:
+                old_pid = int(f.read().strip())
+
+            # Проверяем, существует ли процесс с таким PID
+            try:
+                os.kill(old_pid, 0)
+                print(f"❌ Бот уже запущен с PID {old_pid}")
+                print(f"Убейте процесс командой: kill -9 {old_pid}")
+                return False
+            except OSError:
+                # Процесс не существует, можно удалить файл
+                os.remove(PID_FILE)
+        except:
+            pass
+
+    # Записываем текущий PID
+    with open(PID_FILE, 'w') as f:
+        f.write(str(os.getpid()))
+
+    return True
+
+
+def cleanup_pid_file():
+    """Удаляет файл PID при выходе"""
+    try:
+        if os.path.exists(PID_FILE):
+            os.remove(PID_FILE)
+    except:
+        pass
+
+
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
@@ -77,7 +80,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     logger.error("❌ BOT_TOKEN не найден в .env")
-    exit(1)
+    sys.exit(1)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -182,7 +185,6 @@ async def class_chosen(call: CallbackQuery, state: FSMContext):
     try:
         class_name = call.data.split("_")[1]
 
-        # Проверяем, существует ли такой класс
         if class_name not in CLASS_DATA:
             await call.answer("❌ Такого класса нет", show_alert=True)
             return
@@ -212,7 +214,6 @@ async def race_chosen(call: CallbackQuery, state: FSMContext):
 
         data = await state.get_data()
 
-        # Валидация данных
         required_fields = ["name", "class_name", "race"]
         for field in required_fields:
             if field not in data:
@@ -220,18 +221,15 @@ async def race_chosen(call: CallbackQuery, state: FSMContext):
                 await state.clear()
                 return
 
-        # Базовые характеристики
         stats = {
             "STR": 15, "DEX": 14, "CON": 13,
             "INT": 12, "WIS": 10, "CHA": 8
         }
 
-        # Расчет HP и AC
         hp = calc_hp(data["class_name"], stats["CON"])
         ac = calc_ac(stats["DEX"])
         class_data = CLASS_DATA[data["class_name"]]
 
-        # Сохраняем в базу данных
         try:
             save_character(
                 call.from_user.id,
@@ -243,17 +241,15 @@ async def race_chosen(call: CallbackQuery, state: FSMContext):
                 class_data["equipment"],
                 class_data["spells"]
             )
-            logger.info(f"Персонаж {data['name']} сохранен для user {call.from_user.id}")
+            logger.info(f"Персонаж {data['name']} сохранен")
         except Exception as e:
             logger.error(f"DB save error: {e}")
-            await call.message.answer("❌ Ошибка при сохранении в базу данных. Попробуй еще раз.")
+            await call.message.answer("❌ Ошибка при сохранении в базу данных")
             await state.clear()
             return
 
-        # Генерируем PDF
         safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", data["name"])
 
-        # Используем временный файл
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf',
                                          prefix=f"{call.from_user.id}_{safe_name}_") as tmp_file:
             temp_pdf_file = tmp_file.name
@@ -275,25 +271,21 @@ async def race_chosen(call: CallbackQuery, state: FSMContext):
             if pdf_file and os.path.exists(pdf_file):
                 await call.message.answer_document(
                     FSInputFile(pdf_file),
-                    caption=f"✅ Персонаж *{data['name']}* успешно создан!\n\n🎭 Класс: {data['class_name']}\n🧝 Раса: {race}\n❤️ HP: {hp} | 🛡️ AC: {ac}",
+                    caption=f"✅ Персонаж *{data['name']}* успешно создан!",
                     parse_mode="Markdown"
                 )
             else:
                 await call.message.answer(
-                    f"✅ Персонаж *{data['name']}* создан!\n\n"
+                    f"✅ Персонаж *{data['name']}* создан!\n"
                     f"🎭 Класс: {data['class_name']}\n"
                     f"🧝 Раса: {race}\n"
-                    f"❤️ HP: {hp} | 🛡️ AC: {ac}\n\n"
-                    f"⚠️ PDF не сгенерирован (проверь шаблон)",
+                    f"❤️ HP: {hp} | 🛡️ AC: {ac}",
                     parse_mode="Markdown"
                 )
         except Exception as e:
             logger.error(f"PDF generation error: {e}")
             await call.message.answer(
-                f"✅ Персонаж *{data['name']}* создан!\n\n"
-                f"🎭 Класс: {data['class_name']}\n"
-                f"🧝 Раса: {race}\n"
-                f"❤️ HP: {hp} | 🛡️ AC: {ac}",
+                f"✅ Персонаж *{data['name']}* создан!",
                 parse_mode="Markdown"
             )
 
@@ -302,11 +294,10 @@ async def race_chosen(call: CallbackQuery, state: FSMContext):
 
     except Exception as e:
         logger.error(f"Error in race_chosen: {e}")
-        await call.message.answer(f"❌ Произошла ошибка: {str(e)}\nНачни заново /start")
+        await call.message.answer(f"❌ Произошла ошибка. Начни заново /start")
         await state.clear()
 
     finally:
-        # Удаляем временный PDF файл
         if temp_pdf_file and os.path.exists(temp_pdf_file):
             try:
                 os.remove(temp_pdf_file)
@@ -336,7 +327,7 @@ async def show_my_characters(m: Message):
         chars = get_user_characters(m.from_user.id)
 
         if not chars:
-            await m.answer("📭 У тебя пока нет персонажей. Создай первого с помощью кнопки '➕ Создать персонажа'!")
+            await m.answer("📭 У тебя пока нет персонажей. Создай первого!")
             return
 
         keyboard = characters_keyboard(chars)
@@ -347,7 +338,7 @@ async def show_my_characters(m: Message):
 
     except Exception as e:
         logger.error(f"Error in show_my_characters: {e}")
-        await m.answer("❌ Ошибка при загрузке персонажей. Попробуй позже.")
+        await m.answer("❌ Ошибка при загрузке персонажей")
 
 
 # ---------- CHARACTER DETAILS ----------
@@ -362,7 +353,6 @@ async def show_character_details(call: CallbackQuery):
             await call.answer()
             return
 
-        # Формируем сообщение с данными персонажа
         message_text = (
             f"📖 *{char['name']}*\n"
             f"━━━━━━━━━━━━━━━━━━\n"
@@ -391,7 +381,7 @@ async def show_character_details(call: CallbackQuery):
 
     except Exception as e:
         logger.error(f"Error in show_character_details: {e}")
-        await call.answer("❌ Ошибка при загрузке персонажа", show_alert=True)
+        await call.answer("❌ Ошибка", show_alert=True)
 
 
 # ---------- GENERATE PDF ----------
@@ -409,7 +399,6 @@ async def generate_character_pdf(call: CallbackQuery):
 
         await call.answer("⏳ Генерирую PDF...")
 
-        # Подготавливаем данные для PDF
         stats = {
             "STR": char['str'],
             "DEX": char['dex'],
@@ -419,13 +408,11 @@ async def generate_character_pdf(call: CallbackQuery):
             "CHA": char['cha']
         }
 
-        # Создаем временный файл
         safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", char['name'])
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf',
                                          prefix=f"{call.from_user.id}_{safe_name}_") as tmp_file:
             temp_pdf_file = tmp_file.name
 
-        # Генерируем PDF
         pdf_file = generate_pdf({
             "name": char['name'],
             "class_name": char['class_name'],
@@ -446,7 +433,7 @@ async def generate_character_pdf(call: CallbackQuery):
                 parse_mode="Markdown"
             )
         else:
-            await call.message.answer("❌ Не удалось создать PDF. Проверь наличие шаблона character.html")
+            await call.message.answer("❌ Не удалось создать PDF")
 
         await call.answer()
 
@@ -455,7 +442,6 @@ async def generate_character_pdf(call: CallbackQuery):
         await call.answer("❌ Ошибка при создании PDF", show_alert=True)
 
     finally:
-        # Удаляем временный файл
         if temp_pdf_file and os.path.exists(temp_pdf_file):
             try:
                 os.remove(temp_pdf_file)
@@ -503,9 +489,9 @@ async def delete_character_from_db(call: CallbackQuery):
         if success:
             await call.message.edit_text("🗑️ Персонаж успешно удален!")
             await call.message.answer("🎮 Главное меню", reply_markup=main_menu())
-            logger.info(f"Character {char_id} deleted by user {call.from_user.id}")
+            logger.info(f"Character {char_id} deleted")
         else:
-            await call.message.edit_text("❌ Не удалось удалить персонажа или он не принадлежит тебе")
+            await call.message.edit_text("❌ Не удалось удалить персонажа")
 
         await call.answer()
 
@@ -528,14 +514,10 @@ async def help_command(m: Message):
     help_text = (
         "📚 *D&D Character Creator - Помощь*\n\n"
         "🔹 *Создать персонажа* - создай нового персонажа\n"
-        "🔹 *Мои персонажи* - посмотреть список твоих персонажей\n"
+        "🔹 *Мои персонажи* - посмотреть список персонажей\n"
         "🔹 /cancel - отменить текущее действие\n"
         "🔹 /start - вернуться в главное меню\n"
-        "🔹 /help - показать эту справку\n\n"
-        "После создания персонажа ты можешь:\n"
-        "• Скачать PDF с листом персонажа\n"
-        "• Просмотреть характеристики\n"
-        "• Удалить персонажа"
+        "🔹 /help - показать эту справку"
     )
     await m.answer(help_text, parse_mode="Markdown", reply_markup=main_menu())
 
@@ -543,24 +525,36 @@ async def help_command(m: Message):
 # ---------- GLOBAL ERROR HANDLER ----------
 @dp.errors()
 async def global_error_handler(update, exception):
-    """Глобальный обработчик ошибок"""
     logger.error(f"Global error - Update: {update}, Exception: {exception}")
-    return True  # Не позволяем ошибке остановить бота
+    return True
 
 
 # ---------- RUN BOT ----------
 async def main():
     """Запуск бота"""
-    check_pid_file()
-    signal.signal(signal.SIGTERM, lambda *args: cleanup_pid_file())
-    signal.signal(signal.SIGINT, lambda *args: cleanup_pid_file())
+    # Проверяем PID файл
+    if not check_pid_file():
+        sys.exit(1)
+
+    # Устанавливаем обработчики сигналов
+    signal.signal(signal.SIGINT, lambda s, f: cleanup_pid_file())
+    signal.signal(signal.SIGTERM, lambda s, f: cleanup_pid_file())
+
     # Инициализируем базу данных
     try:
         init_database()
         logger.info("✅ База данных инициализирована")
     except Exception as e:
         logger.error(f"❌ Ошибка инициализации БД: {e}")
+        cleanup_pid_file()
         return
+
+    # Удаляем webhook при старте
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("✅ Webhook удален")
+    except Exception as e:
+        logger.error(f"Ошибка удаления webhook: {e}")
 
     # Информация о боте
     try:
@@ -568,6 +562,7 @@ async def main():
         logger.info(f"🚀 Бот {bot_info.username} запущен!")
     except Exception as e:
         logger.error(f"❌ Ошибка подключения к Telegram API: {e}")
+        cleanup_pid_file()
         return
 
     # Запускаем поллинг
@@ -581,11 +576,16 @@ async def main():
         logger.error(f"Unexpected error in main: {e}")
     finally:
         await bot.session.close()
+        cleanup_pid_file()
         logger.info("Бот завершил работу")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    finally:
+    except KeyboardInterrupt:
+        print("\n👋 Бот остановлен пользователем")
+        cleanup_pid_file()
+    except Exception as e:
+        print(f"❌ Критическая ошибка: {e}")
         cleanup_pid_file()

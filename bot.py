@@ -1,6 +1,10 @@
 import asyncio
 import os
 import re
+import asyncio
+import logging
+from aiogram import Bot, Dispatcher
+from aiogram.exceptions import TelegramNetworkError
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import (
@@ -23,6 +27,7 @@ from db import (
 from dnd_logic import calc_hp, calc_ac, CLASS_DATA
 from pdf_generator import generate_pdf
 
+logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
 bot = Bot(token=os.getenv("BOT_TOKEN"))
@@ -36,6 +41,21 @@ class Char(StatesGroup):
     name = State()
     class_name = State()
     race = State()
+
+
+async def main():
+    while True:  # Бесконечный цикл переподключения
+        try:
+            await dp.start_polling(bot)
+        except TelegramNetworkError as e:
+            logging.error(f"Сетевая ошибка: {e}. Переподключение через 5 секунд...")
+            await asyncio.sleep(5)
+        except Exception as e:
+            logging.error(f"Неожиданная ошибка: {e}. Перезапуск через 10 секунд...")
+            await asyncio.sleep(10)
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 
 # ---------- MENU ----------

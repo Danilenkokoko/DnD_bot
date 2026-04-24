@@ -43,21 +43,6 @@ class Char(StatesGroup):
     race = State()
 
 
-async def main():
-    while True:  # Бесконечный цикл переподключения
-        try:
-            await dp.start_polling(bot)
-        except TelegramNetworkError as e:
-            logging.error(f"Сетевая ошибка: {e}. Переподключение через 5 секунд...")
-            await asyncio.sleep(5)
-        except Exception as e:
-            logging.error(f"Неожиданная ошибка: {e}. Перезапуск через 10 секунд...")
-            await asyncio.sleep(10)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-
-
 # ---------- MENU ----------
 def main_menu():
     return ReplyKeyboardMarkup(

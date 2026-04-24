@@ -2,7 +2,46 @@ import asyncio
 import os
 import re
 import logging
+import signal
+import sys
 import tempfile
+
+PID_FILE = "bot.pid"
+
+
+def check_pid_file():
+    """Проверяет, не запущен ли уже бот"""
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE, 'r') as f:
+                old_pid = int(f.read().strip())
+
+            # Проверяем, существует ли процесс с таким PID
+            try:
+                os.kill(old_pid, 0)
+                print(f"❌ Бот уже запущен с PID {old_pid}")
+                print(f"Убейте процесс командой: kill -9 {old_pid} или удалите файл {PID_FILE}")
+                sys.exit(1)
+            except OSError:
+                # Процесс не существует, можно удалить файл
+                os.remove(PID_FILE)
+        except:
+            pass
+
+    # Записываем текущий PID
+    with open(PID_FILE, 'w') as f:
+        f.write(str(os.getpid()))
+
+
+def cleanup_pid_file():
+    """Удаляет файл PID при выходе"""
+    try:
+        if os.path.exists(PID_FILE):
+            os.remove(PID_FILE)
+    except:
+        pass
+
+
 from aiogram import Bot, Dispatcher, F
 from aiogram.exceptions import TelegramNetworkError
 from aiogram.types import (
@@ -512,6 +551,9 @@ async def global_error_handler(update, exception):
 # ---------- RUN BOT ----------
 async def main():
     """Запуск бота"""
+    check_pid_file()
+    signal.signal(signal.SIGTERM, lambda *args: cleanup_pid_file())
+    signal.signal(signal.SIGINT, lambda *args: cleanup_pid_file())
     # Инициализируем базу данных
     try:
         init_database()
@@ -543,4 +585,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    finally:
+        cleanup_pid_file())

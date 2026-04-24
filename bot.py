@@ -165,9 +165,10 @@ async def race_chosen(call: CallbackQuery, state: FSMContext):
         temp_pdf_file = tmp.name
         tmp.close()
 
+        print(data)
         pdf_file = generate_pdf({
             "name": data["name"],
-            "class": class_name,
+            "class_name": class_name,  # ✅ исправлено
             "race": race,
             "level": 1,
             "stats": stats,

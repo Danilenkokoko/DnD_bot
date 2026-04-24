@@ -1,7 +1,7 @@
 import psycopg2
 import os
 from dotenv import load_dotenv
-from psycopg2.extras import Json
+from psycopg2.extras import Json, RealDictCursor
 from contextlib import contextmanager
 
 load_dotenv(encoding='utf-8')
@@ -10,7 +10,6 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 if DB_PASSWORD:
     DB_PASSWORD = DB_PASSWORD.strip()
 
-# Параметры подключения
 DB_CONFIG = {
     'dbname': os.getenv('DB_NAME'),
     'user': os.getenv('DB_USER'),
@@ -19,7 +18,6 @@ DB_CONFIG = {
     'port': 5432
 }
 
-# Контекстный менеджер для управления соединениями
 @contextmanager
 def get_connection():
     conn = None
@@ -35,6 +33,35 @@ def get_connection():
         if conn:
             conn.close()
 
+def init_database():
+    """Создает таблицу если она не существует"""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS characters (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    name VARCHAR(100) NOT NULL,
+                    class_name VARCHAR(50) NOT NULL,
+                    race VARCHAR(50) NOT NULL,
+                    str INTEGER DEFAULT 10,
+                    dex INTEGER DEFAULT 10,
+                    con INTEGER DEFAULT 10,
+                    int INTEGER DEFAULT 10,
+                    wis INTEGER DEFAULT 10,
+                    cha INTEGER DEFAULT 10,
+                    hp INTEGER DEFAULT 0,
+                    ac INTEGER DEFAULT 10,
+                    level INTEGER DEFAULT 1,
+                    skills JSONB DEFAULT '{}',
+                    equipment JSONB DEFAULT '[]',
+                    spells JSONB DEFAULT '[]',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_characters_user_id ON characters(user_id)")
+            conn.commit()
+            print("✅ Таблица characters готова")
 
 def save_character(user_id, data, stats, hp, ac, skills, equipment, spells):
     with get_connection() as conn:
@@ -43,39 +70,36 @@ def save_character(user_id, data, stats, hp, ac, skills, equipment, spells):
                 INSERT INTO characters (
                     user_id, name, class_name, race,
                     str, dex, con, int, wis, cha,
-                    hp, ac, skills, equipment, spells
+                    hp, ac, level, skills, equipment, spells
                 )
                 VALUES (%s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s)
+                        %s, %s, %s, %s, %s, %s)
             """, (
                 user_id,
                 data.get("name"),
                 data.get("class_name"),
                 data.get("race"),
-                stats.get("STR"), stats.get("DEX"), stats.get("CON"),
-                stats.get("INT"), stats.get("WIS"), stats.get("CHA"),
-                hp, ac,
+                stats.get("STR", 10), stats.get("DEX", 10), stats.get("CON", 10),
+                stats.get("INT", 10), stats.get("WIS", 10), stats.get("CHA", 10),
+                hp, ac, 1,
                 Json(skills), Json(equipment), Json(spells)
             ))
-
 
 def get_user_characters(user_id):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, class_name, race, level FROM characters WHERE user_id = %s",
+                "SELECT id, name, class_name, race, level FROM characters WHERE user_id = %s ORDER BY id DESC",
                 (user_id,)
             )
             return cur.fetchall()
 
-
 def get_character_by_id(char_id):
     with get_connection() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT * FROM characters WHERE id = %s", (char_id,))
             return cur.fetchone()
-
 
 def delete_character(char_id, user_id):
     with get_connection() as conn:
@@ -84,3 +108,4 @@ def delete_character(char_id, user_id):
                 "DELETE FROM characters WHERE id = %s AND user_id = %s",
                 (char_id, user_id)
             )
+            return cur.rowcount > 0  # Возвращает True если удалили

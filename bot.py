@@ -588,4 +588,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     finally:
-        cleanup_pid_file())
+        cleanup_pid_file()

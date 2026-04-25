@@ -79,6 +79,8 @@ def get_connection():
 # ---------------- INIT ----------------
 def init_database():
     """Создаёт таблицы если они не существуют"""
+    # Сначала создаём БД если её нет
+    create_database_if_not_exists()
     with get_connection() as conn:
         with conn.cursor() as cur:
             # Таблица персонажей

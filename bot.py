@@ -36,7 +36,11 @@ from pdf_generator import generate_pdf
 # ---------------- CONFIG ----------------
 load_dotenv()
 
-bot = Bot(token=os.getenv("BOT_TOKEN"))
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise ValueError("❌ BOT_TOKEN не найден в .env файле")
+
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 logging.basicConfig(level=logging.INFO)
@@ -45,14 +49,14 @@ logger = logging.getLogger(__name__)
 
 # ---------------- FSM STATES ----------------
 class CreateCharacter(StatesGroup):
-    race = State()  # 1. Выбор расы
-    subrace = State()  # 1а. Выбор подрасы (если есть)
-    char_class = State()  # 2. Выбор класса
-    name = State()  # 3. Ввод имени
-    background = State()  # 4. Выбор предыстории
-    equipment = State()  # 5. Выбор снаряжения А или Б
-    backstory = State()  # 6. Ввод истории
-    image = State()  # 7. Загрузка картинки
+    race = State()          # 1. Выбор расы
+    subrace = State()       # 1а. Выбор подрасы (если есть)
+    char_class = State()    # 2. Выбор класса
+    name = State()          # 3. Ввод имени
+    background = State()    # 4. Выбор предыстории
+    equipment = State()     # 5. Выбор снаряжения А или Б
+    backstory = State()     # 6. Ввод истории
+    image = State()         # 7. Загрузка картинки
 
 
 # ---------------- MENU ----------------
@@ -184,13 +188,21 @@ def create_delete_keyboard(characters: list) -> InlineKeyboardMarkup:
 @dp.message(Command("start"))
 async def start(m: Message, state: FSMContext):
     await state.clear()
-    count = get_user_characters_count(m.from_user.id)
-    await m.answer(
-        f"🎮 Добро пожаловать в D&D Character Creator!\n\n"
-        f"У вас создано персонажей: {count}\n\n"
-        f"Используйте кнопки меню для создания нового персонажа или просмотра существующих.",
-        reply_markup=main_menu()
-    )
+    try:
+        count = get_user_characters_count(m.from_user.id)
+        await m.answer(
+            f"🎮 Добро пожаловать в D&D Character Creator!\n\n"
+            f"У вас создано персонажей: {count}\n\n"
+            f"Используйте кнопки меню для создания нового персонажа или просмотра существующих.",
+            reply_markup=main_menu()
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при старте: {e}")
+        await m.answer(
+            "🎮 Добро пожаловать в D&D Character Creator!\n\n"
+            "Используйте кнопки меню для создания нового персонажа.",
+            reply_markup=main_menu()
+        )
 
 
 @dp.message(F.text == "❌ Отмена")
@@ -218,7 +230,6 @@ async def select_race(call: CallbackQuery, state: FSMContext):
     race = call.data.replace("race_", "")
     await state.update_data(race=race)
 
-    # Проверяем наличие подрас
     race_info = get_race_info(race)
     subraces = race_info.get("subraces", {})
 
@@ -432,10 +443,8 @@ async def skip_image(m: Message, state: FSMContext):
 
 @dp.message(CreateCharacter.image, F.photo)
 async def set_image(m: Message, state: FSMContext):
-    # Берём самое большое фото
     photo = m.photo[-1]
     file_id = photo.file_id
-
     await finalize_character(m, state, image_file_id=file_id)
 
 
@@ -481,6 +490,10 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         equipment_text = bg_info.get(f"equipment_{equipment_choice.lower()}", "")
         equipment_list = [item.strip() for item in equipment_text.split(",") if item.strip()]
 
+        # ИСПРАВЛЕНО: Получаем умения ТОЛЬКО для 1-го уровня
+        all_features = class_info.get("features", {})
+        first_level_features = all_features.get(1, [])
+
         # Сохраняем в БД
         char_id = save_character(
             user_id=m.from_user.id,
@@ -493,7 +506,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
             hp=hp,
             ac=ac,
             race_traits=race_traits,
-            class_features=class_info.get("features", []),
+            class_features=first_level_features,
             skills=bg_info.get("skills", []),
             tools=[bg_info.get("tools", "")] if bg_info.get("tools") else [],
             equipment=equipment_list,
@@ -525,7 +538,9 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
             "proficiency_bonus": calculate_proficiency_bonus(1),
             "background": background,
             "background_trait": bg_info.get("trait", ""),
+            "background_description": bg_info.get("description", ""),
             "race_traits": race_traits,
+            "class_features": first_level_features,
             "backstory": backstory
         }
 
@@ -607,7 +622,6 @@ async def view_character(call: CallbackQuery):
         await call.answer("❌ Персонаж не найден")
         return
 
-    # Формируем информацию
     info = (
         f"📛 **{character['name']}**\n\n"
         f"🧝 **Раса:** {character['race']}\n"
@@ -623,7 +637,6 @@ async def view_character(call: CallbackQuery):
         f"**История:** {character.get('backstory', 'Нет истории')[:200]}..."
     )
 
-    # Отправляем картинку если есть
     if character.get('image_file_id'):
         await call.message.answer_photo(
             photo=character['image_file_id'],
@@ -657,16 +670,13 @@ async def delete_character_menu(m: Message):
 async def confirm_delete(call: CallbackQuery):
     char_id = int(call.data.replace("delete_", ""))
 
-    # Получаем имя персонажа
     character = get_character_by_id(char_id)
     if not character:
         await call.answer("❌ Персонаж не найден")
         return
 
-    # Удаляем
     if delete_character(char_id, call.from_user.id):
-        await call.message.edit_text(f"✅ Персонаж **{character['name']}** успешно удалён!",
-                                     parse_mode=ParseMode.MARKDOWN)
+        await call.message.edit_text(f"✅ Персонаж **{character['name']}** успешно удалён!", parse_mode=ParseMode.MARKDOWN)
     else:
         await call.message.edit_text("❌ Не удалось удалить персонажа. Возможно, он не принадлежит вам.")
 
@@ -700,18 +710,12 @@ async def skip_command(m: Message, state: FSMContext):
 async def main():
     """Запуск бота"""
     try:
-        # Инициализация базы данных
         from db import init_database, migrate_database
 
         logger.info("🔄 Инициализация базы данных...")
-
-        # Сначала создаём таблицы
         init_database()
-
-        # Применяем миграции (для существующих таблиц)
         migrate_database()
 
-        # Принудительно перезагружаем кэш предысторий после инициализации БД
         try:
             from backgrounds_data import reload_cache
             reload_cache()
@@ -719,24 +723,27 @@ async def main():
         except Exception as e:
             logger.warning(f"⚠️ Не удалось загрузить кэш предысторий: {e}")
 
-        # Проверяем подключение к БД
-        from db import get_user_characters_count
         try:
-            count = get_user_characters_count(0)  # Тестовый запрос
+            from db import get_user_characters_count
+            get_user_characters_count(0)
             logger.info("✅ Подключение к базе данных установлено")
         except Exception as e:
             logger.error(f"❌ Ошибка подключения к базе данных: {e}")
-            logger.info("Проверьте настройки подключения в .env файле")
-            return
 
-        logger.info("🚀 Бот D&D Character Creator запущен!")
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("✅ Webhook удалён")
+
+        bot_info = await bot.get_me()
+        logger.info(f"✅ Бот запущен: @{bot_info.username}")
+
+        logger.info("=" * 50)
+        logger.info("🎲 Бот D&D Character Creator готов к работе!")
         logger.info("=" * 50)
 
-        # Запуск поллинга
         await dp.start_polling(bot)
 
     except Exception as e:
-        logger.error(f"❌ Критическая ошибка при запуске бота: {e}", exc_info=True)
+        logger.error(f"❌ Критическая ошибка: {e}", exc_info=True)
     finally:
         logger.info("🛑 Бот остановлен")
 

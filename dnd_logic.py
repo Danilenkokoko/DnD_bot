@@ -12,7 +12,7 @@ from backgrounds_data import (
     get_all_backgrounds, get_background_data, get_background_characteristics,
     get_background_trait, get_background_skills, get_background_tools,
     get_background_description, get_equipment_choice, get_equipment_options,
-    format_background_info, search_backgrounds, validate_background
+    format_background_info, search_backgrounds
 )
 
 
@@ -209,10 +209,12 @@ def validate_class(class_name: str) -> Tuple[bool, str]:
 
 
 def validate_background(background: str) -> Tuple[bool, str]:
-    """Проверяет предысторию"""
-    if not validate_background(background):
-        backgrounds = get_all_backgrounds()
-        return False, f"❌ Предыстория '{background}' не существует. Доступные предыстории: {', '.join(backgrounds)}"
+    """Проверяет предысторию - ИСПРАВЛЕНО (убрана рекурсия)"""
+    # Получаем список предысторий из БД
+    backgrounds = get_all_backgrounds()
+
+    if background not in backgrounds:
+        return False, f"❌ Предыстория '{background}' не существует. Доступные предыстории: {', '.join(backgrounds[:10])}..."
 
     return True, "✅ Предыстория корректна"
 
@@ -432,7 +434,7 @@ def get_level_up_info(character_class: str, constitution: int, current_level: in
 
     # Определяем, какие умения получает класс на новом уровне
     class_data = get_class_info(character_class)
-    level_features = class_data.get("level_features", {}).get(new_level, [])
+    level_features = class_data.get("features", {}).get(new_level, [])
 
     return {
         "new_level": new_level,
@@ -514,9 +516,9 @@ if __name__ == "__main__":
     print(f"   modifier(15) = {modifier(15)} (ожидается 2)")
     print(f"   modifier(10) = {modifier(10)} (ожидается 0)")
     print(f"   modifier(8) = {modifier(8)} (ожидается -1)")
-    assert modifier(15) == 2
-    assert modifier(10) == 0
-    assert modifier(8) == -1
+    assert modifier(15) == 2, "Ошибка в modifier(15)"
+    assert modifier(10) == 0, "Ошибка в modifier(10)"
+    assert modifier(8) == -1, "Ошибка в modifier(8)"
     print("   ✅ OK")
 
     # 2. Тест HP
@@ -524,7 +526,7 @@ if __name__ == "__main__":
     print(f"   Воин, CON=14, уровень 1: {calc_hp('Воин', 14)} (ожидается 12)")
     print(f"   Волшебник, CON=12, уровень 1: {calc_hp('Волшебник', 12)} (ожидается 7)")
     print(f"   Воин, CON=14, уровень 3: {calc_hp('Воин', 14, 3)}")
-    assert calc_hp('Воин', 14) == 12
+    assert calc_hp('Воин', 14) == 12, "Ошибка в calc_hp для Воина"
     print("   ✅ OK")
 
     # 3. Тест AC
@@ -556,7 +558,10 @@ if __name__ == "__main__":
     print("\n7. Тест предысторий:")
     backgrounds = get_background_list()
     print(f"   Всего предысторий: {len(backgrounds)}")
-    print(f"   Первые 5: {', '.join(backgrounds[:5])}")
+    if backgrounds:
+        print(f"   Первые 5: {', '.join(backgrounds[:5])}")
+    else:
+        print("   ⚠️ Предыстории не загружены (проверьте БД)")
 
     # 8. Тест начальных характеристик
     print("\n8. Тест начальных характеристик:")
@@ -575,6 +580,9 @@ if __name__ == "__main__":
 
     valid, msg = validate_character("", "Воин", "Человек", "Мудрец", test_stats)
     print(f"   Пустое имя: {msg}")
+
+    valid, msg = validate_character("Герой", "НесуществующийКласс", "Человек", "Мудрец", test_stats)
+    print(f"   Несуществующий класс: {msg}")
 
     # 10. Тест информации о классе
     print("\n10. Тест информации о классе:")

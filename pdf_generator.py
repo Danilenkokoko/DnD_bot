@@ -37,19 +37,12 @@ DEFAULT_HTML_TEMPLATE = '''
             padding: 20px;
         }
 
-        /* Основной контейнер */
         .sheet {
             max-width: 1100px;
             margin: 0 auto;
             background: #faf8f0;
             box-shadow: 0 0 20px rgba(0,0,0,0.1);
             padding: 20px;
-        }
-
-        /* Заголовки */
-        h1, h2, h3 {
-            font-family: 'Georgia', 'Times New Roman', serif;
-            font-weight: normal;
         }
 
         .header {
@@ -65,7 +58,6 @@ DEFAULT_HTML_TEMPLATE = '''
             letter-spacing: 2px;
         }
 
-        /* Основная информация */
         .basic-info {
             display: grid;
             grid-template-columns: 2fr 1fr 1fr;
@@ -95,7 +87,6 @@ DEFAULT_HTML_TEMPLATE = '''
             font-weight: bold;
         }
 
-        /* 6 колонок характеристик */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(6, 1fr);
@@ -129,7 +120,6 @@ DEFAULT_HTML_TEMPLATE = '''
             color: #555;
         }
 
-        /* Спасброски и навыки */
         .saves-skills {
             display: grid;
             grid-template-columns: 1fr 2fr;
@@ -161,19 +151,6 @@ DEFAULT_HTML_TEMPLATE = '''
             font-size: 12px;
         }
 
-        .save-name, .skill-name {
-            font-weight: normal;
-        }
-
-        .save-mod, .skill-mod {
-            font-weight: bold;
-        }
-
-        .proficient {
-            color: #2c5f2d;
-        }
-
-        /* Боевые характеристики */
         .combat-stats {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -199,7 +176,6 @@ DEFAULT_HTML_TEMPLATE = '''
             font-weight: bold;
         }
 
-        /* Секции для предыстории, снаряжения и особенностей */
         .detail-section {
             margin-bottom: 20px;
         }
@@ -222,39 +198,24 @@ DEFAULT_HTML_TEMPLATE = '''
             line-height: 1.5;
         }
 
-        .equipment-list, .traits-list, .skills-list {
+        .equipment-list, .traits-list {
             list-style: none;
             padding: 0;
         }
 
-        .equipment-list li, .traits-list li, .skills-list li {
+        .equipment-list li, .traits-list li {
             padding: 4px 0;
             border-bottom: 1px dotted #c4b89c;
         }
 
-        /* Заметки */
         .notes-section {
             background: #f0ebdf;
             padding: 15px;
             border-radius: 5px;
-            min-height: 150px;
+            min-height: 100px;
             margin-bottom: 20px;
         }
 
-        .notes-title {
-            font-size: 12px;
-            font-weight: bold;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-        }
-
-        .notes-content {
-            font-size: 11px;
-            line-height: 1.4;
-            color: #333;
-        }
-
-        /* Блок заклинаний (если есть) */
         .spells-section {
             margin-bottom: 20px;
         }
@@ -281,13 +242,12 @@ DEFAULT_HTML_TEMPLATE = '''
         }
 
         .spell-item {
-            background: #f0ebdf;
+            background: #e8e0d0;
             padding: 5px 10px;
             border-radius: 3px;
             font-size: 11px;
         }
 
-        /* Footer */
         .footer {
             text-align: center;
             font-size: 10px;
@@ -297,7 +257,6 @@ DEFAULT_HTML_TEMPLATE = '''
             border-top: 1px solid #c4b89c;
         }
 
-        /* Стили для печати */
         @media print {
             body {
                 background: white;
@@ -312,50 +271,43 @@ DEFAULT_HTML_TEMPLATE = '''
 </head>
 <body>
     <div class="sheet">
-        <!-- Заголовок -->
         <div class="header">
             <h1>{{ name }}</h1>
         </div>
 
-        <!-- Основная информация -->
         <div class="basic-info">
             <div>
                 <div class="info-row">
-                    <div class="info-label">Класс и уровень</div>
+                    <div class="info-label">КЛАСС И УРОВЕНЬ</div>
                     <div class="info-value">{{ class_name }} • Уровень {{ level }}</div>
                 </div>
                 <div class="info-row">
-                    <div class="info-label">Предыстория</div>
+                    <div class="info-label">ПРЕДЫСТОРИЯ</div>
                     <div class="info-value">{{ background }}</div>
                 </div>
                 <div class="info-row">
-                    <div class="info-label">Мировоззрение</div>
-                    <div class="info-value">{{ alignment if alignment else "Нейтральное" }}</div>
+                    <div class="info-label">МИРОВОЗЗРЕНИЕ</div>
+                    <div class="info-value">{{ alignment }}</div>
                 </div>
             </div>
             <div>
                 <div class="info-row">
-                    <div class="info-label">Раса</div>
+                    <div class="info-label">РАСА</div>
                     <div class="info-value">{{ race }}</div>
                 </div>
                 <div class="info-row">
-                    <div class="info-label">Опыт</div>
-                    <div class="info-value">{{ experience if experience else "0" }} / 300</div>
+                    <div class="info-label">ОПЫТ</div>
+                    <div class="info-value">{{ experience }} / 300 XP</div>
                 </div>
             </div>
             <div>
                 <div class="info-row">
-                    <div class="info-label">Игрок</div>
-                    <div class="info-value">{{ player_name if player_name else "—" }}</div>
-                </div>
-                <div class="info-row">
-                    <div class="info-label">Внешность</div>
+                    <div class="info-label">ВНЕШНОСТЬ</div>
                     <div class="info-value">{{ appearance if appearance else "—" }}</div>
                 </div>
             </div>
         </div>
 
-        <!-- Характеристики -->
         <div class="stats-grid">
             {% set stat_names = ["STR", "DEX", "CON", "INT", "WIS", "CHA"] %}
             {% for stat in stat_names %}
@@ -367,63 +319,44 @@ DEFAULT_HTML_TEMPLATE = '''
             {% endfor %}
         </div>
 
-        <!-- Спасброски и навыки -->
         <div class="saves-skills">
             <div class="saves-section">
-                <div class="section-title">Спасброски</div>
+                <div class="section-title">СПАСБРОСКИ</div>
                 {% for save in ["STR", "DEX", "CON", "INT", "WIS", "CHA"] %}
                 <div class="save-row">
-                    <span class="save-name">
-                        {% if save in saving_throws %}✓{% else %}•{% endif %} {{ save }}
-                    </span>
-                    <span class="save-mod">
-                        {% if save in saving_throws %}
-                            {{ (stats[save] - 10) // 2 + proficiency_bonus }}
-                        {% else %}
-                            {{ (stats[save] - 10) // 2 }}
-                        {% endif %}
-                    </span>
+                    <span>{% if save in saving_throws %}✓{% else %}•{% endif %} {{ save }}</span>
+                    <span>{% if save in saving_throws %}{{ (stats[save] - 10) // 2 + proficiency_bonus }}{% else %}{{ (stats[save] - 10) // 2 }}{% endif %}</span>
                 </div>
                 {% endfor %}
             </div>
             <div class="skills-section">
-                <div class="section-title">Навыки</div>
+                <div class="section-title">НАВЫКИ</div>
                 {% for skill in all_skills %}
                 <div class="skill-row">
-                    <span class="skill-name">
-                        {% if skill in skills %}✓{% else %}•{% endif %} {{ skill }}
-                    </span>
-                    <span class="skill-mod">
-                        {% if skill in skills %}
-                            {{ calculate_skill_mod(skill, stats, proficiency_bonus) }}
-                        {% else %}
-                            {{ calculate_skill_mod(skill, stats, 0) }}
-                        {% endif %}
-                    </span>
+                    <span>{% if skill in skills %}✓{% else %}•{% endif %} {{ skill }}</span>
+                    <span>{{ calculate_skill_mod(skill, stats, proficiency_bonus if skill in skills else 0) }}</span>
                 </div>
                 {% endfor %}
             </div>
         </div>
 
-        <!-- Боевые характеристики -->
         <div class="combat-stats">
             <div class="combat-card">
-                <div class="combat-label">Класс брони (AC)</div>
+                <div class="combat-label">КЛАСС БРОНИ (AC)</div>
                 <div class="combat-value">{{ ac }}</div>
             </div>
             <div class="combat-card">
-                <div class="combat-label">Хиты (HP)</div>
+                <div class="combat-label">ХИТЫ (HP)</div>
                 <div class="combat-value">{{ hp }}</div>
             </div>
             <div class="combat-card">
-                <div class="combat-label">Скорость</div>
-                <div class="combat-value">{{ speed if speed else "30" }} фт.</div>
+                <div class="combat-label">СКОРОСТЬ</div>
+                <div class="combat-value">{{ speed }} фт.</div>
             </div>
         </div>
 
-        <!-- Особенности расы и класса -->
         <div class="detail-section">
-            <div class="detail-title">Особенности и умения</div>
+            <div class="detail-title">ОСОБЕННОСТИ И УМЕНИЯ</div>
             <div class="detail-content">
                 <ul class="traits-list">
                     {% for trait in race_traits %}
@@ -439,13 +372,14 @@ DEFAULT_HTML_TEMPLATE = '''
             </div>
         </div>
 
-        <!-- Снаряжение -->
         <div class="detail-section">
-            <div class="detail-title">Снаряжение</div>
+            <div class="detail-title">СНАРЯЖЕНИЕ</div>
             <div class="detail-content">
                 <ul class="equipment-list">
                     {% for item in equipment %}
                     <li>{{ item }}</li>
+                    {% else %}
+                    <li>Нет снаряжения</li>
                     {% endfor %}
                 </ul>
                 {% if coins %}
@@ -456,25 +390,24 @@ DEFAULT_HTML_TEMPLATE = '''
             </div>
         </div>
 
-        <!-- Предыстория -->
         <div class="detail-section">
-            <div class="detail-title">Предыстория и личные качества</div>
+            <div class="detail-title">ПРЕДЫСТОРИЯ И ЛИЧНЫЕ КАЧЕСТВА</div>
             <div class="detail-content">
-                <p><strong>Черта:</strong> {{ background_trait }}</p>
+                {% if background_description %}
                 <p><strong>Описание предыстории:</strong></p>
                 <p>{{ background_description }}</p>
+                {% endif %}
                 <p><strong>История персонажа:</strong></p>
                 <p>{{ backstory }}</p>
             </div>
         </div>
 
-        <!-- Заклинания (если есть) -->
         {% if spells and spells|length > 0 %}
         <div class="spells-section">
-            <div class="detail-title">Заклинания</div>
+            <div class="detail-title">ЗАКЛИНАНИЯ</div>
             <div class="spell-slots">
-                <div class="slot-level">1-й уровень: {{ spell_slots_1 if spell_slots_1 else "2" }} ячейки</div>
-                <div class="slot-level">2-й уровень: {{ spell_slots_2 if spell_slots_2 else "0" }} ячейки</div>
+                <div class="slot-level">1-й уровень: {{ spell_slots_1 }} ячейки</div>
+                <div class="slot-level">2-й уровень: {{ spell_slots_2 }} ячеек</div>
             </div>
             <div class="spells-list">
                 {% for spell in spells %}
@@ -484,17 +417,15 @@ DEFAULT_HTML_TEMPLATE = '''
         </div>
         {% endif %}
 
-        <!-- Заметки -->
         <div class="notes-section">
-            <div class="notes-title">Заметки</div>
-            <div class="notes-content">
+            <div class="detail-title">ЗАМЕТКИ</div>
+            <div class="detail-content">
                 {{ notes if notes else "—" }}
             </div>
         </div>
 
-        <!-- Footer -->
         <div class="footer">
-            <p>Создано в D&D Character Creator • {{ created_date }}</p>
+            <p>D&D Character Sheet • Создано в D&D Character Creator • {{ created_date }}</p>
         </div>
     </div>
 </body>
@@ -612,19 +543,19 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
                 mod += prof_bonus
             return mod
 
-        # Подготавливаем данные для шаблона
+        # Подготавливаем данные для шаблона с значениями по умолчанию
         template_data = {
-            'name': data['name'],
-            'class_name': data['class_name'],
-            'race': data['race'],
-            'level': data['level'],
+            'name': data.get('name', 'Безымянный'),
+            'class_name': data.get('class_name', 'Без класса'),
+            'race': data.get('race', 'Неизвестно'),
+            'level': data.get('level', 1),
             'background': data.get('background', 'Нет'),
             'background_trait': data.get('background_trait', 'Нет'),
             'background_description': data.get('background_description', ''),
             'backstory': data.get('backstory', 'Нет истории'),
             'stats': data['stats'],
-            'hp': data['hp'],
-            'ac': data['ac'],
+            'hp': data.get('hp', 0),
+            'ac': data.get('ac', 10),
             'speed': data.get('speed', 30),
             'alignment': data.get('alignment', 'Нейтральное'),
             'player_name': data.get('player_name', ''),
@@ -640,7 +571,7 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
             'equipment': data.get('equipment', []),
             'coins': data.get('coins', ''),
             'spells': data.get('spells', []),
-            'spell_slots_1': data.get('spell_slots_1', 2),
+            'spell_slots_1': data.get('spell_slots_1', 0),
             'spell_slots_2': data.get('spell_slots_2', 0),
             'notes': data.get('notes', ''),
             'created_date': datetime.now().strftime("%d.%m.%Y")
@@ -687,6 +618,37 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
         return None
 
 
+def generate_pdf_from_template(template_name: str, data: Dict[str, Any], filename: str) -> Optional[str]:
+    """
+    Генерирует PDF используя указанный шаблон
+
+    Args:
+        template_name: имя файла шаблона
+        data: данные для шаблона
+        filename: имя выходного файла
+
+    Returns:
+        str: путь к файлу или None при ошибке
+    """
+    try:
+        if not ensure_template_exists():
+            return None
+
+        env = get_jinja_env()
+        template = env.get_template(template_name)
+        html_content = template.render(**data)
+
+        HTML(string=html_content).write_pdf(filename)
+
+        if os.path.exists(filename):
+            return filename
+        return None
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка в generate_pdf_from_template: {e}")
+        return None
+
+
 def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
     """Очищает старые PDF файлы"""
     import time
@@ -696,8 +658,7 @@ def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
         max_age_seconds = max_age_hours * 3600
 
         for filename in os.listdir(directory):
-            if (filename.startswith("temp_") or filename.endswith("_character_sheet.pdf")) and filename.endswith(
-                    ".pdf"):
+            if (filename.startswith("temp_") or filename.endswith("_character_sheet.pdf")) and filename.endswith(".pdf"):
                 filepath = os.path.join(directory, filename)
                 file_age = current_time - os.path.getmtime(filepath)
 
@@ -743,7 +704,10 @@ if __name__ == "__main__":
         "class_features": ["Боевой стиль: Стрельба", "Первобытное чутьё", "Избранный враг: Звери"],
         "equipment": ["Длинный лук", "20 стрел", "Кожаная броня", "Два кинжала"],
         "coins": "50 ЗМ",
-        "notes": "Ищет доказательства существования древнего пророчества."
+        "notes": "Ищет доказательства существования древнего пророчества.",
+        "spells": [],
+        "spell_slots_1": 0,
+        "spell_slots_2": 0
     }
 
     result = generate_pdf(test_data, "test_character.pdf")

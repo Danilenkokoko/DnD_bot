@@ -27,6 +27,36 @@ for key, value in DB_CONFIG.items():
         raise ValueError(f"❌ Не задана переменная окружения: {key}")
 
 
+# ---------------- CREATE DATABASE IF NOT EXISTS ----------------
+def create_database_if_not_exists():
+    """Создаёт базу данных если она не существует"""
+    # Временно подключаемся к системной базе 'postgres'
+    temp_config = DB_CONFIG.copy()
+    temp_config["dbname"] = "postgres"  # Подключаемся к системной БД
+
+    try:
+        conn = psycopg2.connect(**temp_config)
+        conn.autocommit = True
+        cur = conn.cursor()
+
+        # Проверяем существует ли база
+        cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (DB_CONFIG["dbname"],))
+        exists = cur.fetchone()
+
+        if not exists:
+            cur.execute(f'CREATE DATABASE {DB_CONFIG["dbname"]}')
+            logger.info(f"✅ База данных '{DB_CONFIG['dbname']}' создана")
+        else:
+            logger.info(f"✅ База данных '{DB_CONFIG['dbname']}' уже существует")
+
+        cur.close()
+        conn.close()
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка при создании базы данных: {e}")
+        raise
+
+
 # ---------------- CONNECTION ----------------
 @contextmanager
 def get_connection():

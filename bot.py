@@ -698,14 +698,53 @@ async def skip_command(m: Message, state: FSMContext):
 
 # ---------------- RUN ----------------
 async def main():
-    # Инициализация базы данных
-    from db import init_database, migrate_database
-    init_database()
-    migrate_database()
+    """Запуск бота"""
+    try:
+        # Инициализация базы данных
+        from db import init_database, migrate_database
 
-    logger.info("🚀 Бот запущен!")
-    await dp.start_polling(bot)
+        logger.info("🔄 Инициализация базы данных...")
+
+        # Сначала создаём таблицы
+        init_database()
+
+        # Применяем миграции (для существующих таблиц)
+        migrate_database()
+
+        # Принудительно перезагружаем кэш предысторий после инициализации БД
+        try:
+            from backgrounds_data import reload_cache
+            reload_cache()
+            logger.info("✅ Кэш предысторий загружен")
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось загрузить кэш предысторий: {e}")
+
+        # Проверяем подключение к БД
+        from db import get_user_characters_count
+        try:
+            count = get_user_characters_count(0)  # Тестовый запрос
+            logger.info("✅ Подключение к базе данных установлено")
+        except Exception as e:
+            logger.error(f"❌ Ошибка подключения к базе данных: {e}")
+            logger.info("Проверьте настройки подключения в .env файле")
+            return
+
+        logger.info("🚀 Бот D&D Character Creator запущен!")
+        logger.info("=" * 50)
+
+        # Запуск поллинга
+        await dp.start_polling(bot)
+
+    except Exception as e:
+        logger.error(f"❌ Критическая ошибка при запуске бота: {e}", exc_info=True)
+    finally:
+        logger.info("🛑 Бот остановлен")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("👋 Бот остановлен пользователем")
+    except Exception as e:
+        logger.error(f"❌ Необработанная ошибка: {e}", exc_info=True)

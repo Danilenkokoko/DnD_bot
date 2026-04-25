@@ -5,7 +5,7 @@ D&D 5e Backgrounds Data Module
 """
 
 from typing import Dict, Any, List, Tuple, Optional
-from db import get_background_from_db, get_all_backgrounds_from_db, get_background_names
+from db import get_background_from_db, get_all_backgrounds_from_db
 
 # Кэш для данных (чтобы не ходить в БД каждый раз)
 _BACKGROUNDS_CACHE: Dict[str, Dict[str, Any]] = {}
@@ -21,21 +21,15 @@ def _load_backgrounds_cache():
 
     try:
         backgrounds = get_all_backgrounds_from_db()
+        if not backgrounds:
+            print("⚠️ Предыстории не загружены (таблица пуста или не существует)")
+            _CACHE_LOADED = True
+            return
+
         for bg in backgrounds:
-            # Получаем полные данные для каждой предыстории
             full_data = get_background_from_db(bg["name"])
             if full_data:
-                # Преобразуем JSONB данные обратно в списки
                 data = dict(full_data)
-
-                # Обрабатываем JSONB поля
-                if isinstance(data.get("characteristics"), str):
-                    import json
-                    data["characteristics"] = json.loads(data["characteristics"])
-                if isinstance(data.get("skills"), str):
-                    import json
-                    data["skills"] = json.loads(data["skills"])
-
                 _BACKGROUNDS_CACHE[bg["name"]] = data
 
         _CACHE_LOADED = True
@@ -55,111 +49,49 @@ def reload_cache():
 
 
 def get_all_backgrounds() -> List[str]:
-    """
-    Возвращает список всех предысторий
-
-    Returns:
-        List[str]: Список названий предысторий
-    """
+    """Возвращает список всех предысторий"""
     _load_backgrounds_cache()
     return list(_BACKGROUNDS_CACHE.keys())
 
 
 def get_background_data(background_name: str) -> Dict[str, Any]:
-    """
-    Возвращает данные предыстории по имени
-
-    Args:
-        background_name: название предыстории
-
-    Returns:
-        Dict[str, Any]: словарь с данными предыстории
-    """
+    """Возвращает данные предыстории по имени"""
     _load_backgrounds_cache()
     return _BACKGROUNDS_CACHE.get(background_name, {})
 
 
 def get_background_characteristics(background_name: str) -> List[str]:
-    """
-    Возвращает характеристики, которые дает предыстория
-
-    Args:
-        background_name: название предыстории
-
-    Returns:
-        List[str]: список характеристик
-    """
+    """Возвращает характеристики, которые дает предыстория"""
     data = get_background_data(background_name)
     return data.get("characteristics", [])
 
 
 def get_background_trait(background_name: str) -> str:
-    """
-    Возвращает черту предыстории
-
-    Args:
-        background_name: название предыстории
-
-    Returns:
-        str: черта предыстории
-    """
+    """Возвращает черту предыстории"""
     data = get_background_data(background_name)
     return data.get("trait", "")
 
 
 def get_background_skills(background_name: str) -> List[str]:
-    """
-    Возвращает навыки, которые дает предыстория
-
-    Args:
-        background_name: название предыстории
-
-    Returns:
-        List[str]: список навыков
-    """
+    """Возвращает навыки, которые дает предыстория"""
     data = get_background_data(background_name)
     return data.get("skills", [])
 
 
 def get_background_tools(background_name: str) -> str:
-    """
-    Возвращает инструменты, которые дает предыстория
-
-    Args:
-        background_name: название предыстории
-
-    Returns:
-        str: инструменты
-    """
+    """Возвращает инструменты, которые дает предыстория"""
     data = get_background_data(background_name)
     return data.get("tools", "")
 
 
 def get_background_description(background_name: str) -> str:
-    """
-    Возвращает описание предыстории
-
-    Args:
-        background_name: название предыстории
-
-    Returns:
-        str: описание предыстории
-    """
+    """Возвращает описание предыстории"""
     data = get_background_data(background_name)
     return data.get("description", "")
 
 
 def get_equipment_choice(background_name: str, choice: str = "A") -> str:
-    """
-    Возвращает снаряжение для предыстории в зависимости от выбора А или Б
-
-    Args:
-        background_name: название предыстории
-        choice: выбор "A" или "B"
-
-    Returns:
-        str: описание снаряжения
-    """
+    """Возвращает снаряжение для предыстории в зависимости от выбора А или Б"""
     data = get_background_data(background_name)
     if choice.upper() == "A":
         return data.get("equipment_a", "Нет данных")
@@ -170,29 +102,13 @@ def get_equipment_choice(background_name: str, choice: str = "A") -> str:
 
 
 def get_equipment_options(background_name: str) -> Tuple[str, str]:
-    """
-    Возвращает оба варианта снаряжения для предыстории
-
-    Args:
-        background_name: название предыстории
-
-    Returns:
-        Tuple[str, str]: (снаряжение А, снаряжение Б)
-    """
+    """Возвращает оба варианта снаряжения для предыстории"""
     data = get_background_data(background_name)
     return data.get("equipment_a", ""), data.get("equipment_b", "")
 
 
 def format_background_info(background_name: str) -> str:
-    """
-    Форматирует информацию о предыстории для отображения пользователю
-
-    Args:
-        background_name: название предыстории
-
-    Returns:
-        str: отформатированный текст
-    """
+    """Форматирует информацию о предыстории для отображения пользователю"""
     data = get_background_data(background_name)
     if not data:
         return f"❌ Предыстория '{background_name}' не найдена"
@@ -210,15 +126,7 @@ def format_background_info(background_name: str) -> str:
 
 
 def search_backgrounds(query: str) -> List[Dict[str, Any]]:
-    """
-    Поиск предысторий по названию или описанию
-
-    Args:
-        query: поисковый запрос
-
-    Returns:
-        List[Dict[str, Any]]: список найденных предысторий
-    """
+    """Поиск предысторий по названию или описанию"""
     _load_backgrounds_cache()
     query_lower = query.lower()
     results = []
@@ -234,111 +142,40 @@ def search_backgrounds(query: str) -> List[Dict[str, Any]]:
 
 
 def get_backgrounds_count() -> int:
-    """
-    Возвращает количество предысторий в базе
-
-    Returns:
-        int: количество предысторий
-    """
+    """Возвращает количество предысторий в базе"""
     _load_backgrounds_cache()
     return len(_BACKGROUNDS_CACHE)
 
 
 def validate_background(background_name: str) -> bool:
-    """
-    Проверяет существует ли предыстория
-
-    Args:
-        background_name: название предыстории
-
-    Returns:
-        bool: True если существует
-    """
+    """Проверяет существует ли предыстория"""
     _load_backgrounds_cache()
     return background_name in _BACKGROUNDS_CACHE
 
 
-# Загружаем кэш при импорте модуля
-_load_backgrounds_cache()
-
-
 # Для совместимости со старым кодом
 def get_background_info(background_name: str) -> Dict[str, Any]:
-    """
-    Алиас для get_background_data (для совместимости)
-    """
+    """Алиас для get_background_data (для совместимости)"""
     return get_background_data(background_name)
+
+
+# Не загружаем кэш автоматически при импорте, чтобы избежать ошибок до инициализации БД
+# _load_backgrounds_cache()
 
 
 # ---------------- ТЕСТИРОВАНИЕ ----------------
 if __name__ == "__main__":
     print("=== Тест предысторий (PostgreSQL) ===\n")
 
-    # Проверяем соединение с БД
-    try:
-        from db import init_database
+    # Принудительно загружаем
+    _load_backgrounds_cache()
 
-        init_database()
-        print("✅ Подключение к БД установлено\n")
-    except Exception as e:
-        print(f"❌ Ошибка подключения к БД: {e}\n")
-        print("Убедитесь, что:")
-        print("1. PostgreSQL запущен")
-        print("2. Переменные окружения DB_NAME, DB_USER, DB_PASSWORD, DB_HOST заданы")
-        print("3. База данных существует\n")
-        exit(1)
-
-    # Получаем список всех предысторий
     backgrounds = get_all_backgrounds()
     print(f"📚 Всего предысторий: {len(backgrounds)}")
-    print(f"Список: {', '.join(backgrounds)}\n")
 
-    # Проверяем каждую предысторию
-    print("=" * 50)
-    print("Детальная информация о предысториях:")
-    print("=" * 50)
-
-    for bg_name in backgrounds[:5]:  # Показываем первые 5 для примера
-        print(f"\n📜 {bg_name}")
-        print("-" * 40)
-
-        data = get_background_data(bg_name)
-        if data:
-            print(f"  Характеристики: {', '.join(data.get('characteristics', []))}")
-            print(f"  Черта: {data.get('trait', 'Нет')}")
-            print(f"  Навыки: {', '.join(data.get('skills', []))}")
-            print(f"  Инструменты: {data.get('tools', 'Нет')}")
-            print(f"  Снаряжение А: {data.get('equipment_a', 'Нет')[:60]}...")
-            print(f"  Снаряжение Б: {data.get('equipment_b', 'Нет')[:60]}...")
-            print(f"  Описание: {data.get('description', 'Нет')[:100]}...")
-
-    # Тестирование дополнительных функций
-    print("\n" + "=" * 50)
-    print("Тестирование дополнительных функций:")
-    print("=" * 50)
-
-    # Тест форматирования
     if backgrounds:
-        print(f"\n📋 Форматированная информация о '{backgrounds[0]}':")
-        print(get_background_info(backgrounds[0]))
+        print(f"Список: {', '.join(backgrounds[:5])}...")
+    else:
+        print("⚠️ Предыстории не загружены. Убедитесь, что база данных инициализирована.")
 
-    # Тест поиска
-    print("\n🔍 Поиск предысторий по слову 'маг':")
-    results = search_backgrounds("маг")
-    for result in results:
-        print(f"  - {result['name']}: {result['description']}...")
-
-    # Тест валидации
-    print(f"\n✅ Проверка существования 'Мудрец': {validate_background('Мудрец')}")
-    print(f"❌ Проверка существования 'НесуществующаяПредыстория': {validate_background('НесуществующаяПредыстория')}")
-
-    # Тест выбора снаряжения
-    if backgrounds:
-        print(f"\n🎒 Выбор снаряжения для '{backgrounds[0]}':")
-        equip_a, equip_b = get_equipment_options(backgrounds[0])
-        print(f"  Вариант А: {equip_a[:80]}...")
-        print(f"  Вариант Б: {equip_b[:80]}...")
-
-    print("\n" + "=" * 50)
-    print("✅ Модуль предысторий успешно протестирован!")
-    print("=" * 50)
+    print("\n✅ Модуль предысторий загружен")

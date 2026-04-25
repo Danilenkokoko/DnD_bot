@@ -66,6 +66,11 @@ def get_connection():
         conn.autocommit = False
         yield conn
         conn.commit()
+    except psycopg2.OperationalError as e:
+        if conn:
+            conn.rollback()
+        logger.error(f"❌ Ошибка подключения к БД: {e}")
+        raise
     except Exception as e:
         if conn:
             conn.rollback()
@@ -79,82 +84,85 @@ def get_connection():
 # ---------------- INIT ----------------
 def init_database():
     """Создаёт таблицы если они не существуют"""
-    # Сначала создаём БД если её нет
-    create_database_if_not_exists()
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            # Таблица персонажей
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS characters (
-                    id SERIAL PRIMARY KEY,
-                    user_id BIGINT NOT NULL,
-                    name VARCHAR(100) NOT NULL,
-                    race VARCHAR(50) NOT NULL,
-                    class_name VARCHAR(50) NOT NULL,
-                    level INTEGER DEFAULT 1,
-                    background VARCHAR(100),
-                    backstory TEXT,
-                    image_file_id VARCHAR(255),
-                    str INTEGER DEFAULT 10,
-                    dex INTEGER DEFAULT 10,
-                    con INTEGER DEFAULT 10,
-                    int INTEGER DEFAULT 10,
-                    wis INTEGER DEFAULT 10,
-                    cha INTEGER DEFAULT 10,
-                    hp INTEGER DEFAULT 0,
-                    ac INTEGER DEFAULT 10,
-                    race_traits JSONB DEFAULT '[]',
-                    class_features JSONB DEFAULT '[]',
-                    skills JSONB DEFAULT '[]',
-                    tools JSONB DEFAULT '[]',
-                    equipment JSONB DEFAULT '[]',
-                    spells JSONB DEFAULT '[]',
-                    background_trait VARCHAR(255),
-                    background_skills JSONB DEFAULT '[]',
-                    background_tools VARCHAR(255),
-                    background_equipment_choice VARCHAR(1),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+    # База данных уже существует, просто создаём таблицы
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Таблица персонажей
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS characters (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        name VARCHAR(100) NOT NULL,
+                        race VARCHAR(50) NOT NULL,
+                        class_name VARCHAR(50) NOT NULL,
+                        level INTEGER DEFAULT 1,
+                        background VARCHAR(100),
+                        backstory TEXT,
+                        image_file_id VARCHAR(255),
+                        str INTEGER DEFAULT 10,
+                        dex INTEGER DEFAULT 10,
+                        con INTEGER DEFAULT 10,
+                        int INTEGER DEFAULT 10,
+                        wis INTEGER DEFAULT 10,
+                        cha INTEGER DEFAULT 10,
+                        hp INTEGER DEFAULT 0,
+                        ac INTEGER DEFAULT 10,
+                        race_traits JSONB DEFAULT '[]',
+                        class_features JSONB DEFAULT '[]',
+                        skills JSONB DEFAULT '[]',
+                        tools JSONB DEFAULT '[]',
+                        equipment JSONB DEFAULT '[]',
+                        spells JSONB DEFAULT '[]',
+                        background_trait VARCHAR(255),
+                        background_skills JSONB DEFAULT '[]',
+                        background_tools VARCHAR(255),
+                        background_equipment_choice VARCHAR(1),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
 
-            # Таблица предысторий
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS backgrounds (
-                    id SERIAL PRIMARY KEY,
-                    name VARCHAR(100) UNIQUE NOT NULL,
-                    characteristics JSONB NOT NULL,
-                    trait VARCHAR(255) NOT NULL,
-                    skills JSONB NOT NULL,
-                    tools VARCHAR(255),
-                    equipment_a TEXT NOT NULL,
-                    equipment_b TEXT NOT NULL,
-                    description TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+                # Таблица предысторий
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS backgrounds (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(100) UNIQUE NOT NULL,
+                        characteristics JSONB NOT NULL,
+                        trait VARCHAR(255) NOT NULL,
+                        skills JSONB NOT NULL,
+                        tools VARCHAR(255),
+                        equipment_a TEXT NOT NULL,
+                        equipment_b TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
 
-            # Индексы
-            cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_characters_user_id 
-                ON characters(user_id)
-            """)
+                # Индексы
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_characters_user_id 
+                    ON characters(user_id)
+                """)
 
-            cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_characters_name 
-                ON characters(name)
-            """)
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_characters_name 
+                    ON characters(name)
+                """)
 
-            cur.execute("""
-                CREATE INDEX IF NOT EXISTS idx_backgrounds_name 
-                ON backgrounds(name)
-            """)
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_backgrounds_name 
+                    ON backgrounds(name)
+                """)
 
-            logger.info("✅ Таблицы characters и backgrounds готовы")
+                logger.info("✅ Таблицы characters и backgrounds готовы")
 
-            # Заполняем таблицу предысторий начальными данными
-            # Важно: вызываем ПОСЛЕ создания таблицы
-            seed_backgrounds()
+                # Заполняем таблицу предысторий
+                seed_backgrounds()
+
+    except Exception as e:
+        logger.error(f"❌ Ошибка при инициализации таблиц: {e}")
+        raise
 
 
 def seed_backgrounds():

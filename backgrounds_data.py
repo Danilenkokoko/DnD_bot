@@ -152,12 +152,6 @@ def validate_background(background_name: str) -> bool:
     _load_backgrounds_cache()
     return background_name in _BACKGROUNDS_CACHE
 
-def reload_cache():
-    """Принудительная перезагрузка кэша"""
-    global _CACHE_LOADED
-    _CACHE_LOADED = False
-    _load_backgrounds_cache()
-
 
 # Для совместимости со старым кодом
 def get_background_info(background_name: str) -> Dict[str, Any]:

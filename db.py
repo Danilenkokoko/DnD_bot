@@ -65,7 +65,7 @@ def init_database():
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Таблица персонажей
+                # ===== ТАБЛИЦА 1: characters (персонажи) =====
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS characters (
                         id SERIAL PRIMARY KEY,
@@ -100,7 +100,68 @@ def init_database():
                     )
                 """)
 
-                # Таблица предысторий
+                # Индексы для таблицы characters
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_characters_user_id 
+                    ON characters(user_id)
+                """)
+
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_characters_name 
+                    ON characters(name)
+                """)
+
+                logger.info("✅ Таблица characters готова")
+
+                # ===== ТАБЛИЦА 2: characters_backup (копия characters) =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS characters_backup (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        name VARCHAR(100) NOT NULL,
+                        race VARCHAR(50) NOT NULL,
+                        class_name VARCHAR(50) NOT NULL,
+                        level INTEGER DEFAULT 1,
+                        background VARCHAR(100),
+                        backstory TEXT,
+                        image_file_id VARCHAR(255),
+                        str INTEGER DEFAULT 10,
+                        dex INTEGER DEFAULT 10,
+                        con INTEGER DEFAULT 10,
+                        int INTEGER DEFAULT 10,
+                        wis INTEGER DEFAULT 10,
+                        cha INTEGER DEFAULT 10,
+                        hp INTEGER DEFAULT 0,
+                        ac INTEGER DEFAULT 10,
+                        race_traits JSONB DEFAULT '[]',
+                        class_features JSONB DEFAULT '[]',
+                        skills JSONB DEFAULT '[]',
+                        tools JSONB DEFAULT '[]',
+                        equipment JSONB DEFAULT '[]',
+                        spells JSONB DEFAULT '[]',
+                        background_trait VARCHAR(255),
+                        background_skills JSONB DEFAULT '[]',
+                        background_tools VARCHAR(255),
+                        background_equipment_choice VARCHAR(1),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+
+                # Индексы для таблицы characters_backup
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_characters_backup_user_id 
+                    ON characters_backup(user_id)
+                """)
+
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_characters_backup_name 
+                    ON characters_backup(name)
+                """)
+
+                logger.info("✅ Таблица characters_backup готова")
+
+                # ===== ТАБЛИЦА 3: backgrounds (предыстории) =====
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS backgrounds (
                         id SERIAL PRIMARY KEY,
@@ -116,23 +177,13 @@ def init_database():
                     )
                 """)
 
-                # Индексы
-                cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_characters_user_id 
-                    ON characters(user_id)
-                """)
-
-                cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_characters_name 
-                    ON characters(name)
-                """)
-
+                # Индексы для таблицы backgrounds
                 cur.execute("""
                     CREATE INDEX IF NOT EXISTS idx_backgrounds_name 
                     ON backgrounds(name)
                 """)
 
-                logger.info("✅ Таблицы characters и backgrounds готовы")
+                logger.info("✅ Таблица backgrounds готова")
 
                 # Заполняем таблицу предысторий начальными данными
                 seed_backgrounds()
@@ -568,6 +619,45 @@ def get_user_characters_count(user_id: int) -> int:
                 (user_id,)
             )
             return cur.fetchone()[0]
+
+
+# ---------------- BACKUP FUNCTIONS ----------------
+def backup_all_characters():
+    """Копирует всех персонажей из characters в characters_backup"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Очищаем таблицу backup
+                cur.execute("TRUNCATE TABLE characters_backup")
+
+                # Копируем все данные
+                cur.execute("""
+                    INSERT INTO characters_backup 
+                    SELECT * FROM characters
+                """)
+
+                logger.info(f"✅ Создана резервная копия {cur.rowcount} персонажей")
+    except Exception as e:
+        logger.error(f"❌ Ошибка при создании резервной копии: {e}")
+
+
+def restore_from_backup():
+    """Восстанавливает персонажей из резервной копии"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Очищаем основную таблицу
+                cur.execute("TRUNCATE TABLE characters")
+
+                # Восстанавливаем из backup
+                cur.execute("""
+                    INSERT INTO characters 
+                    SELECT * FROM characters_backup
+                """)
+
+                logger.info(f"✅ Восстановлено {cur.rowcount} персонажей из резервной копии")
+    except Exception as e:
+        logger.error(f"❌ Ошибка при восстановлении из резервной копии: {e}")
 
 
 # ---------------- MIGRATION ----------------

@@ -248,7 +248,7 @@ async def select_race(call: CallbackQuery, state: FSMContext):
     image_path = get_race_image_path(race)
     image_exists = image_path and os.path.exists(image_path)
 
-    # Формируем текст с описанием
+    # Формируем текст
     text = f"🧝 **{race}**\n\n"
     text += f"📖 {race_description}\n\n"
     text += f"**Скорость:** {race_info.get('speed', 30)} футов\n"
@@ -284,7 +284,9 @@ async def select_race(call: CallbackQuery, state: FSMContext):
     try:
         if image_exists:
             photo = FSInputFile(image_path)
+            # Удаляем старое сообщение
             await call.message.delete()
+            # Отправляем новое с картинкой
             await call.message.answer_photo(
                 photo=photo,
                 caption=text,
@@ -292,6 +294,7 @@ async def select_race(call: CallbackQuery, state: FSMContext):
                 reply_markup=reply_markup
             )
         else:
+            # Если картинки нет - просто редактируем текст
             await call.message.edit_text(
                 text,
                 parse_mode=ParseMode.MARKDOWN,
@@ -339,7 +342,10 @@ async def select_subrace(call: CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data == "back_to_races")
 async def back_to_races(call: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.race)
-    await call.message.edit_text(
+
+    # Вместо edit_text используем новый ответ
+    await call.message.delete()
+    await call.message.answer(
         "**Шаг 1/7: Выберите расу**",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=create_race_keyboard()
@@ -372,7 +378,9 @@ async def select_class(call: CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data == "back_to_class")
 async def back_to_class(call: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.char_class)
-    await call.message.edit_text(
+
+    await call.message.delete()
+    await call.message.answer(
         "**Шаг 2/7: Выберите класс**",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=create_class_keyboard()
@@ -434,7 +442,9 @@ async def select_background(call: CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data == "back_to_background")
 async def back_to_background(call: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.background)
-    await call.message.edit_text(
+
+    await call.message.delete()
+    await call.message.answer(
         "**Шаг 4/7: Выберите предысторию**",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=create_background_keyboard()

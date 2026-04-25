@@ -6,7 +6,13 @@ D&D 5e Character Logic Module
 """
 
 from typing import Dict, List, Any, Tuple, Optional
-from races_data import RACES_DATA, get_race_data, get_race_ability_bonuses, get_race_traits, get_all_races
+from races_data import (
+    RACES_DATA, get_race_data, get_race_ability_bonuses,
+    get_race_traits, get_all_races, get_race_description,
+    get_race_speed, get_race_size, get_race_languages,
+    has_subraces, get_race_subraces, validate_race,
+    format_race_info, get_race_image_path
+)
 from classes_data import CLASSES_DATA, get_class_data, get_class_hit_die, get_class_skill_choices, get_all_classes
 from backgrounds_data import (
     get_all_backgrounds, get_background_data, get_background_characteristics,
@@ -168,6 +174,61 @@ def get_initial_stats(race: str, subrace: Optional[str] = None) -> Dict[str, int
     return apply_racial_bonuses(base_stats, race, subrace)
 
 
+# ---------------- RACE DESCRIPTION WRAPPERS ----------------
+def get_race_description_text(race: str, subrace: Optional[str] = None) -> str:
+    """
+    Возвращает описание расы
+
+    Args:
+        race: название расы
+        subrace: название подрасы (опционально)
+
+    Returns:
+        str: описание расы
+    """
+    return get_race_description(race, subrace)
+
+
+def get_race_image(race: str) -> Optional[str]:
+    """
+    Возвращает путь к картинке расы
+
+    Args:
+        race: название расы
+
+    Returns:
+        Optional[str]: путь к картинке или None
+    """
+    return get_race_image_path(race)
+
+
+def get_race_full_info(race: str, subrace: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Возвращает полную информацию о расе
+
+    Args:
+        race: название расы
+        subrace: название подрасы (опционально)
+
+    Returns:
+        Dict[str, Any]: информация о расе
+    """
+    race_data = get_race_data(race)
+    return {
+        "name": race,
+        "subrace": subrace,
+        "description": get_race_description(race, subrace),
+        "speed": race_data.get("speed", 30),
+        "size": race_data.get("size", "Средний"),
+        "languages": race_data.get("languages", ["Общий"]),
+        "traits": get_race_traits(race, subrace),
+        "ability_bonuses": get_race_ability_bonuses(race, subrace),
+        "image_path": get_race_image_path(race),
+        "has_subraces": has_subraces(race),
+        "subraces": get_race_subraces(race)
+    }
+
+
 # ---------------- VALIDATION ----------------
 def validate_name(name: str) -> Tuple[bool, str]:
     """Проверяет имя персонажа"""
@@ -299,26 +360,34 @@ def get_race_ability_bonuses_list(race: str, subrace: Optional[str] = None) -> D
     return get_race_ability_bonuses(race, subrace)
 
 
-def format_race_info(race: str, subrace: Optional[str] = None) -> str:
+def get_race_speed_value(race: str) -> int:
+    """Возвращает скорость расы"""
+    return get_race_speed(race)
+
+
+def get_race_size_value(race: str) -> str:
+    """Возвращает размер расы"""
+    return get_race_size(race)
+
+
+def get_race_languages_list(race: str) -> List[str]:
+    """Возвращает языки расы"""
+    return get_race_languages(race)
+
+
+def get_race_has_subraces(race: str) -> bool:
+    """Проверяет, есть ли у расы подрасы"""
+    return has_subraces(race)
+
+
+def get_race_subraces_dict(race: str) -> Dict[str, Dict[str, Any]]:
+    """Возвращает подрасы расы"""
+    return get_race_subraces(race)
+
+
+def format_race_info_text(race: str, subrace: Optional[str] = None) -> str:
     """Форматирует информацию о расе для отображения"""
-    race_data = get_race_info(race)
-    if not race_data:
-        return f"❌ Раса '{race}' не найдена"
-
-    info = f"🧝 **{race}**"
-    if subrace:
-        info += f" ({subrace})"
-    info += "\n\n"
-
-    info += f"**Скорость:** {race_data.get('speed', 30)} футов\n"
-    info += f"**Размер:** {race_data.get('size', 'Средний')}\n"
-    info += f"**Языки:** {', '.join(race_data.get('languages', ['Общий']))}\n\n"
-
-    info += "**Особенности:**\n"
-    for trait in race_data.get('traits', []):
-        info += f"• {trait}\n"
-
-    return info
+    return format_race_info(race, subrace)
 
 
 # ---------------- CLASS HELPERS ----------------
@@ -548,14 +617,23 @@ if __name__ == "__main__":
     print(f"   Всего рас: {len(races)}")
     print(f"   Первые 5: {', '.join(races[:5])}")
 
-    # 6. Тест классов
-    print("\n6. Тест классов:")
+    # 6. Тест описания расы
+    print("\n6. Тест описания расы:")
+    if races:
+        test_race = races[0]
+        desc = get_race_description_text(test_race)
+        print(f"   {test_race}: {desc[:100]}...")
+        img = get_race_image(test_race)
+        print(f"   Картинка: {img if img else 'нет'}")
+
+    # 7. Тест классов
+    print("\n7. Тест классов:")
     classes = get_class_list()
     print(f"   Всего классов: {len(classes)}")
     print(f"   Список: {', '.join(classes)}")
 
-    # 7. Тест предысторий
-    print("\n7. Тест предысторий:")
+    # 8. Тест предысторий
+    print("\n8. Тест предысторий:")
     backgrounds = get_background_list()
     print(f"   Всего предысторий: {len(backgrounds)}")
     if backgrounds:
@@ -563,16 +641,16 @@ if __name__ == "__main__":
     else:
         print("   ⚠️ Предыстории не загружены (проверьте БД)")
 
-    # 8. Тест начальных характеристик
-    print("\n8. Тест начальных характеристик:")
+    # 9. Тест начальных характеристик
+    print("\n9. Тест начальных характеристик:")
     stats = get_initial_stats("Дварф")
     print(f"   Дварф (без подрасы): {stats}")
     stats_elf = get_initial_stats("Эльф", "Лесной эльф")
     print(f"   Лесной эльф: {stats_elf}")
     print("   ✅ OK")
 
-    # 9. Тест валидации
-    print("\n9. Тест валидации:")
+    # 10. Тест валидации
+    print("\n10. Тест валидации:")
     test_stats = {"STR": 15, "DEX": 14, "CON": 13, "INT": 12, "WIS": 10, "CHA": 8}
 
     valid, msg = validate_character("Гимли", "Воин", "Дварф", "Солдат", test_stats)
@@ -584,18 +662,18 @@ if __name__ == "__main__":
     valid, msg = validate_character("Герой", "НесуществующийКласс", "Человек", "Мудрец", test_stats)
     print(f"   Несуществующий класс: {msg}")
 
-    # 10. Тест информации о классе
-    print("\n10. Тест информации о классе:")
+    # 11. Тест информации о классе
+    print("\n11. Тест информации о классе:")
     class_info = format_class_info("Воин")
     print(f"   {class_info[:100]}...")
 
-    # 11. Тест информации о расе
-    print("\n11. Тест информации о расе:")
-    race_info = format_race_info("Эльф", "Лесной эльф")
+    # 12. Тест информации о расе
+    print("\n12. Тест информации о расе:")
+    race_info = format_race_info_text("Эльф", "Лесной эльф")
     print(f"   {race_info[:100]}...")
 
-    # 12. Тест повышения уровня
-    print("\n12. Тест повышения уровня:")
+    # 13. Тест повышения уровня
+    print("\n13. Тест повышения уровня:")
     level_up = get_level_up_info("Воин", 14, 1)
     print(f"   Уровень 1 -> 2: +{level_up['hp_increase']} HP, новый бонус: {level_up['proficiency_bonus']}")
 

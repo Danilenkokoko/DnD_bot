@@ -29,14 +29,17 @@ from dnd_logic import (
     get_race_info, get_class_info, get_background_data,
     get_race_traits_list, get_class_skill_choices,
     calculate_proficiency_bonus, format_background_for_display,
-    get_equipment_choice
+    get_equipment_choice, get_race_description, get_race_ability_bonuses
 )
 from pdf_generator import generate_pdf
+
+# Импортируем функции для работы с картинками рас
+from races_data import get_race_image_path, get_race_image_exists, RACE_IMAGES
 
 # ---------------- CONFIG ----------------
 load_dotenv()
 
-# Настройка логирования - должна быть ПЕРВОЙ
+# Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -50,24 +53,17 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ================= ВНИМАНИЕ! =================
-# НЕ ДОБАВЛЯЙТЕ ОБРАБОТЧИК debug_all_messages!
-# Он перехватывает все сообщения и ломает работу бота.
-# Если нужен отладочный обработчик - используйте фильтр,
-# но лучше вообще его не добавлять.
-# =============================================
-
 
 # ---------------- FSM STATES ----------------
 class CreateCharacter(StatesGroup):
-    race = State()          # 1. Выбор расы
-    subrace = State()       # 1а. Выбор подрасы (если есть)
-    char_class = State()    # 2. Выбор класса
-    name = State()          # 3. Ввод имени
-    background = State()    # 4. Выбор предыстории
-    equipment = State()     # 5. Выбор снаряжения А или Б
-    backstory = State()     # 6. Ввод истории
-    image = State()         # 7. Загрузка картинки
+    race = State()  # 1. Выбор расы
+    subrace = State()  # 1а. Выбор подрасы (если есть)
+    char_class = State()  # 2. Выбор класса
+    name = State()  # 3. Ввод имени
+    background = State()  # 4. Выбор предыстории
+    equipment = State()  # 5. Выбор снаряжения А или Б
+    backstory = State()  # 6. Ввод истории
+    image = State()  # 7. Загрузка картинки
 
 
 # ---------------- MENU ----------------
@@ -244,24 +240,69 @@ async def select_race(call: CallbackQuery, state: FSMContext):
     race_info = get_race_info(race)
     subraces = race_info.get("subraces", {})
 
+    # Получаем полное описание расы
+    from races_data import get_race_description
+    race_description = get_race_description(race)
+
+    # Получаем путь к картинке расы
+    image_path = get_race_image_path(race)
+    image_exists = image_path and os.path.exists(image_path)
+
+    # Формируем текст с описанием
+    text = f"🧝 **{race}**\n\n"
+    text += f"📖 {race_description}\n\n"
+    text += f"**Скорость:** {race_info.get('speed', 30)} футов\n"
+    text += f"**Размер:** {race_info.get('size', 'Средний')}\n"
+    text += f"**Языки:** {', '.join(race_info.get('languages', ['Общий']))}\n\n"
+
+    # Бонусы к характеристикам
+    bonuses = get_race_ability_bonuses(race, None)
+    if bonuses:
+        text += "**Бонусы к характеристикам:**\n"
+        for stat, bonus in bonuses.items():
+            text += f"  • {stat}: +{bonus}\n"
+        text += "\n"
+
+    # Особенности
+    text += "**Особенности:**\n"
+    for trait in race_info.get('traits', []):
+        text += f"  • {trait}\n"
+
     if subraces:
-        await state.set_state(CreateCharacter.subrace)
-        await call.message.edit_text(
-            f"🧝 **Выбрана раса: {race}**\n\n"
-            f"**Шаг 1а/7: Выберите подрасу**\n\n"
-            f"Особенности: {', '.join(race_info.get('traits', []))}",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=create_subrace_keyboard(race)
-        )
+        text += f"\n**Шаг 1а/7: Выберите подрасу**"
+        reply_markup = create_subrace_keyboard(race)
+        new_state = CreateCharacter.subrace
     else:
         await state.update_data(subrace=None)
-        await state.set_state(CreateCharacter.char_class)
+        text += f"\n\n**Шаг 2/7: Выберите класс**"
+        reply_markup = create_class_keyboard()
+        new_state = CreateCharacter.char_class
+
+    await state.set_state(new_state)
+
+    # Отправляем сообщение с картинкой (если есть)
+    try:
+        if image_exists:
+            photo = FSInputFile(image_path)
+            await call.message.delete()
+            await call.message.answer_photo(
+                photo=photo,
+                caption=text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=reply_markup
+            )
+        else:
+            await call.message.edit_text(
+                text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=reply_markup
+            )
+    except Exception as e:
+        logger.error(f"Ошибка при отправке картинки расы: {e}")
         await call.message.edit_text(
-            f"🧝 **Выбрана раса: {race}**\n\n"
-            f"**Шаг 2/7: Выберите класс**\n\n"
-            f"Класс определяет вашу профессию и боевой стиль.",
+            text,
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=create_class_keyboard()
+            reply_markup=reply_markup
         )
 
     await call.answer()
@@ -276,10 +317,19 @@ async def select_subrace(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     race = data.get("race")
 
+    # Получаем описание подрасы
+    race_info = get_race_info(race)
+    subrace_info = race_info.get("subraces", {}).get(subrace, {})
+    subrace_description = subrace_info.get("description", "")
+
+    text = (
+        f"🧝 **{race} ({subrace})**\n\n"
+        f"📖 {subrace_description}\n\n"
+        f"**Шаг 2/7: Выберите класс**"
+    )
+
     await call.message.edit_text(
-        f"🧝 **Раса: {race} ({subrace})**\n\n"
-        f"**Шаг 2/7: Выберите класс**\n\n"
-        f"Класс определяет вашу профессию и боевой стиль.",
+        text,
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=create_class_keyboard()
     )
@@ -686,7 +736,8 @@ async def confirm_delete(call: CallbackQuery):
         return
 
     if delete_character(char_id, call.from_user.id):
-        await call.message.edit_text(f"✅ Персонаж **{character['name']}** успешно удалён!", parse_mode=ParseMode.MARKDOWN)
+        await call.message.edit_text(f"✅ Персонаж **{character['name']}** успешно удалён!",
+                                     parse_mode=ParseMode.MARKDOWN)
     else:
         await call.message.edit_text("❌ Не удалось удалить персонажа. Возможно, он не принадлежит вам.")
 

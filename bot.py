@@ -43,6 +43,19 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+
+@dp.message()
+async def debug_all_messages(message: Message):
+    """Отладочный обработчик всех сообщений"""
+    logger.info(f"🔍 Получено сообщение: '{message.text}' от {message.from_user.id}")
+    # Проверяем, есть ли активное состояние
+    from aiogram.fsm.storage.memory import MemoryStorage
+    logger.info(f"   Текст: {message.text}")
+    logger.info(f"   Чат ID: {message.chat.id}")
+
+    # Отвечаем на любое сообщение для проверки
+    await message.answer(f"✅ Бот работает! Вы написали: {message.text}")
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -709,37 +722,58 @@ async def skip_command(m: Message, state: FSMContext):
 # ---------------- RUN ----------------
 async def main():
     """Запуск бота"""
+    logger.info("=" * 50)
+    logger.info("🚀 ЗАПУСК БОТА D&D CHARACTER CREATOR")
+    logger.info("=" * 50)
+
     try:
+        # Инициализация базы данных
         from db import init_database, migrate_database
 
-        logger.info("🔄 Инициализация базы данных...")
+        logger.info("📊 Шаг 1/5: Инициализация базы данных...")
         init_database()
         migrate_database()
+        logger.info("✅ База данных готова")
 
+        # Загрузка предысторий
+        logger.info("📜 Шаг 2/5: Загрузка предысторий...")
         try:
             from backgrounds_data import reload_cache
             reload_cache()
-            logger.info("✅ Кэш предысторий загружен")
+            logger.info("✅ Предыстории загружены")
         except Exception as e:
-            logger.warning(f"⚠️ Не удалось загрузить кэш предысторий: {e}")
+            logger.warning(f"⚠️ Ошибка загрузки предысторий: {e}")
 
+        # Проверка БД
+        logger.info("🔌 Шаг 3/5: Проверка подключения к БД...")
         try:
             from db import get_user_characters_count
-            get_user_characters_count(0)
-            logger.info("✅ Подключение к базе данных установлено")
+            count = get_user_characters_count(0)
+            logger.info(f"✅ Подключение к БД работает (тест: {count} персонажей)")
         except Exception as e:
-            logger.error(f"❌ Ошибка подключения к базе данных: {e}")
+            logger.error(f"❌ Ошибка БД: {e}")
 
+        # Удаление вебхука
+        logger.info("🌐 Шаг 4/5: Настройка webhook...")
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("✅ Webhook удалён")
 
+        # Информация о боте
+        logger.info("🤖 Шаг 5/5: Получение информации о боте...")
         bot_info = await bot.get_me()
-        logger.info(f"✅ Бот запущен: @{bot_info.username}")
+        logger.info(f"✅ Бот: @{bot_info.username} (ID: {bot_info.id})")
+        logger.info(f"   Ссылка: https://t.me/{bot_info.username}")
 
         logger.info("=" * 50)
-        logger.info("🎲 Бот D&D Character Creator готов к работе!")
+        logger.info("🎲 БОТ ГОТОВ К РАБОТЕ!")
+        logger.info("📨 Ожидание сообщений...")
         logger.info("=" * 50)
 
+        # ПРИНУДИТЕЛЬНЫЙ ВЫВОД
+        import sys
+        sys.stdout.flush()
+
+        # ЗАПУСК ПОЛЛИНГА
         await dp.start_polling(bot)
 
     except Exception as e:
@@ -749,9 +783,10 @@ async def main():
 
 
 if __name__ == "__main__":
+    logger.info("🔄 Запуск asyncio...")
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("👋 Бот остановлен пользователем")
+        logger.info("👋 Бот остановлен пользователем (Ctrl+C)")
     except Exception as e:
         logger.error(f"❌ Необработанная ошибка: {e}", exc_info=True)

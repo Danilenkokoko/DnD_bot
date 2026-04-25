@@ -12,367 +12,451 @@
         }
 
         body {
-            font-family: 'Arial', 'Helvetica', 'DejaVu Sans', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 40px;
-            min-height: 100vh;
+            font-family: 'Times New Roman', 'Georgia', 'Arial', serif;
+            background: #f5f0e8;
+            padding: 20px;
         }
 
         .sheet {
-            max-width: 1000px;
+            max-width: 1100px;
             margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
+            background: #faf8f0;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            padding: 20px;
         }
 
         .header {
-            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
+            border-bottom: 2px solid #8b4513;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
         }
 
         .header h1 {
-            font-size: 32px;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-            word-wrap: break-word;
-        }
-
-        .header p {
-            font-size: 18px;
-            opacity: 0.9;
-        }
-
-        .content {
-            padding: 30px;
-        }
-
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .info-card {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            padding: 15px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .info-card h3 {
-            color: #2c3e50;
-            margin-bottom: 10px;
-            font-size: 16px;
+            font-size: 28px;
+            color: #2c1810;
             text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .basic-info {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+            background: #f0ebdf;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .info-row {
+            margin-bottom: 8px;
+        }
+
+        .info-label {
+            font-weight: bold;
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #8b4513;
             letter-spacing: 1px;
         }
 
-        .info-card .value {
-            font-size: 28px;
+        .info-value {
+            font-size: 14px;
+            border-bottom: 1px solid #c4b89c;
+            padding: 4px;
             font-weight: bold;
-            color: #3498db;
         }
 
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(6, 1fr);
-            gap: 15px;
-            margin-bottom: 30px;
-        }
-
-        .stat {
-            background: #ecf0f1;
-            padding: 15px;
-            text-align: center;
-            border-radius: 15px;
-            transition: transform 0.3s;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .stat:hover {
-            transform: translateY(-5px);
-        }
-
-        .stat h3 {
-            color: #2c3e50;
-            margin-bottom: 10px;
-            font-size: 14px;
-            text-transform: uppercase;
-        }
-
-        .stat .score {
-            font-size: 32px;
-            font-weight: bold;
-            color: #3498db;
-            margin: 10px 0;
-        }
-
-        .stat .mod {
-            font-size: 18px;
-            color: #7f8c8d;
-            font-weight: bold;
-        }
-
-        .section {
-            margin-bottom: 30px;
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .section h2 {
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-            font-size: 24px;
-        }
-
-        .skills-list, .equipment-list, .spells-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
             gap: 10px;
+            margin-bottom: 20px;
         }
 
-        .skill-item, .equipment-item, .spell-item {
-            background: white;
+        .stat-card {
+            background: #f0ebdf;
+            text-align: center;
             padding: 10px;
-            border-radius: 8px;
-            border-left: 4px solid #3498db;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            border: 1px solid #c4b89c;
+            border-radius: 5px;
         }
 
-        .skill-item:hover, .equipment-item:hover, .spell-item:hover {
-            background: #f0f8ff;
-            transform: translateX(5px);
-            transition: all 0.3s;
-        }
-
-        .empty-message {
-            text-align: center;
-            color: #95a5a6;
-            font-style: italic;
-            padding: 20px;
-        }
-
-        .footer {
-            background: #2c3e50;
-            color: white;
-            text-align: center;
-            padding: 20px;
+        .stat-name {
             font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #8b4513;
         }
 
-        .footer p {
+        .stat-score {
+            font-size: 28px;
+            font-weight: bold;
             margin: 5px 0;
         }
 
-        /* Стили для печати */
+        .stat-mod {
+            font-size: 14px;
+            color: #555;
+        }
+
+        .saves-skills {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .saves-section, .skills-section {
+            background: #f0ebdf;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-bottom: 2px solid #8b4513;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+            color: #2c1810;
+        }
+
+        .save-row, .skill-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px dotted #c4b89c;
+            font-size: 12px;
+        }
+
+        .combat-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .combat-card {
+            background: #f0ebdf;
+            text-align: center;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .combat-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #8b4513;
+        }
+
+        .combat-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .detail-section {
+            margin-bottom: 20px;
+        }
+
+        .detail-title {
+            font-size: 14px;
+            font-weight: bold;
+            text-transform: uppercase;
+            background: #2c1810;
+            color: #faf8f0;
+            padding: 5px 10px;
+            margin-bottom: 10px;
+        }
+
+        .detail-content {
+            background: #f0ebdf;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .equipment-list, .traits-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .equipment-list li, .traits-list li {
+            padding: 4px 0;
+            border-bottom: 1px dotted #c4b89c;
+        }
+
+        .notes-section {
+            background: #f0ebdf;
+            padding: 15px;
+            border-radius: 5px;
+            min-height: 100px;
+            margin-bottom: 20px;
+        }
+
+        .spells-section {
+            margin-bottom: 20px;
+        }
+
+        .spell-slots {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .slot-level {
+            background: #2c1810;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .spells-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 5px;
+        }
+
+        .spell-item {
+            background: #e8e0d0;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 10px;
+            color: #999;
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 1px solid #c4b89c;
+        }
+
         @media print {
             body {
                 background: white;
                 padding: 0;
             }
-
             .sheet {
                 box-shadow: none;
-                border-radius: 0;
-            }
-
-            .stat:hover {
-                transform: none;
-            }
-
-            .skill-item:hover, .equipment-item:hover, .spell-item:hover {
-                transform: none;
-            }
-        }
-
-        /* Адаптивность для мобильных устройств */
-        @media (max-width: 768px) {
-            body {
-                padding: 20px;
-            }
-
-            .stats-grid {
-                grid-template-columns: repeat(3, 1fr);
-                gap: 10px;
-            }
-
-            .info-grid {
-                grid-template-columns: 1fr;
-                gap: 10px;
-            }
-
-            .header h1 {
-                font-size: 24px;
-            }
-
-            .header p {
-                font-size: 14px;
-            }
-
-            .content {
-                padding: 20px;
-            }
-        }
-
-        /* Темная тема для печати */
-        @media print and (prefers-color-scheme: dark) {
-            body {
-                background: white;
-            }
-
-            .sheet {
-                background: white;
+                padding: 0;
             }
         }
     </style>
 </head>
 <body>
     <div class="sheet">
+        <!-- ЗАГОЛОВОК -->
         <div class="header">
-            <h1>📖 {{ name }}</h1>
-            <p>{{ class_name }} • {{ race }} • Уровень {{ level }}</p>
+            <h1>{{ name }}</h1>
         </div>
 
-        <div class="content">
-            <!-- Основная информация -->
-            <div class="info-grid">
-                <div class="info-card">
-                    <h3>❤️ Здоровье (HP)</h3>
-                    <div class="value">{{ hp }}</div>
+        <!-- ОСНОВНАЯ ИНФОРМАЦИЯ -->
+        <div class="basic-info">
+            <div>
+                <div class="info-row">
+                    <div class="info-label">КЛАСС И УРОВЕНЬ</div>
+                    <div class="info-value">{{ class_name }} • Уровень {{ level }}</div>
                 </div>
-                <div class="info-card">
-                    <h3>🛡️ Класс брони (AC)</h3>
-                    <div class="value">{{ ac }}</div>
+                <div class="info-row">
+                    <div class="info-label">ПРЕДЫСТОРИЯ</div>
+                    <div class="info-value">{{ background if background else "—" }}</div>
                 </div>
-                <div class="info-card">
-                    <h3>📊 Уровень</h3>
-                    <div class="value">{{ level }}</div>
-                </div>
-                <div class="info-card">
-                    <h3>✨ Бонус мастерства</h3>
-                    <div class="value">{{ proficiency_bonus if proficiency_bonus is defined else 2 }}</div>
+                <div class="info-row">
+                    <div class="info-label">МИРОВОЗЗРЕНИЕ</div>
+                    <div class="info-value">{{ alignment if alignment else "Нейтральное" }}</div>
                 </div>
             </div>
-
-            <!-- Характеристики -->
-            <h2 style="margin-bottom: 15px;">📊 Характеристики</h2>
-            <div class="stats-grid">
-                <div class="stat">
-                    <h3>💪 Сила (STR)</h3>
-                    <div class="score">{{ stats.STR }}</div>
-                    <div class="mod">Модификатор: {{ (stats.STR - 10) // 2 }}</div>
+            <div>
+                <div class="info-row">
+                    <div class="info-label">РАСА</div>
+                    <div class="info-value">{{ race }}</div>
                 </div>
-                <div class="stat">
-                    <h3>🤸 Ловкость (DEX)</h3>
-                    <div class="score">{{ stats.DEX }}</div>
-                    <div class="mod">Модификатор: {{ (stats.DEX - 10) // 2 }}</div>
-                </div>
-                <div class="stat">
-                    <h3>🏋️ Телосложение (CON)</h3>
-                    <div class="score">{{ stats.CON }}</div>
-                    <div class="mod">Модификатор: {{ (stats.CON - 10) // 2 }}</div>
-                </div>
-                <div class="stat">
-                    <h3>🧠 Интеллект (INT)</h3>
-                    <div class="score">{{ stats.INT }}</div>
-                    <div class="mod">Модификатор: {{ (stats.INT - 10) // 2 }}</div>
-                </div>
-                <div class="stat">
-                    <h3>🧙 Мудрость (WIS)</h3>
-                    <div class="score">{{ stats.WIS }}</div>
-                    <div class="mod">Модификатор: {{ (stats.WIS - 10) // 2 }}</div>
-                </div>
-                <div class="stat">
-                    <h3>✨ Харизма (CHA)</h3>
-                    <div class="score">{{ stats.CHA }}</div>
-                    <div class="mod">Модификатор: {{ (stats.CHA - 10) // 2 }}</div>
+                <div class="info-row">
+                    <div class="info-label">ОПЫТ</div>
+                    <div class="info-value">{{ experience if experience else "0" }} / 300 XP</div>
                 </div>
             </div>
+            <div>
+                <div class="info-row">
+                    <div class="info-label">ИГРОК</div>
+                    <div class="info-value">{{ player_name if player_name else "—" }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">ВНЕШНОСТЬ</div>
+                    <div class="info-value">{{ appearance if appearance else "—" }}</div>
+                </div>
+            </div>
+        </div>
 
-            <!-- Спасброски -->
-            {% if saving_throws is defined %}
-            <div class="section">
-                <h2>🎲 Спасброски</h2>
-                <div class="skills-list">
-                    {% for throw in saving_throws %}
-                    <div class="skill-item">• {{ throw }}</div>
+        <!-- ХАРАКТЕРИСТИКИ (6 КОЛОНОК) -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-name">СИЛА (STR)</div>
+                <div class="stat-score">{{ stats.STR }}</div>
+                <div class="stat-mod">({{ (stats.STR - 10) // 2 }})</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-name">ЛОВКОСТЬ (DEX)</div>
+                <div class="stat-score">{{ stats.DEX }}</div>
+                <div class="stat-mod">({{ (stats.DEX - 10) // 2 }})</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-name">ТЕЛОСЛОЖЕНИЕ (CON)</div>
+                <div class="stat-score">{{ stats.CON }}</div>
+                <div class="stat-mod">({{ (stats.CON - 10) // 2 }})</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-name">ИНТЕЛЛЕКТ (INT)</div>
+                <div class="stat-score">{{ stats.INT }}</div>
+                <div class="stat-mod">({{ (stats.INT - 10) // 2 }})</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-name">МУДРОСТЬ (WIS)</div>
+                <div class="stat-score">{{ stats.WIS }}</div>
+                <div class="stat-mod">({{ (stats.WIS - 10) // 2 }})</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-name">ХАРИЗМА (CHA)</div>
+                <div class="stat-score">{{ stats.CHA }}</div>
+                <div class="stat-mod">({{ (stats.CHA - 10) // 2 }})</div>
+            </div>
+        </div>
+
+        <!-- СПАСБРОСКИ И НАВЫКИ -->
+        <div class="saves-skills">
+            <div class="saves-section">
+                <div class="section-title">СПАСБРОСКИ</div>
+                {% set saves = ["STR", "DEX", "CON", "INT", "WIS", "CHA"] %}
+                {% for save in saves %}
+                <div class="save-row">
+                    <span class="save-name">{% if save in saving_throws %}✓{% else %}•{% endif %} {{ save }}</span>
+                    <span class="save-mod">
+                        {% if save in saving_throws %}
+                            {{ (stats[save] - 10) // 2 + proficiency_bonus }}
+                        {% else %}
+                            {{ (stats[save] - 10) // 2 }}
+                        {% endif %}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="skills-section">
+                <div class="section-title">НАВЫКИ</div>
+                {% set skills_list = [
+                    "Акробатика", "Атлетика", "Аркана", "Восприятие", "Выживание",
+                    "Выступление", "Запугивание", "История", "Ловкость рук", "Медицина",
+                    "Обман", "Обращение с животными", "Природа", "Проницательность",
+                    "Расследование", "Религия", "Скрытность", "Тайная магия", "Убеждение"
+                ] %}
+                {% for skill in skills_list %}
+                <div class="skill-row">
+                    <span class="skill-name">{% if skill in skills %}✓{% else %}•{% endif %} {{ skill }}</span>
+                    <span class="skill-mod">{{ calculate_skill_mod(skill, stats, proficiency_bonus if skill in skills else 0) }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- БОЕВЫЕ ХАРАКТЕРИСТИКИ -->
+        <div class="combat-stats">
+            <div class="combat-card">
+                <div class="combat-label">КЛАСС БРОНИ (AC)</div>
+                <div class="combat-value">{{ ac }}</div>
+            </div>
+            <div class="combat-card">
+                <div class="combat-label">ХИТЫ (HP)</div>
+                <div class="combat-value">{{ hp }}</div>
+            </div>
+            <div class="combat-card">
+                <div class="combat-label">СКОРОСТЬ</div>
+                <div class="combat-value">{{ speed if speed else "30" }} фт.</div>
+            </div>
+        </div>
+
+        <!-- ОСОБЕННОСТИ РАСЫ И КЛАССА -->
+        <div class="detail-section">
+            <div class="detail-title">ОСОБЕННОСТИ И УМЕНИЯ</div>
+            <div class="detail-content">
+                <ul class="traits-list">
+                    {% for trait in race_traits %}
+                    <li><strong>Раса:</strong> {{ trait }}</li>
                     {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Навыки -->
-            {% if skills and skills|length > 0 %}
-            <div class="section">
-                <h2>⚔️ Навыки</h2>
-                <div class="skills-list">
-                    {% for skill in skills %}
-                    <div class="skill-item">• {{ skill }}</div>
+                    {% for feature in class_features %}
+                    <li><strong>Класс:</strong> {{ feature }}</li>
                     {% endfor %}
-                </div>
+                    {% if background_trait %}
+                    <li><strong>Предыстория:</strong> {{ background_trait }}</li>
+                    {% endif %}
+                </ul>
             </div>
-            {% endif %}
+        </div>
 
-            <!-- Снаряжение -->
-            {% if equipment and equipment|length > 0 %}
-            <div class="section">
-                <h2>🎒 Снаряжение</h2>
-                <div class="equipment-list">
+        <!-- СНАРЯЖЕНИЕ -->
+        <div class="detail-section">
+            <div class="detail-title">СНАРЯЖЕНИЕ</div>
+            <div class="detail-content">
+                <ul class="equipment-list">
                     {% for item in equipment %}
-                    <div class="equipment-item">• {{ item }}</div>
+                    <li>{{ item }}</li>
+                    {% else %}
+                    <li>Нет снаряжения</li>
                     {% endfor %}
+                </ul>
+                {% if coins %}
+                <div style="margin-top: 10px;">
+                    <strong>Монеты:</strong> {{ coins }}
                 </div>
+                {% endif %}
             </div>
-            {% else %}
-            <div class="section">
-                <h2>🎒 Снаряжение</h2>
-                <div class="empty-message">Нет снаряжения</div>
-            </div>
-            {% endif %}
-
-            <!-- Заклинания -->
-            {% if spells and spells|length > 0 %}
-            <div class="section">
-                <h2>🔮 Заклинания</h2>
-                <div class="spells-list">
-                    {% for spell in spells %}
-                    <div class="spell-item">✨ {{ spell }}</div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- Дополнительные заметки -->
-            {% if notes is defined and notes %}
-            <div class="section">
-                <h2>📝 Заметки</h2>
-                <div class="empty-message">{{ notes }}</div>
-            </div>
-            {% endif %}
-
-            <!-- Опыт -->
-            {% if experience is defined and experience %}
-            <div class="section">
-                <h2>⭐ Опыт</h2>
-                <div class="empty-message">{{ experience }} / {{ experience_next_level if experience_next_level is defined else 300 }} XP</div>
-            </div>
-            {% endif %}
         </div>
 
+        <!-- ПРЕДЫСТОРИЯ И ИСТОРИЯ ПЕРСОНАЖА -->
+        <div class="detail-section">
+            <div class="detail-title">ПРЕДЫСТОРИЯ И ЛИЧНЫЕ КАЧЕСТВА</div>
+            <div class="detail-content">
+                {% if background_description %}
+                <p><strong>Описание предыстории:</strong></p>
+                <p>{{ background_description }}</p>
+                {% endif %}
+                <p><strong>История персонажа:</strong></p>
+                <p>{{ backstory if backstory else "Нет истории" }}</p>
+            </div>
+        </div>
+
+        <!-- ЗАКЛИНАНИЯ (ЕСЛИ ЕСТЬ) -->
+        {% if spells and spells|length > 0 %}
+        <div class="spells-section">
+            <div class="detail-title">ЗАКЛИНАНИЯ</div>
+            <div class="spell-slots">
+                <div class="slot-level">1-й уровень: {{ spell_slots_1 if spell_slots_1 else "2" }} ячейки</div>
+                <div class="slot-level">2-й уровень: {{ spell_slots_2 if spell_slots_2 else "0" }} ячеек</div>
+                <div class="slot-level">3-й уровень: {{ spell_slots_3 if spell_slots_3 else "0" }} ячеек</div>
+            </div>
+            <div class="spells-list">
+                {% for spell in spells %}
+                <div class="spell-item">✨ {{ spell }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- ЗАМЕТКИ -->
+        <div class="notes-section">
+            <div class="detail-title">ЗАМЕТКИ</div>
+            <div class="detail-content">
+                {{ notes if notes else "—" }}
+            </div>
+        </div>
+
+        <!-- ПОДВАЛ -->
         <div class="footer">
-            <p>🏰 Dungeons & Dragons Character Sheet</p>
-            <p>📅 Создано: {{ created_date if created_date is defined else "сегодня" }}</p>
-            <p>🤖 Сгенерировано D&D Character Bot</p>
+            <p>D&D Character Sheet • Создано в D&D Character Creator • {{ created_date }}</p>
         </div>
     </div>
 </body>

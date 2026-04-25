@@ -1,12 +1,14 @@
+# pdf_generator.py
 """
 PDF Generator Module for D&D Character Sheets
-Модуль для генерации PDF листов персонажей D&D
+Модуль для генерации PDF листов персонажей D&D в стиле официальных листов
 """
 
 import os
 import logging
 from typing import Dict, Any, Optional
-from jinja2 import Environment, FileSystemLoader, TemplateNotFound, TemplateError
+from datetime import datetime
+from jinja2 import Environment, FileSystemLoader, TemplateError
 from weasyprint import HTML, CSS
 from weasyprint.text.fonts import FontConfiguration
 
@@ -14,7 +16,7 @@ from weasyprint.text.fonts import FontConfiguration
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# HTML шаблон для персонажа (встроенный на случай отсутствия файла)
+# HTML шаблон для персонажа в стиле D&D
 DEFAULT_HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="ru">
@@ -30,254 +32,469 @@ DEFAULT_HTML_TEMPLATE = '''
         }
 
         body {
-            font-family: 'Arial', 'Helvetica', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 40px;
-            min-height: 100vh;
+            font-family: 'Times New Roman', 'Georgia', 'Arial', serif;
+            background: #f5f0e8;
+            padding: 20px;
         }
 
+        /* Основной контейнер */
         .sheet {
-            max-width: 1000px;
+            max-width: 1100px;
             margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
+            background: #faf8f0;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+
+        /* Заголовки */
+        h1, h2, h3 {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            font-weight: normal;
         }
 
         .header {
-            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
+            border-bottom: 2px solid #8b4513;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
         }
 
         .header h1 {
-            font-size: 32px;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-        }
-
-        .header p {
-            font-size: 18px;
-            opacity: 0.9;
-        }
-
-        .content {
-            padding: 30px;
-        }
-
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .info-card {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            padding: 15px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .info-card h3 {
-            color: #2c3e50;
-            margin-bottom: 10px;
-            font-size: 16px;
+            font-size: 28px;
+            color: #2c1810;
             text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Основная информация */
+        .basic-info {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+            background: #f0ebdf;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .info-row {
+            margin-bottom: 8px;
+        }
+
+        .info-label {
+            font-weight: bold;
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #8b4513;
             letter-spacing: 1px;
         }
 
-        .info-card .value {
-            font-size: 28px;
+        .info-value {
+            font-size: 14px;
+            border-bottom: 1px solid #c4b89c;
+            padding: 4px;
             font-weight: bold;
-            color: #3498db;
         }
 
+        /* 6 колонок характеристик */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(6, 1fr);
-            gap: 15px;
-            margin-bottom: 30px;
-        }
-
-        .stat {
-            background: #ecf0f1;
-            padding: 15px;
-            text-align: center;
-            border-radius: 15px;
-            transition: transform 0.3s;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .stat:hover {
-            transform: translateY(-5px);
-        }
-
-        .stat h3 {
-            color: #2c3e50;
-            margin-bottom: 10px;
-            font-size: 14px;
-            text-transform: uppercase;
-        }
-
-        .stat .score {
-            font-size: 32px;
-            font-weight: bold;
-            color: #3498db;
-            margin: 10px 0;
-        }
-
-        .stat .mod {
-            font-size: 18px;
-            color: #7f8c8d;
-            font-weight: bold;
-        }
-
-        .section {
-            margin-bottom: 30px;
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .section h2 {
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-            font-size: 24px;
-        }
-
-        .skills-list, .equipment-list, .spells-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
             gap: 10px;
+            margin-bottom: 20px;
         }
 
-        .skill-item, .equipment-item, .spell-item {
-            background: white;
-            padding: 10px;
-            border-radius: 8px;
-            border-left: 4px solid #3498db;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-
-        .footer {
-            background: #2c3e50;
-            color: white;
+        .stat-card {
+            background: #f0ebdf;
             text-align: center;
-            padding: 20px;
+            padding: 10px;
+            border: 1px solid #c4b89c;
+            border-radius: 5px;
+        }
+
+        .stat-name {
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #8b4513;
+        }
+
+        .stat-score {
+            font-size: 28px;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+
+        .stat-mod {
+            font-size: 14px;
+            color: #555;
+        }
+
+        /* Спасброски и навыки */
+        .saves-skills {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .saves-section, .skills-section {
+            background: #f0ebdf;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-bottom: 2px solid #8b4513;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+            color: #2c1810;
+        }
+
+        .save-row, .skill-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px dotted #c4b89c;
             font-size: 12px;
         }
 
+        .save-name, .skill-name {
+            font-weight: normal;
+        }
+
+        .save-mod, .skill-mod {
+            font-weight: bold;
+        }
+
+        .proficient {
+            color: #2c5f2d;
+        }
+
+        /* Боевые характеристики */
+        .combat-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .combat-card {
+            background: #f0ebdf;
+            text-align: center;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .combat-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #8b4513;
+        }
+
+        .combat-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        /* Секции для предыстории, снаряжения и особенностей */
+        .detail-section {
+            margin-bottom: 20px;
+        }
+
+        .detail-title {
+            font-size: 14px;
+            font-weight: bold;
+            text-transform: uppercase;
+            background: #2c1810;
+            color: #faf8f0;
+            padding: 5px 10px;
+            margin-bottom: 10px;
+        }
+
+        .detail-content {
+            background: #f0ebdf;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .equipment-list, .traits-list, .skills-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .equipment-list li, .traits-list li, .skills-list li {
+            padding: 4px 0;
+            border-bottom: 1px dotted #c4b89c;
+        }
+
+        /* Заметки */
+        .notes-section {
+            background: #f0ebdf;
+            padding: 15px;
+            border-radius: 5px;
+            min-height: 150px;
+            margin-bottom: 20px;
+        }
+
+        .notes-title {
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .notes-content {
+            font-size: 11px;
+            line-height: 1.4;
+            color: #333;
+        }
+
+        /* Блок заклинаний (если есть) */
+        .spells-section {
+            margin-bottom: 20px;
+        }
+
+        .spell-slots {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .slot-level {
+            background: #2c1810;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .spells-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 5px;
+        }
+
+        .spell-item {
+            background: #f0ebdf;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            font-size: 10px;
+            color: #999;
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 1px solid #c4b89c;
+        }
+
+        /* Стили для печати */
         @media print {
             body {
                 background: white;
                 padding: 0;
             }
-            .stat:hover {
-                transform: none;
+            .sheet {
+                box-shadow: none;
+                padding: 0;
             }
         }
     </style>
 </head>
 <body>
     <div class="sheet">
+        <!-- Заголовок -->
         <div class="header">
-            <h1>📖 {{ name }}</h1>
-            <p>{{ class_name }} • {{ race }} • Уровень {{ level }}</p>
+            <h1>{{ name }}</h1>
         </div>
 
-        <div class="content">
-            <div class="info-grid">
-                <div class="info-card">
-                    <h3>❤️ Здоровье (HP)</h3>
-                    <div class="value">{{ hp }}</div>
+        <!-- Основная информация -->
+        <div class="basic-info">
+            <div>
+                <div class="info-row">
+                    <div class="info-label">Класс и уровень</div>
+                    <div class="info-value">{{ class_name }} • Уровень {{ level }}</div>
                 </div>
-                <div class="info-card">
-                    <h3>🛡️ Класс брони (AC)</h3>
-                    <div class="value">{{ ac }}</div>
+                <div class="info-row">
+                    <div class="info-label">Предыстория</div>
+                    <div class="info-value">{{ background }}</div>
                 </div>
-                <div class="info-card">
-                    <h3>📊 Уровень</h3>
-                    <div class="value">{{ level }}</div>
-                </div>
-            </div>
-
-            <h2 style="margin-bottom: 15px;">📊 Характеристики</h2>
-            <div class="stats-grid">
-                <div class="stat">
-                    <h3>💪 Сила (STR)</h3>
-                    <div class="score">{{ stats.STR }}</div>
-                    <div class="mod">({{ (stats.STR - 10) // 2 }})</div>
-                </div>
-                <div class="stat">
-                    <h3>🤸 Ловкость (DEX)</h3>
-                    <div class="score">{{ stats.DEX }}</div>
-                    <div class="mod">({{ (stats.DEX - 10) // 2 }})</div>
-                </div>
-                <div class="stat">
-                    <h3>🏋️ Телосложение (CON)</h3>
-                    <div class="score">{{ stats.CON }}</div>
-                    <div class="mod">({{ (stats.CON - 10) // 2 }})</div>
-                </div>
-                <div class="stat">
-                    <h3>🧠 Интеллект (INT)</h3>
-                    <div class="score">{{ stats.INT }}</div>
-                    <div class="mod">({{ (stats.INT - 10) // 2 }})</div>
-                </div>
-                <div class="stat">
-                    <h3>🧙 Мудрость (WIS)</h3>
-                    <div class="score">{{ stats.WIS }}</div>
-                    <div class="mod">({{ (stats.WIS - 10) // 2 }})</div>
-                </div>
-                <div class="stat">
-                    <h3>✨ Харизма (CHA)</h3>
-                    <div class="score">{{ stats.CHA }}</div>
-                    <div class="mod">({{ (stats.CHA - 10) // 2 }})</div>
+                <div class="info-row">
+                    <div class="info-label">Мировоззрение</div>
+                    <div class="info-value">{{ alignment if alignment else "Нейтральное" }}</div>
                 </div>
             </div>
+            <div>
+                <div class="info-row">
+                    <div class="info-label">Раса</div>
+                    <div class="info-value">{{ race }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Опыт</div>
+                    <div class="info-value">{{ experience if experience else "0" }} / 300</div>
+                </div>
+            </div>
+            <div>
+                <div class="info-row">
+                    <div class="info-label">Игрок</div>
+                    <div class="info-value">{{ player_name if player_name else "—" }}</div>
+                </div>
+                <div class="info-row">
+                    <div class="info-label">Внешность</div>
+                    <div class="info-value">{{ appearance if appearance else "—" }}</div>
+                </div>
+            </div>
+        </div>
 
-            {% if skills %}
-            <div class="section">
-                <h2>⚔️ Навыки</h2>
-                <div class="skills-list">
-                    {% for skill in skills %}
-                    <div class="skill-item">• {{ skill }}</div>
+        <!-- Характеристики -->
+        <div class="stats-grid">
+            {% set stat_names = ["STR", "DEX", "CON", "INT", "WIS", "CHA"] %}
+            {% for stat in stat_names %}
+            <div class="stat-card">
+                <div class="stat-name">{{ stat }}</div>
+                <div class="stat-score">{{ stats[stat] }}</div>
+                <div class="stat-mod">({{ (stats[stat] - 10) // 2 }})</div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Спасброски и навыки -->
+        <div class="saves-skills">
+            <div class="saves-section">
+                <div class="section-title">Спасброски</div>
+                {% for save in ["STR", "DEX", "CON", "INT", "WIS", "CHA"] %}
+                <div class="save-row">
+                    <span class="save-name">
+                        {% if save in saving_throws %}✓{% else %}•{% endif %} {{ save }}
+                    </span>
+                    <span class="save-mod">
+                        {% if save in saving_throws %}
+                            {{ (stats[save] - 10) // 2 + proficiency_bonus }}
+                        {% else %}
+                            {{ (stats[save] - 10) // 2 }}
+                        {% endif %}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="skills-section">
+                <div class="section-title">Навыки</div>
+                {% for skill in all_skills %}
+                <div class="skill-row">
+                    <span class="skill-name">
+                        {% if skill in skills %}✓{% else %}•{% endif %} {{ skill }}
+                    </span>
+                    <span class="skill-mod">
+                        {% if skill in skills %}
+                            {{ calculate_skill_mod(skill, stats, proficiency_bonus) }}
+                        {% else %}
+                            {{ calculate_skill_mod(skill, stats, 0) }}
+                        {% endif %}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Боевые характеристики -->
+        <div class="combat-stats">
+            <div class="combat-card">
+                <div class="combat-label">Класс брони (AC)</div>
+                <div class="combat-value">{{ ac }}</div>
+            </div>
+            <div class="combat-card">
+                <div class="combat-label">Хиты (HP)</div>
+                <div class="combat-value">{{ hp }}</div>
+            </div>
+            <div class="combat-card">
+                <div class="combat-label">Скорость</div>
+                <div class="combat-value">{{ speed if speed else "30" }} фт.</div>
+            </div>
+        </div>
+
+        <!-- Особенности расы и класса -->
+        <div class="detail-section">
+            <div class="detail-title">Особенности и умения</div>
+            <div class="detail-content">
+                <ul class="traits-list">
+                    {% for trait in race_traits %}
+                    <li><strong>Раса:</strong> {{ trait }}</li>
                     {% endfor %}
-                </div>
+                    {% for feature in class_features %}
+                    <li><strong>Класс:</strong> {{ feature }}</li>
+                    {% endfor %}
+                    {% if background_trait %}
+                    <li><strong>Предыстория:</strong> {{ background_trait }}</li>
+                    {% endif %}
+                </ul>
             </div>
-            {% endif %}
+        </div>
 
-            {% if equipment %}
-            <div class="section">
-                <h2>🎒 Снаряжение</h2>
-                <div class="equipment-list">
+        <!-- Снаряжение -->
+        <div class="detail-section">
+            <div class="detail-title">Снаряжение</div>
+            <div class="detail-content">
+                <ul class="equipment-list">
                     {% for item in equipment %}
-                    <div class="equipment-item">• {{ item }}</div>
+                    <li>{{ item }}</li>
                     {% endfor %}
+                </ul>
+                {% if coins %}
+                <div style="margin-top: 10px;">
+                    <strong>Монеты:</strong> {{ coins }}
                 </div>
+                {% endif %}
             </div>
-            {% endif %}
-
-            {% if spells %}
-            <div class="section">
-                <h2>🔮 Заклинания</h2>
-                <div class="spells-list">
-                    {% for spell in spells %}
-                    <div class="spell-item">✨ {{ spell }}</div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
         </div>
 
+        <!-- Предыстория -->
+        <div class="detail-section">
+            <div class="detail-title">Предыстория и личные качества</div>
+            <div class="detail-content">
+                <p><strong>Черта:</strong> {{ background_trait }}</p>
+                <p><strong>Описание предыстории:</strong></p>
+                <p>{{ background_description }}</p>
+                <p><strong>История персонажа:</strong></p>
+                <p>{{ backstory }}</p>
+            </div>
+        </div>
+
+        <!-- Заклинания (если есть) -->
+        {% if spells and spells|length > 0 %}
+        <div class="spells-section">
+            <div class="detail-title">Заклинания</div>
+            <div class="spell-slots">
+                <div class="slot-level">1-й уровень: {{ spell_slots_1 if spell_slots_1 else "2" }} ячейки</div>
+                <div class="slot-level">2-й уровень: {{ spell_slots_2 if spell_slots_2 else "0" }} ячейки</div>
+            </div>
+            <div class="spells-list">
+                {% for spell in spells %}
+                <div class="spell-item">✨ {{ spell }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Заметки -->
+        <div class="notes-section">
+            <div class="notes-title">Заметки</div>
+            <div class="notes-content">
+                {{ notes if notes else "—" }}
+            </div>
+        </div>
+
+        <!-- Footer -->
         <div class="footer">
-            <p>D&D Character Sheet • Generated by D&D Bot</p>
+            <p>Создано в D&D Character Creator • {{ created_date }}</p>
         </div>
     </div>
 </body>
@@ -285,18 +502,14 @@ DEFAULT_HTML_TEMPLATE = '''
 '''
 
 
-# Инициализация окружения Jinja2
 def get_jinja_env():
     """Создает и возвращает окружение Jinja2"""
-    # Создаем папку templates если её нет
     if not os.path.exists("templates"):
         os.makedirs("templates")
         logger.info("✅ Создана папка templates")
 
-    # Проверяем наличие файла шаблона
     template_path = "templates/character.html"
     if not os.path.exists(template_path):
-        # Создаем файл шаблона с содержимым по умолчанию
         with open(template_path, 'w', encoding='utf-8') as f:
             f.write(DEFAULT_HTML_TEMPLATE)
         logger.info("✅ Создан файл шаблона character.html")
@@ -305,21 +518,14 @@ def get_jinja_env():
 
 
 def ensure_template_exists() -> bool:
-    """
-    Проверяет существование шаблона и создает его при необходимости
-
-    Returns:
-        bool: True если шаблон существует или создан
-    """
+    """Проверяет существование шаблона и создает его при необходимости"""
     try:
         template_path = "templates/character.html"
 
-        # Создаем папку если нет
         if not os.path.exists("templates"):
             os.makedirs("templates")
             logger.info("📁 Создана папка templates")
 
-        # Создаем файл если нет
         if not os.path.exists(template_path):
             with open(template_path, 'w', encoding='utf-8') as f:
                 f.write(DEFAULT_HTML_TEMPLATE)
@@ -332,9 +538,35 @@ def ensure_template_exists() -> bool:
         return False
 
 
+def get_skill_ability(skill_name: str) -> str:
+    """Определяет, какая характеристика отвечает за навык"""
+    skill_map = {
+        "Акробатика": "DEX",
+        "Атлетика": "STR",
+        "Аркана": "INT",
+        "Восприятие": "WIS",
+        "Выживание": "WIS",
+        "Выступление": "CHA",
+        "Запугивание": "CHA",
+        "История": "INT",
+        "Ловкость рук": "DEX",
+        "Медицина": "WIS",
+        "Обман": "CHA",
+        "Обращение с животными": "WIS",
+        "Природа": "INT",
+        "Проницательность": "WIS",
+        "Расследование": "INT",
+        "Религия": "INT",
+        "Скрытность": "DEX",
+        "Тайная магия": "INT",
+        "Убеждение": "CHA"
+    }
+    return skill_map.get(skill_name, "WIS")
+
+
 def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
     """
-    Генерирует PDF файл с листом персонажа
+    Генерирует PDF файл с листом персонажа в стиле D&D
 
     Args:
         data: словарь с данными персонажа
@@ -344,7 +576,6 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
         str: путь к созданному файлу или None при ошибке
     """
     try:
-        # Проверяем наличие шаблона
         if not ensure_template_exists():
             logger.error("❌ Не удалось создать/найти шаблон")
             return None
@@ -356,16 +587,30 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
                 logger.error(f"❌ Отсутствует обязательное поле: {field}")
                 return None
 
-        # Проверяем, что stats содержит все характеристики
         required_stats = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']
         for stat in required_stats:
             if stat not in data['stats']:
                 logger.error(f"❌ Отсутствует характеристика: {stat}")
                 return None
 
-        # Загружаем шаблон
         env = get_jinja_env()
         template = env.get_template("character.html")
+
+        # Создаём полный список навыков для отображения
+        all_skills = [
+            "Акробатика", "Атлетика", "Аркана", "Восприятие", "Выживание",
+            "Выступление", "Запугивание", "История", "Ловкость рук", "Медицина",
+            "Обман", "Обращение с животными", "Природа", "Проницательность",
+            "Расследование", "Религия", "Скрытность", "Тайная магия", "Убеждение"
+        ]
+
+        def calculate_skill_mod(skill, stats, prof_bonus):
+            """Вспомогательная функция для расчёта модификатора навыка"""
+            ability = get_skill_ability(skill)
+            mod = (stats.get(ability, 10) - 10) // 2
+            if prof_bonus > 0:
+                mod += prof_bonus
+            return mod
 
         # Подготавливаем данные для шаблона
         template_data = {
@@ -373,15 +618,34 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
             'class_name': data['class_name'],
             'race': data['race'],
             'level': data['level'],
+            'background': data.get('background', 'Нет'),
+            'background_trait': data.get('background_trait', 'Нет'),
+            'background_description': data.get('background_description', ''),
+            'backstory': data.get('backstory', 'Нет истории'),
             'stats': data['stats'],
             'hp': data['hp'],
             'ac': data['ac'],
+            'speed': data.get('speed', 30),
+            'alignment': data.get('alignment', 'Нейтральное'),
+            'player_name': data.get('player_name', ''),
+            'appearance': data.get('appearance', ''),
+            'experience': data.get('experience', 0),
+            'proficiency_bonus': data.get('proficiency_bonus', 2),
+            'saving_throws': data.get('saving_throws', []),
             'skills': data.get('skills', []),
+            'all_skills': all_skills,
+            'calculate_skill_mod': calculate_skill_mod,
+            'race_traits': data.get('race_traits', []),
+            'class_features': data.get('class_features', []),
             'equipment': data.get('equipment', []),
-            'spells': data.get('spells', [])
+            'coins': data.get('coins', ''),
+            'spells': data.get('spells', []),
+            'spell_slots_1': data.get('spell_slots_1', 2),
+            'spell_slots_2': data.get('spell_slots_2', 0),
+            'notes': data.get('notes', ''),
+            'created_date': datetime.now().strftime("%d.%m.%Y")
         }
 
-        # Рендерим HTML
         try:
             html_content = template.render(**template_data)
             logger.info(f"✅ HTML сгенерирован для {data['name']}")
@@ -389,16 +653,24 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
             logger.error(f"❌ Ошибка рендеринга шаблона: {e}")
             return None
 
-        # Генерируем PDF
         try:
-            # Настройка шрифтов для корректного отображения
             font_config = FontConfiguration()
-
-            # Создаем PDF
             html = HTML(string=html_content)
-            html.write_pdf(filename, font_config=font_config)
 
-            # Проверяем, что файл создан
+            # CSS для печати
+            css = CSS(string='''
+                @page {
+                    size: A4;
+                    margin: 1.5cm;
+                }
+                body {
+                    margin: 0;
+                    padding: 0;
+                }
+            ''')
+
+            html.write_pdf(filename, stylesheets=[css], font_config=font_config)
+
             if os.path.exists(filename) and os.path.getsize(filename) > 0:
                 logger.info(f"✅ PDF создан: {filename} (размер: {os.path.getsize(filename)} байт)")
                 return filename
@@ -415,45 +687,8 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
         return None
 
 
-def generate_pdf_from_template(template_name: str, data: Dict[str, Any], filename: str) -> Optional[str]:
-    """
-    Генерирует PDF используя указанный шаблон
-
-    Args:
-        template_name: имя файла шаблона
-        data: данные для шаблона
-        filename: имя выходного файла
-
-    Returns:
-        str: путь к файлу или None при ошибке
-    """
-    try:
-        if not ensure_template_exists():
-            return None
-
-        env = get_jinja_env()
-        template = env.get_template(template_name)
-        html_content = template.render(**data)
-
-        HTML(string=html_content).write_pdf(filename)
-
-        if os.path.exists(filename):
-            return filename
-        return None
-
-    except Exception as e:
-        logger.error(f"❌ Ошибка в generate_pdf_from_template: {e}")
-        return None
-
-
 def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
-    """
-    Очищает старые PDF файлы
-
-    Args:
-        directory: директория для очистки
-        max_age_hours: максимальный возраст файлов в часах
-    """
+    """Очищает старые PDF файлы"""
     import time
 
     try:
@@ -461,7 +696,8 @@ def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
         max_age_seconds = max_age_hours * 3600
 
         for filename in os.listdir(directory):
-            if filename.startswith("temp_") and filename.endswith(".pdf"):
+            if (filename.startswith("temp_") or filename.endswith("_character_sheet.pdf")) and filename.endswith(
+                    ".pdf"):
                 filepath = os.path.join(directory, filename)
                 file_age = current_time - os.path.getmtime(filepath)
 
@@ -477,40 +713,45 @@ def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
 if __name__ == "__main__":
     print("=== Тестирование PDF Generator ===\n")
 
-    # Тестовые данные
     test_data = {
-        "name": "Тестовый Персонаж",
-        "class_name": "Воин",
+        "name": "Арагорн",
+        "class_name": "Следопыт",
         "race": "Человек",
-        "level": 1,
+        "level": 3,
+        "background": "Стражник",
+        "background_trait": "Бдительный",
+        "background_description": "Вы прошли через множество сражений и научились выживать в самых опасных условиях.",
+        "backstory": "Родился в семье лесничих, с детства учился выживать в дикой природе. После нападения орков на деревню поклялся защищать невинных.",
         "stats": {
-            "STR": 15,
+            "STR": 16,
             "DEX": 14,
-            "CON": 13,
+            "CON": 15,
             "INT": 12,
-            "WIS": 10,
-            "CHA": 8
+            "WIS": 13,
+            "CHA": 11
         },
-        "hp": 12,
-        "ac": 15,
-        "skills": ["Athletics", "Intimidation"],
-        "equipment": ["Longsword", "Shield", "Chain Mail"],
-        "spells": []
+        "hp": 32,
+        "ac": 16,
+        "speed": 30,
+        "alignment": "Добрый",
+        "player_name": "Иван",
+        "experience": 900,
+        "proficiency_bonus": 2,
+        "saving_throws": ["STR", "DEX"],
+        "skills": ["Атлетика", "Выживание", "Восприятие"],
+        "race_traits": ["Универсальность человечества", "+1 ко всем характеристикам"],
+        "class_features": ["Боевой стиль: Стрельба", "Первобытное чутьё", "Избранный враг: Звери"],
+        "equipment": ["Длинный лук", "20 стрел", "Кожаная броня", "Два кинжала"],
+        "coins": "50 ЗМ",
+        "notes": "Ищет доказательства существования древнего пророчества."
     }
 
-    # Генерация PDF
     result = generate_pdf(test_data, "test_character.pdf")
 
     if result:
         print(f"✅ PDF успешно создан: {result}")
-
-        # Проверка размера файла
         file_size = os.path.getsize(result)
         print(f"📄 Размер файла: {file_size} байт")
-
-        # Очистка тестового файла
-        # os.remove(result)
-        # print("🗑️ Тестовый файл удален")
     else:
         print("❌ Ошибка при создании PDF")
 

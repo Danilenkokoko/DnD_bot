@@ -36,6 +36,13 @@ from pdf_generator import generate_pdf
 # ---------------- CONFIG ----------------
 load_dotenv()
 
+# Настройка логирования - должна быть ПЕРВОЙ
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN не найден в .env файле")
@@ -43,21 +50,12 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-
-@dp.message()
-async def debug_all_messages(message: Message):
-    """Отладочный обработчик всех сообщений"""
-    logger.info(f"🔍 Получено сообщение: '{message.text}' от {message.from_user.id}")
-    # Проверяем, есть ли активное состояние
-    from aiogram.fsm.storage.memory import MemoryStorage
-    logger.info(f"   Текст: {message.text}")
-    logger.info(f"   Чат ID: {message.chat.id}")
-
-    # Отвечаем на любое сообщение для проверки
-    await message.answer(f"✅ Бот работает! Вы написали: {message.text}")
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# ================= ВНИМАНИЕ! =================
+# НЕ ДОБАВЛЯЙТЕ ОБРАБОТЧИК debug_all_messages!
+# Он перехватывает все сообщения и ломает работу бота.
+# Если нужен отладочный обработчик - используйте фильтр,
+# но лучше вообще его не добавлять.
+# =============================================
 
 
 # ---------------- FSM STATES ----------------
@@ -486,7 +484,6 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
 
         # Получаем информацию о классах, расах, предысториях
         class_info = get_class_info(char_class)
-        race_info = get_race_info(race)
         bg_info = get_background_data(background)
 
         # Собираем данные для сохранения
@@ -503,7 +500,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         equipment_text = bg_info.get(f"equipment_{equipment_choice.lower()}", "")
         equipment_list = [item.strip() for item in equipment_text.split(",") if item.strip()]
 
-        # ИСПРАВЛЕНО: Получаем умения ТОЛЬКО для 1-го уровня
+        # Получаем умения ТОЛЬКО для 1-го уровня
         all_features = class_info.get("features", {})
         first_level_features = all_features.get(1, [])
 
@@ -727,7 +724,6 @@ async def main():
     logger.info("=" * 50)
 
     try:
-        # Инициализация базы данных
         from db import init_database, migrate_database
 
         logger.info("📊 Шаг 1/5: Инициализация базы данных...")
@@ -735,7 +731,6 @@ async def main():
         migrate_database()
         logger.info("✅ База данных готова")
 
-        # Загрузка предысторий
         logger.info("📜 Шаг 2/5: Загрузка предысторий...")
         try:
             from backgrounds_data import reload_cache
@@ -744,7 +739,6 @@ async def main():
         except Exception as e:
             logger.warning(f"⚠️ Ошибка загрузки предысторий: {e}")
 
-        # Проверка БД
         logger.info("🔌 Шаг 3/5: Проверка подключения к БД...")
         try:
             from db import get_user_characters_count
@@ -753,12 +747,10 @@ async def main():
         except Exception as e:
             logger.error(f"❌ Ошибка БД: {e}")
 
-        # Удаление вебхука
         logger.info("🌐 Шаг 4/5: Настройка webhook...")
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("✅ Webhook удалён")
 
-        # Информация о боте
         logger.info("🤖 Шаг 5/5: Получение информации о боте...")
         bot_info = await bot.get_me()
         logger.info(f"✅ Бот: @{bot_info.username} (ID: {bot_info.id})")
@@ -769,11 +761,9 @@ async def main():
         logger.info("📨 Ожидание сообщений...")
         logger.info("=" * 50)
 
-        # ПРИНУДИТЕЛЬНЫЙ ВЫВОД
         import sys
         sys.stdout.flush()
 
-        # ЗАПУСК ПОЛЛИНГА
         await dp.start_polling(bot)
 
     except Exception as e:

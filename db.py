@@ -18,43 +18,18 @@ DB_CONFIG = {
     "user": os.getenv("DB_USER"),
     "password": (os.getenv("DB_PASSWORD") or "").strip(),
     "host": os.getenv("DB_HOST"),
-    "port": 5432
+    "port": 5432,
+    "connect_timeout": 5
 }
 
 # Проверка env
 for key, value in DB_CONFIG.items():
+    if key == "connect_timeout":
+        continue
     if not value:
         raise ValueError(f"❌ Не задана переменная окружения: {key}")
 
-
-# ---------------- CREATE DATABASE IF NOT EXISTS ----------------
-def create_database_if_not_exists():
-    """Создаёт базу данных если она не существует"""
-    # Временно подключаемся к системной базе 'postgres'
-    temp_config = DB_CONFIG.copy()
-    temp_config["dbname"] = "postgres"  # Подключаемся к системной БД
-
-    try:
-        conn = psycopg2.connect(**temp_config)
-        conn.autocommit = True
-        cur = conn.cursor()
-
-        # Проверяем существует ли база
-        cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (DB_CONFIG["dbname"],))
-        exists = cur.fetchone()
-
-        if not exists:
-            cur.execute(f'CREATE DATABASE {DB_CONFIG["dbname"]}')
-            logger.info(f"✅ База данных '{DB_CONFIG['dbname']}' создана")
-        else:
-            logger.info(f"✅ База данных '{DB_CONFIG['dbname']}' уже существует")
-
-        cur.close()
-        conn.close()
-
-    except Exception as e:
-        logger.error(f"❌ Ошибка при создании базы данных: {e}")
-        raise
+logger.info(f"📊 Настройки БД: host={DB_CONFIG['host']}, dbname={DB_CONFIG['dbname']}, user={DB_CONFIG['user']}")
 
 
 # ---------------- CONNECTION ----------------
@@ -62,8 +37,10 @@ def create_database_if_not_exists():
 def get_connection():
     conn = None
     try:
+        logger.debug("🔄 Попытка подключения к БД...")
         conn = psycopg2.connect(**DB_CONFIG)
         conn.autocommit = False
+        logger.debug("✅ Подключение к БД установлено")
         yield conn
         conn.commit()
     except psycopg2.OperationalError as e:
@@ -79,12 +56,12 @@ def get_connection():
     finally:
         if conn:
             conn.close()
+            logger.debug("🔌 Соединение с БД закрыто")
 
 
 # ---------------- INIT ----------------
 def init_database():
     """Создаёт таблицы если они не существуют"""
-    # База данных уже существует, просто создаём таблицы
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -157,7 +134,7 @@ def init_database():
 
                 logger.info("✅ Таблицы characters и backgrounds готовы")
 
-                # Заполняем таблицу предысторий
+                # Заполняем таблицу предысторий начальными данными
                 seed_backgrounds()
 
     except Exception as e:
@@ -167,45 +144,48 @@ def init_database():
 
 def seed_backgrounds():
     """Заполняет таблицу backgrounds начальными данными"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            # Проверяем, существует ли таблица
-            cur.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'backgrounds'
-                )
-            """)
-            table_exists = cur.fetchone()[0]
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Проверяем, существует ли таблица
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'backgrounds'
+                    )
+                """)
+                table_exists = cur.fetchone()[0]
 
-            if not table_exists:
-                logger.warning("⚠️ Таблица backgrounds не существует, пропускаем заполнение")
-                return
+                if not table_exists:
+                    logger.warning("⚠️ Таблица backgrounds не существует, пропускаем заполнение")
+                    return
 
-            # Проверяем, пуста ли таблица
-            cur.execute("SELECT COUNT(*) FROM backgrounds")
-            count = cur.fetchone()[0]
+                # Проверяем, пуста ли таблица
+                cur.execute("SELECT COUNT(*) FROM backgrounds")
+                count = cur.fetchone()[0]
 
-            if count == 0:
-                backgrounds_data = get_default_backgrounds_for_db()
+                if count == 0:
+                    backgrounds_data = get_default_backgrounds_for_db()
 
-                for bg in backgrounds_data:
-                    cur.execute("""
-                        INSERT INTO backgrounds (name, characteristics, trait, skills, tools, equipment_a, equipment_b, description)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (name) DO NOTHING
-                    """, (
-                        bg["name"],
-                        Json(bg["characteristics"]),
-                        bg["trait"],
-                        Json(bg["skills"]),
-                        bg["tools"],
-                        bg["equipment_a"],
-                        bg["equipment_b"],
-                        bg["description"]
-                    ))
+                    for bg in backgrounds_data:
+                        cur.execute("""
+                            INSERT INTO backgrounds (name, characteristics, trait, skills, tools, equipment_a, equipment_b, description)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (name) DO NOTHING
+                        """, (
+                            bg["name"],
+                            Json(bg["characteristics"]),
+                            bg["trait"],
+                            Json(bg["skills"]),
+                            bg["tools"],
+                            bg["equipment_a"],
+                            bg["equipment_b"],
+                            bg["description"]
+                        ))
 
-                logger.info(f"✅ Добавлено {len(backgrounds_data)} предысторий в базу данных")
+                    logger.info(f"✅ Добавлено {len(backgrounds_data)} предысторий в базу данных")
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка при заполнении предысторий: {e}")
 
 
 def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
@@ -593,46 +573,52 @@ def get_user_characters_count(user_id: int) -> int:
 # ---------------- MIGRATION ----------------
 def migrate_database():
     """Миграция существующей базы данных (добавление новых полей)"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            new_columns = [
-                ("background", "VARCHAR(100)"),
-                ("backstory", "TEXT"),
-                ("image_file_id", "VARCHAR(255)"),
-                ("race_traits", "JSONB DEFAULT '[]'"),
-                ("class_features", "JSONB DEFAULT '[]'"),
-                ("tools", "JSONB DEFAULT '[]'"),
-                ("background_trait", "VARCHAR(255)"),
-                ("background_skills", "JSONB DEFAULT '[]'"),
-                ("background_tools", "VARCHAR(255)"),
-                ("background_equipment_choice", "VARCHAR(1)"),
-                ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-            ]
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                new_columns = [
+                    ("background", "VARCHAR(100)"),
+                    ("backstory", "TEXT"),
+                    ("image_file_id", "VARCHAR(255)"),
+                    ("race_traits", "JSONB DEFAULT '[]'"),
+                    ("class_features", "JSONB DEFAULT '[]'"),
+                    ("tools", "JSONB DEFAULT '[]'"),
+                    ("background_trait", "VARCHAR(255)"),
+                    ("background_skills", "JSONB DEFAULT '[]'"),
+                    ("background_tools", "VARCHAR(255)"),
+                    ("background_equipment_choice", "VARCHAR(1)"),
+                    ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+                ]
 
-            for col_name, col_type in new_columns:
-                try:
-                    cur.execute(f"""
-                        ALTER TABLE characters 
-                        ADD COLUMN IF NOT EXISTS {col_name} {col_type}
-                    """)
-                    logger.info(f"✅ Добавлена колонка: {col_name}")
-                except Exception as e:
-                    logger.warning(f"⚠️ Не удалось добавить {col_name}: {e}")
+                for col_name, col_type in new_columns:
+                    try:
+                        cur.execute(f"""
+                            ALTER TABLE characters 
+                            ADD COLUMN IF NOT EXISTS {col_name} {col_type}
+                        """)
+                        logger.info(f"✅ Добавлена колонка: {col_name}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Не удалось добавить {col_name}: {e}")
 
-            conn.commit()
-            logger.info("✅ Миграция базы данных завершена")
+                conn.commit()
+                logger.info("✅ Миграция базы данных завершена")
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка миграции: {e}")
 
 
 # ---------------- TEST ----------------
 if __name__ == "__main__":
     print("=== Тест базы данных ===\n")
 
-    init_database()
-    migrate_database()
+    try:
+        init_database()
+        migrate_database()
 
-    backgrounds = get_all_backgrounds_from_db()
-    print(f"📚 Загружено предысторий: {len(backgrounds)}")
-    for bg in backgrounds[:5]:
-        print(f"   - {bg['name']}")
+        backgrounds = get_all_backgrounds_from_db()
+        print(f"📚 Загружено предысторий: {len(backgrounds)}")
+        for bg in backgrounds[:5]:
+            print(f"   - {bg['name']}")
 
-    print("\n✅ Модуль db.py готов к использованию!")
+        print("\n✅ Модуль db.py готов к использованию!")
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")

@@ -56,8 +56,6 @@ def init_database():
                 CREATE TABLE IF NOT EXISTS characters (
                     id SERIAL PRIMARY KEY,
                     user_id BIGINT NOT NULL,
-
-                    -- Основная информация
                     name VARCHAR(100) NOT NULL,
                     race VARCHAR(50) NOT NULL,
                     class_name VARCHAR(50) NOT NULL,
@@ -65,38 +63,24 @@ def init_database():
                     background VARCHAR(100),
                     backstory TEXT,
                     image_file_id VARCHAR(255),
-
-                    -- Характеристики
                     str INTEGER DEFAULT 10,
                     dex INTEGER DEFAULT 10,
                     con INTEGER DEFAULT 10,
                     int INTEGER DEFAULT 10,
                     wis INTEGER DEFAULT 10,
                     cha INTEGER DEFAULT 10,
-
-                    -- Боевые характеристики
                     hp INTEGER DEFAULT 0,
                     ac INTEGER DEFAULT 10,
-
-                    -- Особенности
                     race_traits JSONB DEFAULT '[]',
                     class_features JSONB DEFAULT '[]',
-
-                    -- Навыки и инструменты
                     skills JSONB DEFAULT '[]',
                     tools JSONB DEFAULT '[]',
-
-                    -- Снаряжение и магия
                     equipment JSONB DEFAULT '[]',
                     spells JSONB DEFAULT '[]',
-
-                    -- Данные предыстории
                     background_trait VARCHAR(255),
                     background_skills JSONB DEFAULT '[]',
                     background_tools VARCHAR(255),
                     background_equipment_choice VARCHAR(1),
-
-                    -- Системные поля
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -137,6 +121,7 @@ def init_database():
             logger.info("✅ Таблицы characters и backgrounds готовы")
 
             # Заполняем таблицу предысторий начальными данными
+            # Важно: вызываем ПОСЛЕ создания таблицы
             seed_backgrounds()
 
 
@@ -144,6 +129,19 @@ def seed_backgrounds():
     """Заполняет таблицу backgrounds начальными данными"""
     with get_connection() as conn:
         with conn.cursor() as cur:
+            # Проверяем, существует ли таблица
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'backgrounds'
+                )
+            """)
+            table_exists = cur.fetchone()[0]
+
+            if not table_exists:
+                logger.warning("⚠️ Таблица backgrounds не существует, пропускаем заполнение")
+                return
+
             # Проверяем, пуста ли таблица
             cur.execute("SELECT COUNT(*) FROM backgrounds")
             count = cur.fetchone()[0]
@@ -179,19 +177,19 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "trait": "Музыкант",
             "skills": ["Акробатика", "Выступление"],
             "tools": "Музыкальный инструмент",
-            "equipment_a": "Музыкальный инструмент (выбранный выше), 2 Костюма, Зеркало, Духи, Дорожная одежда, 11 ЗМ",
+            "equipment_a": "Музыкальный инструмент, 2 Костюма, Зеркало, Духи, Дорожная одежда, 11 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы провели большую часть своей юности следуя за бродячими ярмарками и карнавалами, иногда работая на музыкантов и акробатов в обмен на уроки."
+            "description": "Вы провели большую часть своей юности следуя за бродячими ярмарками..."
         },
         {
             "name": "Мудрец",
             "characteristics": ["Телосложение", "Интеллект", "Мудрость"],
-            "trait": "Посвящённый в магию (Волшебник)",
+            "trait": "Посвящённый в магию",
             "skills": ["История", "Тайная магия"],
             "tools": "Инструменты каллиграфа",
-            "equipment_a": "Боевой посох, Инструменты каллиграфа, Книга (история), Пергамент (8 листов), Мантия, 8 ЗМ",
+            "equipment_a": "Боевой посох, Инструменты каллиграфа, Книга, Пергамент, Мантия, 8 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы провели свои юные годы, путешествуя между поместьями и монастырями, выполняя для них работу и оказывая услуги в обмен на доступ к их библиотекам."
+            "description": "Вы провели свои юные годы, путешествуя между поместьями и монастырями..."
         },
         {
             "name": "Преступник",
@@ -201,7 +199,7 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "tools": "Воровские инструменты",
             "equipment_a": "2 Кинжала, Воровские инструменты, Ломик, 2 Кошеля, Дорожная одежда, 16 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы зарабатывали на жизнь в тёмных переулках, срезая кошельки и проникая в лавки."
+            "description": "Вы зарабатывали на жизнь в тёмных переулках, срезая кошельки..."
         },
         {
             "name": "Стражник",
@@ -209,9 +207,9 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "trait": "Бдительный",
             "skills": ["Атлетика", "Восприятие"],
             "tools": "Игровой набор",
-            "equipment_a": "Копьё, Лёгкий арбалет, 20 Болтов, Игровой набор (выбранный выше), Закрытый фонарь, Кандалы, Колчан, Дорожная одежда, 12 ЗМ",
+            "equipment_a": "Копьё, Лёгкий арбалет, 20 Болтов, Игровой набор, Фонарь, Кандалы, Дорожная одежда, 12 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Когда вы только вспоминаете бесчисленные часы, проведённые на посту в башне, у вас начинают ныть ноги."
+            "description": "Вы провели бесчисленные часы на посту в башне..."
         },
         {
             "name": "Бродяга",
@@ -219,9 +217,9 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "trait": "Везучий",
             "skills": ["Проницательность", "Скрытность"],
             "tools": "Воровские инструменты",
-            "equipment_a": "2 Кинжала, Воровские инструменты, Игровой набор (любой), Спальник, 2 Кошеля, Дорожная одежда, 16 ЗМ",
+            "equipment_a": "2 Кинжала, Воровские инструменты, Игровой набор, Спальник, 2 Кошеля, Дорожная одежда, 16 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы выросли на улицах в окружении таких же злосчастных отбросов общества; с кем-то из них вы дружили, с кем-то соперничали."
+            "description": "Вы выросли на улицах в окружении таких же злосчастных отбросов..."
         },
         {
             "name": "Отшельник",
@@ -229,19 +227,19 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "trait": "Лекарь",
             "skills": ["Медицина", "Религия"],
             "tools": "Набор травника",
-            "equipment_a": "Боевой посох, Набор травника, Спальник, Книга (философия), Лампа, Масло (3 фляги), Дорожная одежда, 16 ЗМ",
+            "equipment_a": "Боевой посох, Набор травника, Спальник, Книга, Лампа, Масло, Дорожная одежда, 16 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы провели свои ранние годы в одиночестве, в хижине или монастыре, далеко за пределами ближайшего поселения."
+            "description": "Вы провели ранние годы в одиночестве, в хижине или монастыре..."
         },
         {
             "name": "Проводник",
             "characteristics": ["Ловкость", "Телосложение", "Мудрость"],
-            "trait": "Посвящённый в магию (Друид)",
+            "trait": "Посвящённый в магию",
             "skills": ["Выживание", "Скрытность"],
             "tools": "Инструменты картографа",
             "equipment_a": "Короткий лук, 20 Стрел, Инструменты картографа, Спальник, Колчан, Палатка, Дорожная одежда, 3 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы вошли в возраст под открытым небом, вдали от обжитых земель. Домом вам было то место, где вы решили расстелить свой спальник."
+            "description": "Вы вошли в возраст под открытым небом, вдали от обжитых земель..."
         },
         {
             "name": "Торговец",
@@ -251,7 +249,7 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "tools": "Инструменты навигатора",
             "equipment_a": "Инструменты навигатора, 2 Кошеля, Дорожная одежда, 22 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы были учеником торговца, хозяина каравана или лавочника, и так изучили основы коммерции."
+            "description": "Вы были учеником торговца, хозяина каравана или лавочника..."
         },
         {
             "name": "Дворянин",
@@ -259,9 +257,9 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "trait": "Одарённый",
             "skills": ["История", "Убеждение"],
             "tools": "Игровой набор",
-            "equipment_a": "Игровой набор (выбранный выше), Отличная одежда, Духи, 29 ЗМ",
+            "equipment_a": "Игровой набор, Отличная одежда, Духи, 29 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы выросли в замке, окруженные богатством, властью и привилегиями. Ваша семья, из мелких аристократов, позаботилась о том, чтобы вы получили первоклассное образование."
+            "description": "Вы выросли в замке, окруженные богатством, властью и привилегиями..."
         },
         {
             "name": "Писарь",
@@ -269,9 +267,9 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "trait": "Одарённый",
             "skills": ["Восприятие", "Расследование"],
             "tools": "Инструменты каллиграфа",
-            "equipment_a": "Инструменты каллиграфа, Отличная одежда, Лампа, Масло (3 фляги), Пергамент (12 листов), 23 ЗМ",
+            "equipment_a": "Инструменты каллиграфа, Отличная одежда, Лампа, Масло, Пергамент, 23 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Годы вашего становления прошли в скриптории, в государственном учреждении или в монастыре, посвященном сохранению знаний."
+            "description": "Годы вашего становления прошли в скриптории..."
         },
         {
             "name": "Ремесленник",
@@ -279,9 +277,9 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "trait": "Мастеровой",
             "skills": ["Расследование", "Убеждение"],
             "tools": "Инструменты кузнеца",
-            "equipment_a": "Ремесленные инструменты (выбранные выше), 2 Кошеля, Дорожная одежда, 32 ЗМ",
+            "equipment_a": "Ремесленные инструменты, 2 Кошеля, Дорожная одежда, 32 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы начали мыть полы и прилавки в мастерской ремесленника за несколько медяков в день, как только окрепли настолько, что могли носить ведро."
+            "description": "Вы начали подмастерьем в мастерской ремесленника..."
         },
         {
             "name": "Фермер",
@@ -289,9 +287,9 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "trait": "Крепкий",
             "skills": ["Природа", "Обращение с животными"],
             "tools": "Инструменты плотника",
-            "equipment_a": "Серп, Инструменты плотника, Комплект целителя, Железный горшок, Лопата, Дорожная одежда, 30 ЗМ",
+            "equipment_a": "Серп, Инструменты плотника, Комплект целителя, Котел, Лопата, Дорожная одежда, 30 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы выросли в близости с землёй. За годы ухода за животными и работы в поле вы выработали терпение и крепкое здоровье."
+            "description": "Вы выросли в близости с землёй, работая в поле и ухаживая за животными..."
         },
         {
             "name": "Моряк",
@@ -301,17 +299,17 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "tools": "Инструменты навигатора",
             "equipment_a": "Кинжал, Инструменты навигатора, Верёвка, Дорожная одежда, 20 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы жили на морских просторах, ветер дул вам в спину, и палуба покачивалась под вашими ногами."
+            "description": "Вы жили на морских просторах, палуба покачивалась под ногами..."
         },
         {
             "name": "Послушник",
             "characteristics": ["Интеллект", "Мудрость", "Харизма"],
-            "trait": "Посвящённый в магию (Жрец)",
+            "trait": "Посвящённый в магию",
             "skills": ["Проницательность", "Религия"],
             "tools": "Инструменты каллиграфа",
-            "equipment_a": "Инструменты каллиграфа, Книга (молитвенник), Священный символ, Пергамент (10 листов), Мантия, 8 ЗМ",
+            "equipment_a": "Инструменты каллиграфа, Молитвенник, Священный символ, Пергамент, Мантия, 8 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы посвятили себя служению в храме, среди городских улиц или в уединении священной рощи."
+            "description": "Вы посвятили себя служению в храме или священной роще..."
         },
         {
             "name": "Солдат",
@@ -319,9 +317,9 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "trait": "Неистово атакующий",
             "skills": ["Атлетика", "Запугивание"],
             "tools": "Игровой набор",
-            "equipment_a": "Копьё, Короткий лук, 20 Стрел, Игровой набор (выбранный выше), Комплект целителя, Колчан, Дорожная одежда, 14 ЗМ",
+            "equipment_a": "Копьё, Короткий лук, 20 Стрел, Игровой набор, Комплект целителя, Колчан, Дорожная одежда, 14 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Вы начали готовиться к войне, как только достигли зрелости, и вы почти не помните свою жизнь до того, как взяли в руки оружие."
+            "description": "Вы начали готовиться к войне, как только достигли зрелости..."
         },
         {
             "name": "Шарлатан",
@@ -331,7 +329,7 @@ def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
             "tools": "Набор для фальсификации",
             "equipment_a": "Набор для фальсификации, Костюм, Отличная одежда, 15 ЗМ",
             "equipment_b": "50 ЗМ",
-            "description": "Совсем мало времени прошло после того, как вы стали достаточно взрослы, чтобы заказывать эль — а у вас уже появилось любимое место в каждой таверне."
+            "description": "Вы научились наживаться на несчастных, ищущих утешившую их ложь..."
         }
     ]
 
@@ -360,12 +358,7 @@ def save_character(
         image_file_id: str = None,
         level: int = 1
 ) -> int:
-    """
-    Сохраняет персонажа в базу данных
-
-    Returns:
-        int: ID созданного персонажа
-    """
+    """Сохраняет персонажа в базу данных"""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -422,7 +415,7 @@ def get_character_by_id(char_id: int) -> Optional[Dict[str, Any]]:
 
 
 def get_character_by_id_and_user(char_id: int, user_id: int) -> Optional[Dict[str, Any]]:
-    """Возвращает персонажа по ID и ID пользователя (для проверки прав)"""
+    """Возвращает персонажа по ID и ID пользователя"""
     with get_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
@@ -435,18 +428,26 @@ def get_character_by_id_and_user(char_id: int, user_id: int) -> Optional[Dict[st
 # ---------------- BACKGROUNDS FROM DB ----------------
 def get_all_backgrounds_from_db() -> List[Dict[str, Any]]:
     """Получает все предыстории из БД"""
-    with get_connection() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT name, description FROM backgrounds ORDER BY name")
-            return cur.fetchall()
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT name, description FROM backgrounds ORDER BY name")
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить предыстории: {e}")
+        return []
 
 
 def get_background_from_db(background_name: str) -> Optional[Dict[str, Any]]:
     """Получает предысторию по имени из БД"""
-    with get_connection() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM backgrounds WHERE name = %s", (background_name,))
-            return cur.fetchone()
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT * FROM backgrounds WHERE name = %s", (background_name,))
+                return cur.fetchone()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить предысторию {background_name}: {e}")
+        return None
 
 
 def get_background_names() -> List[str]:
@@ -554,7 +555,6 @@ def migrate_database():
     """Миграция существующей базы данных (добавление новых полей)"""
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Проверяем и добавляем новые колонки, если их нет
             new_columns = [
                 ("background", "VARCHAR(100)"),
                 ("backstory", "TEXT"),
@@ -587,57 +587,12 @@ def migrate_database():
 if __name__ == "__main__":
     print("=== Тест базы данных ===\n")
 
-    # Инициализация
     init_database()
-
-    # Миграция (для существующих баз)
     migrate_database()
 
-    # Проверка предысторий
     backgrounds = get_all_backgrounds_from_db()
     print(f"📚 Загружено предысторий: {len(backgrounds)}")
     for bg in backgrounds[:5]:
         print(f"   - {bg['name']}")
-
-    # Тестовые данные
-    test_stats = {"STR": 15, "DEX": 14, "CON": 13, "INT": 12, "WIS": 10, "CHA": 8}
-
-    # Сохранение тестового персонажа
-    char_id = save_character(
-        user_id=123456789,
-        name="Тестовый Герой",
-        race="Человек",
-        class_name="Воин",
-        background="Солдат",
-        backstory="Был солдатом, участвовал в великой войне...",
-        stats=test_stats,
-        hp=12,
-        ac=16,
-        race_traits=["Универсальность человечества"],
-        class_features=["Боевой стиль", "Второе дыхание"],
-        skills=["Атлетика", "Запугивание"],
-        tools=["Игровой набор"],
-        equipment=["Longsword", "Shield", "Chain Mail"],
-        spells=[],
-        background_trait="Неистово атакующий",
-        background_skills=["Атлетика", "Запугивание"],
-        background_tools="Игровой набор",
-        background_equipment_choice="A"
-    )
-
-    print(f"\n✅ Создан персонаж с ID: {char_id}")
-
-    # Получение персонажа
-    char = get_character_by_id(char_id)
-    if char:
-        print(f"📖 Имя: {char['name']}")
-        print(f"🎭 Класс: {char['class_name']}")
-        print(f"🧝 Раса: {char['race']}")
-        print(f"📜 Предыстория: {char['background']}")
-        print(f"❤️ HP: {char['hp']}, 🛡️ AC: {char['ac']}")
-
-    # Очистка
-    delete_character(char_id, 123456789)
-    print("\n🗑️ Тестовый персонаж удалён")
 
     print("\n✅ Модуль db.py готов к использованию!")

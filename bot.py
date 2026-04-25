@@ -320,7 +320,6 @@ async def select_subrace(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     race = data.get("race")
 
-    # Получаем описание подрасы
     race_info = get_race_info(race)
     subrace_info = race_info.get("subraces", {}).get(subrace, {})
     subrace_description = subrace_info.get("description", "")
@@ -331,7 +330,8 @@ async def select_subrace(call: CallbackQuery, state: FSMContext):
         f"**Шаг 2/7: Выберите класс**"
     )
 
-    await call.message.edit_text(
+    await call.message.delete()
+    await call.message.answer(
         text,
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=create_class_keyboard()
@@ -362,7 +362,8 @@ async def select_class(call: CallbackQuery, state: FSMContext):
 
     class_info = get_class_info(class_name)
 
-    await call.message.edit_text(
+    await call.message.delete()
+    await call.message.answer(
         f"⚔️ **Выбран класс: {class_name}**\n\n"
         f"**Шаг 3/7: Введите имя персонажа**\n\n"
         f"📖 Описание класса: {class_info.get('description', 'Нет описания')}\n"
@@ -425,7 +426,8 @@ async def select_background(call: CallbackQuery, state: FSMContext):
 
     bg_info = get_background_data(background)
 
-    await call.message.edit_text(
+    await call.message.delete()
+    await call.message.answer(
         f"📜 **Предыстория: {background}**\n\n"
         f"**Шаг 5/7: Выберите снаряжение**\n\n"
         f"**Описание:** {bg_info.get('description', 'Нет описания')[:300]}...\n\n"
@@ -465,7 +467,8 @@ async def select_equipment(call: CallbackQuery, state: FSMContext):
 
     chosen_equipment = bg_info.get(f"equipment_{equipment_choice.lower()}", "Нет описания")
 
-    await call.message.edit_text(
+    await call.message.delete()
+    await call.message.answer(
         f"🎒 **Выбран вариант снаряжения: {equipment_choice}**\n\n"
         f"**Снаряжение:** {chosen_equipment}\n\n"
         f"**Шаг 6/7: История персонажа**\n\n"

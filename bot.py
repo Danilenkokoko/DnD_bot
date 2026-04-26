@@ -832,7 +832,6 @@ async def view_character(call: CallbackQuery):
 
     await call.answer()
 
-
 # ---------------- DELETE CHARACTER ----------------
 @dp.message(F.text == "🗑 Удалить персонажа")
 async def delete_character_menu(m: Message):

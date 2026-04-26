@@ -4,6 +4,7 @@
 seed_data.py - Наполнение базы данных D&D 5.5e (2024) данными
 Запуск: python seed_data.py
 Скрипт не зависит от внешних файлов — все данные встроены в код.
+Включает: расы, классы, предыстории, заклинания, оружие, боевые стили, возвания.
 """
 
 import psycopg2
@@ -40,9 +41,10 @@ def get_connection():
 def clear_tables(conn):
     """Очищает таблицы перед заполнением"""
     tables = [
+        "class_fighting_styles", "class_weapons", "recommended_spells",
         "class_spells", "spells", "subclasses", "classes",
         "subraces", "races", "backgrounds", "weapon_masteries",
-        "fighting_styles", "invocations"
+        "fighting_styles", "weapons", "invocations"
     ]
 
     with conn.cursor() as cur:
@@ -241,12 +243,12 @@ CLASSES_DATA = {
     "Артефактор": {
         "hit_die": 8, "primary_stats": ["INT"], "saving_throws": ["CON", "INT"],
         "skill_choices": 2, "is_spellcaster": True, "spellcasting_ability": "INT",
-        "description": "Мастера раскрытия магии в обычных вещах, изобретатели — величайшие выдумщики. Они видят магию как сложную систему, которую нужно расшифровывать и контролировать."
+        "description": "Мастера раскрытия магии в обычных вещах, изобретатели — величайшие выдумщики."
     },
     "Бард": {
         "hit_die": 8, "primary_stats": ["CHA"], "saving_throws": ["DEX", "CHA"],
         "skill_choices": 3, "is_spellcaster": True, "spellcasting_ability": "CHA",
-        "description": "Бард плетёт магию из слов и музыки, вдохновляя союзников, деморализуя противников, манипулируя сознанием и даже исцеляя раны."
+        "description": "Бард плетёт магию из слов и музыки, вдохновляя союзников и деморализуя противников."
     },
     "Варвар": {
         "hit_die": 12, "primary_stats": ["STR", "CON"], "saving_throws": ["STR", "CON"],
@@ -261,7 +263,7 @@ CLASSES_DATA = {
     "Волшебник": {
         "hit_die": 6, "primary_stats": ["INT"], "saving_throws": ["INT", "WIS"],
         "skill_choices": 2, "is_spellcaster": True, "spellcasting_ability": "INT",
-        "description": "Волшебники — адепты высшей магии, способные создавать заклинания взрывного огня, искрящихся молний и тонкого обмана."
+        "description": "Волшебники — адепты высшей магии, способные создавать заклинания взрывного огня и тонкого обмана."
     },
     "Друид": {
         "hit_die": 8, "primary_stats": ["WIS"], "saving_throws": ["INT", "WIS"],
@@ -276,7 +278,7 @@ CLASSES_DATA = {
     "Колдун": {
         "hit_die": 8, "primary_stats": ["CHA"], "saving_throws": ["WIS", "CHA"],
         "skill_choices": 2, "is_spellcaster": True, "spellcasting_ability": "CHA",
-        "description": "Колдуны — искатели знаний, через договор с таинственными существами открывающие магические эффекты."
+        "description": "Колдуны — искатели знаний, через договор с таинственными существами открывающие магию."
     },
     "Монах": {
         "hit_die": 8, "primary_stats": ["DEX", "WIS"], "saving_throws": ["STR", "DEX"],
@@ -513,27 +515,69 @@ def migrate_weapon_masteries(conn):
 # =========================================================
 
 FIGHTING_STYLES = [
-    "Дуэлянт", "Защита", "Оборона", "Перехват",
-    "Сражение без оружия", "Сражение большим оружием",
-    "Сражение вслепую", "Сражение двумя оружиями",
-    "Сражение метательным оружием", "Стрельба"
+    {"name": "Дуэлянт",
+     "description": "Когда вы атакуете оружием в одной руке и не используете щит, вы добавляете +2 к урону."},
+    {"name": "Защита",
+     "description": "Когда существо, которое вы видите, атакует цель, отличную от вас, вы можете реакцией дать помеху на эту атаку."},
+    {"name": "Оборона", "description": "Вы получаете +1 к Классу Брони, если носите броню."},
+    {"name": "Перехват",
+     "description": "Когда существо атакует цель в пределах 5 футов от вас, вы можете реакцией уменьшить урон на 1d10 + бонус мастерства."},
+    {"name": "Сражение без оружия", "description": "Ваши безоружные удары наносят 1d6 + модификатор силы урона."},
+    {"name": "Сражение большим оружием",
+     "description": "При атаке двуручным оружием вы можете перебросить единицы и двойки на кубиках урона."},
+    {"name": "Сражение вслепую", "description": "Вы получаете слепое зрение в радиусе 10 футов."},
+    {"name": "Сражение двумя оружиями",
+     "description": "При атаке лёгким оружием вы можете добавить модификатор характеристики к урону бонусной атаки."},
+    {"name": "Сражение метательным оружием",
+     "description": "Вы можете выхватить метательное оружие как часть атаки им."},
+    {"name": "Стрельба", "description": "Вы получаете +2 к броскам атаки дальнобойным оружием."},
 ]
 
+# Связь классов с боевыми стилями
+CLASS_FIGHTING_STYLES = {
+    "Воин": ["Дуэлянт", "Защита", "Оборона", "Перехват", "Сражение без оружия",
+             "Сражение большим оружием", "Сражение вслепую", "Сражение двумя оружиями",
+             "Сражение метательным оружием", "Стрельба"],
+    "Паладин": ["Дуэлянт", "Защита", "Оборона", "Перехват", "Сражение без оружия",
+                "Сражение большим оружием", "Сражение вслепую"],
+    "Следопыт": ["Дуэлянт", "Защита", "Оборона", "Сражение вслепую",
+                 "Сражение двумя оружиями", "Сражение метательным оружием", "Стрельба"],
+}
 
-def migrate_fighting_styles(conn):
-    """Перенос боевых стилей"""
+
+def migrate_fighting_styles(conn, class_id_map):
+    """Перенос боевых стилей и связей с классами"""
     logger.info("\n" + "=" * 50)
     logger.info("5. ПЕРЕНОС БОЕВЫХ СТИЛЕЙ")
     logger.info("=" * 50)
 
+    style_id_map = {}
+
     with conn.cursor() as cur:
+        # Вставляем стили
         for style in FIGHTING_STYLES:
             cur.execute("""
                 INSERT INTO fighting_styles (name, description)
                 VALUES (%s, %s)
                 ON CONFLICT (name) DO NOTHING
-            """, (style, f"Боевой стиль: {style}"))
-            logger.info(f"  ✅ Стиль '{style}'")
+                RETURNING id
+            """, (style["name"], style["description"]))
+            result = cur.fetchone()
+            if result:
+                style_id_map[style["name"]] = result[0]
+                logger.info(f"  ✅ Стиль '{style['name']}'")
+
+        # Связываем стили с классами
+        for class_name, styles in CLASS_FIGHTING_STYLES.items():
+            if class_name in class_id_map:
+                for style_name in styles:
+                    if style_name in style_id_map:
+                        cur.execute("""
+                            INSERT INTO class_fighting_styles (class_id, style_id)
+                            VALUES (%s, %s)
+                            ON CONFLICT (class_id, style_id) DO NOTHING
+                        """, (class_id_map[class_name], style_id_map[style_name]))
+                        logger.info(f"    • {class_name} → {style_name}")
 
         conn.commit()
     logger.info(f"✅ Перенесено стилей: {len(FIGHTING_STYLES)}")
@@ -552,6 +596,23 @@ INVOCATIONS = [
     {"name": "Недоговорённость гримуара", "level": 1,
      "effect": "Вы получаете 3 заговора из любых списков и 2 ритуала 1 уровня.", "requires_pact_boon": True,
      "pact_boon_type": "Tome"},
+    {"name": "Броня теней", "level": 1,
+     "effect": "Вы можете накладывать Магическую броню на себя без использования ячейки.", "requires_pact_boon": False,
+     "pact_boon_type": None},
+    {"name": "Разум бездны", "level": 1,
+     "effect": "Вы получаете преимущество на спасброски Телосложения для концентрации.", "requires_pact_boon": False,
+     "pact_boon_type": None},
+    {"name": "Дьявольское могущество", "level": 2,
+     "effect": "Вы накладываете Ложную жизнь на себя без ячейки, автоматически получая максимальные хиты.",
+     "requires_pact_boon": False, "pact_boon_type": None},
+    {"name": "Дьявольское зрение", "level": 2, "effect": "Вы видите в магической тьме на 120 футов.",
+     "requires_pact_boon": False, "pact_boon_type": None},
+    {"name": "Маска многих лиц", "level": 2, "effect": "Вы накладываете Смену облика без ячейки.",
+     "requires_pact_boon": False, "pact_boon_type": None},
+    {"name": "Туманные видения", "level": 2, "effect": "Вы накладываете Немой образ без ячейки.",
+     "requires_pact_boon": False, "pact_boon_type": None},
+    {"name": "Иной мир прыжок", "level": 2, "effect": "Вы накладываете Прыжок на себя без ячейки.",
+     "requires_pact_boon": False, "pact_boon_type": None},
     {"name": "Умножающий залп", "level": 2, "effect": "Вы добавляете модификатор Харизмы к урону выбранного заговора.",
      "requires_pact_boon": False, "pact_boon_type": None},
     {"name": "Колдовское копьё", "level": 2,
@@ -559,23 +620,6 @@ INVOCATIONS = [
      "requires_pact_boon": False, "pact_boon_type": None},
     {"name": "Отталкивающий залп", "level": 2,
      "effect": "При попадании заговором, требующим броска атаки, вы толкаете цель на 10 футов.",
-     "requires_pact_boon": False, "pact_boon_type": None},
-    {"name": "Броня теней", "level": 1,
-     "effect": "Вы можете накладывать Магическую броню на себя без использования ячейки.", "requires_pact_boon": False,
-     "pact_boon_type": None},
-    {"name": "Дьявольское зрение", "level": 2, "effect": "Вы видите в магической тьме на 120 футов.",
-     "requires_pact_boon": False, "pact_boon_type": None},
-    {"name": "Разум бездны", "level": 1,
-     "effect": "Вы получаете преимущество на спасброски Телосложения для концентрации.", "requires_pact_boon": False,
-     "pact_boon_type": None},
-    {"name": "Дьявольское могущество", "level": 2,
-     "effect": "Вы накладываете Ложную жизнь на себя без ячейки, автоматически получая максимальные хиты.",
-     "requires_pact_boon": False, "pact_boon_type": None},
-    {"name": "Маска многих лиц", "level": 2, "effect": "Вы накладываете Смену облика без ячейки.",
-     "requires_pact_boon": False, "pact_boon_type": None},
-    {"name": "Туманные видения", "level": 2, "effect": "Вы накладываете Немой образ без ячейки.",
-     "requires_pact_boon": False, "pact_boon_type": None},
-    {"name": "Иной мир прыжок", "level": 2, "effect": "Вы накладываете Прыжок на себя без ячейки.",
      "requires_pact_boon": False, "pact_boon_type": None},
 ]
 
@@ -603,14 +647,161 @@ def migrate_invocations(conn):
 
 
 # =========================================================
-# 7. ДАННЫЕ ЗАКЛИНАНИЙ (основные)
+# 7. ДАННЫЕ ОРУЖИЯ И СВЯЗЕЙ
+# =========================================================
+
+WEAPONS_DATA = [
+    # Простое оружие
+    {"name": "Кинжал", "category": "simple", "damage_dice": "1d4", "damage_type": "piercing",
+     "properties": ["легкое", "метательное"], "suitable_masteries": ["Выпад", "Подавление"]},
+    {"name": "Серп", "category": "simple", "damage_dice": "1d4", "damage_type": "slashing",
+     "properties": ["легкое"], "suitable_masteries": ["Выпад"]},
+    {"name": "Дубина", "category": "simple", "damage_dice": "1d4", "damage_type": "bludgeoning",
+     "properties": ["легкое"], "suitable_masteries": ["Замедление"]},
+    {"name": "Копьё", "category": "simple", "damage_dice": "1d6", "damage_type": "piercing",
+     "properties": ["метательное", "универсальное"], "suitable_masteries": ["Изнурение", "Толкание"]},
+    {"name": "Булава", "category": "simple", "damage_dice": "1d6", "damage_type": "bludgeoning",
+     "properties": [], "suitable_masteries": ["Изнурение"]},
+
+    # Воинское оружие
+    {"name": "Длинный меч", "category": "martial", "damage_dice": "1d8", "damage_type": "slashing",
+     "properties": ["универсальное"], "suitable_masteries": ["Изнурение"]},
+    {"name": "Рапира", "category": "martial", "damage_dice": "1d8", "damage_type": "piercing",
+     "properties": ["изящное"], "suitable_masteries": ["Подавление"]},
+    {"name": "Боевой топор", "category": "martial", "damage_dice": "1d8", "damage_type": "slashing",
+     "properties": ["универсальное"], "suitable_masteries": ["Опрокидывание", "Изнурение"]},
+    {"name": "Двуручный меч", "category": "martial", "damage_dice": "2d6", "damage_type": "slashing",
+     "properties": ["двуручное", "тяжёлое"], "suitable_masteries": ["Задевание", "Прорубание"]},
+    {"name": "Двуручный топор", "category": "martial", "damage_dice": "1d12", "damage_type": "slashing",
+     "properties": ["двуручное", "тяжёлое"], "suitable_masteries": ["Прорубание", "Задевание"]},
+    {"name": "Алебарда", "category": "martial", "damage_dice": "1d10", "damage_type": "slashing",
+     "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Прорубание"]},
+    {"name": "Глефа", "category": "martial", "damage_dice": "1d10", "damage_type": "slashing",
+     "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Задевание"]},
+    {"name": "Пика", "category": "martial", "damage_dice": "1d10", "damage_type": "piercing",
+     "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Толкание"]},
+    {"name": "Большая дубина", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
+     "properties": ["двуручное"], "suitable_masteries": ["Толкание"]},
+    {"name": "Военный молот", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
+     "properties": ["универсальное"], "suitable_masteries": ["Толкание"]},
+    {"name": "Ланс", "category": "martial", "damage_dice": "1d10", "damage_type": "piercing",
+     "properties": ["досягаемость", "особое"], "suitable_masteries": ["Опрокидывание"]},
+    {"name": "Трезубец", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
+     "properties": ["метательное", "универсальное"], "suitable_masteries": ["Опрокидывание", "Толкание"]},
+    {"name": "Кнут", "category": "martial", "damage_dice": "1d4", "damage_type": "slashing",
+     "properties": ["изящное", "досягаемость"], "suitable_masteries": ["Замедление"]},
+    {"name": "Короткий лук", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
+     "properties": ["двуручное", "дальнобойное"], "suitable_masteries": ["Замедление", "Подавление"]},
+    {"name": "Длинный лук", "category": "martial", "damage_dice": "1d8", "damage_type": "piercing",
+     "properties": ["двуручное", "тяжёлое", "дальнобойное"], "suitable_masteries": ["Замедление"]},
+    {"name": "Лёгкий молот", "category": "simple", "damage_dice": "1d4", "damage_type": "bludgeoning",
+     "properties": ["легкое", "метательное"], "suitable_masteries": ["Выпад"]},
+    {"name": "Метательный топор", "category": "simple", "damage_dice": "1d6", "damage_type": "slashing",
+     "properties": ["легкое", "метательное"], "suitable_masteries": ["Подавление"]},
+]
+
+
+def migrate_weapons(conn, class_id_map):
+    """Перенос оружия и связей с классами"""
+    logger.info("\n" + "=" * 50)
+    logger.info("7. ПЕРЕНОС ОРУЖИЯ")
+    logger.info("=" * 50)
+
+    weapon_id_map = {}
+
+    with conn.cursor() as cur:
+        # Вставляем оружие
+        for weapon in WEAPONS_DATA:
+            cur.execute("""
+                INSERT INTO weapons (name, category, damage_dice, damage_type, properties, suitable_masteries)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (name) DO NOTHING
+                RETURNING id
+            """, (
+                weapon["name"], weapon["category"], weapon["damage_dice"],
+                weapon["damage_type"], json.dumps(weapon["properties"]),
+                json.dumps(weapon["suitable_masteries"])
+            ))
+            result = cur.fetchone()
+            if result:
+                weapon_id_map[weapon["name"]] = result[0]
+                logger.info(f"  ✅ Оружие '{weapon['name']}'")
+
+        # Связываем оружие с классами
+        # Воины получают всё оружие
+        if "Воин" in class_id_map:
+            for weapon_name, weapon_id in weapon_id_map.items():
+                cur.execute("""
+                    INSERT INTO class_weapons (class_id, weapon_id)
+                    VALUES (%s, %s)
+                    ON CONFLICT (class_id, weapon_id) DO NOTHING
+                """, (class_id_map["Воин"], weapon_id))
+            logger.info(f"    • Воин → всё оружие ({len(weapon_id_map)} шт.)")
+
+        # Паладины получают воинское оружие
+        if "Паладин" in class_id_map:
+            for weapon_name, weapon_id in weapon_id_map.items():
+                weapon_data = next((w for w in WEAPONS_DATA if w["name"] == weapon_name), {})
+                if weapon_data.get("category") == "martial":
+                    cur.execute("""
+                        INSERT INTO class_weapons (class_id, weapon_id)
+                        VALUES (%s, %s)
+                        ON CONFLICT (class_id, weapon_id) DO NOTHING
+                    """, (class_id_map["Паладин"], weapon_id))
+            logger.info(f"    • Паладин → воинское оружие")
+
+        # Следопыты получают воинское оружие (кроме тяжёлого?)
+        if "Следопыт" in class_id_map:
+            for weapon_name, weapon_id in weapon_id_map.items():
+                weapon_data = next((w for w in WEAPONS_DATA if w["name"] == weapon_name), {})
+                if weapon_data.get("category") == "martial" and "тяжёлое" not in weapon_data.get("properties", []):
+                    cur.execute("""
+                        INSERT INTO class_weapons (class_id, weapon_id)
+                        VALUES (%s, %s)
+                        ON CONFLICT (class_id, weapon_id) DO NOTHING
+                    """, (class_id_map["Следопыт"], weapon_id))
+            logger.info(f"    • Следопыт → воинское оружие (без тяжёлого)")
+
+        # Варвары и Плуты получают простое + некоторые воинские
+        for class_name in ["Варвар", "Плут"]:
+            if class_name in class_id_map:
+                for weapon_name, weapon_id in weapon_id_map.items():
+                    weapon_data = next((w for w in WEAPONS_DATA if w["name"] == weapon_name), {})
+                    if weapon_data.get("category") == "simple" or weapon_name in ["Рапира", "Короткий лук",
+                                                                                  "Длинный меч"]:
+                        cur.execute("""
+                            INSERT INTO class_weapons (class_id, weapon_id)
+                            VALUES (%s, %s)
+                            ON CONFLICT (class_id, weapon_id) DO NOTHING
+                        """, (class_id_map[class_name], weapon_id))
+                logger.info(f"    • {class_name} → простое + избранное воинское")
+
+        conn.commit()
+    logger.info(f"✅ Перенесено оружия: {len(WEAPONS_DATA)}")
+
+
+# =========================================================
+# 8. ДАННЫЕ ЗАКЛИНАНИЙ И РЕКОМЕНДАЦИЙ
 # =========================================================
 
 SPELLS_DATA = [
-    # Заговоры (кантрипы) для всех классов
+    # Заговоры (кантрипы)
     {"name": "Волшебная рука", "level": 0, "is_cantrip": True,
      "description": "Создаёте призрачную руку для взаимодействия с объектами."},
     {"name": "Вспышка света", "level": 0, "is_cantrip": True, "description": "Вспышка света ослепляет врага."},
+    {"name": "Починка", "level": 0, "is_cantrip": True, "description": "Чините один сломанный предмет."},
+    {"name": "Сообщение", "level": 0, "is_cantrip": True, "description": "Шёпотом передаёте сообщение на расстояние."},
+    {"name": "Удар грома", "level": 0, "is_cantrip": True,
+     "description": "Создаёте громовой звук, отталкивающий врага."},
+    {"name": "Фокус-покус", "level": 0, "is_cantrip": True, "description": "Создаёте мелкий магический эффект."},
+    {"name": "Руководство", "level": 0, "is_cantrip": True,
+     "description": "Даёте цели +1к4 к проверке характеристики."},
+    {"name": "Священное пламя", "level": 0, "is_cantrip": True, "description": "Луч божественного огня."},
+    {"name": "Мистический залп", "level": 0, "is_cantrip": True, "description": "Луч энергии, наносящий 1к10 урона."},
+    {"name": "Вдохновение насмешки", "level": 0, "is_cantrip": True,
+     "description": "Оскорбляете врага, давая ему помеху."},
+
+    # Заклинания 1 уровня
     {"name": "Лечение ран", "level": 1, "is_cantrip": False, "description": "Восстанавливает 1к8 + модификатор хитов."},
     {"name": "Громовая волна", "level": 1, "is_cantrip": False, "description": "Ударная волна отталкивает врагов."},
     {"name": "Благословение", "level": 1, "is_cantrip": False,
@@ -623,74 +814,123 @@ SPELLS_DATA = [
     {"name": "Обнаружение магии", "level": 1, "is_cantrip": False,
      "description": "Чувствуете присутствие магии в радиусе 30 футов."},
     {"name": "Прыжок", "level": 1, "is_cantrip": False, "description": "Удваиваете дистанцию прыжка цели."},
-    {"name": "Рвотный луч", "level": 1, "is_cantrip": False,
-     "description": "Цель должна совершить спасбросок Телосложения или получить урон ядом."},
-    {"name": "Падение пера", "level": 1, "is_cantrip": False, "description": "Замедляете падение цели."},
     {"name": "Разговор с животными", "level": 1, "is_cantrip": False, "description": "Можете общаться с животными."},
-    {"name": "Фея-покровительница", "level": 1, "is_cantrip": False, "description": "Призываете фею для помощи."},
     {"name": "Опутывание", "level": 1, "is_cantrip": False, "description": "Опутываете существ магическими лозами."},
-    {"name": "Туман облака", "level": 1, "is_cantrip": False, "description": "Создаёте облако тумана."},
-    {"name": "Эльфийское пламя", "level": 1, "is_cantrip": False,
-     "description": "Освещаете цель фейским огнём, давая преимущество на атаки по ней."},
+    {"name": "Гекс", "level": 1, "is_cantrip": False, "description": "Проклинаете цель, нанося дополнительный урон."},
+    {"name": "Метка охотника", "level": 1, "is_cantrip": False,
+     "description": "Отмечаете врага, нанося ему дополнительный урон."},
+    {"name": "Божественная кара", "level": 1, "is_cantrip": False, "description": "Добавляете 2к8 урона к атаке."},
+    {"name": "Доспехи Агатиса", "level": 1, "is_cantrip": False,
+     "description": "Получаете временные хиты и ледяную защиту."},
 ]
 
+# Рекомендованные заклинания по классам
+RECOMMENDED_SPELLS = {
+    "Волшебник": {"cantrips": ["Волшебная рука", "Вспышка света", "Починка"],
+                  "level1": ["Щит", "Хроматическая сфера", "Сон", "Обнаружение магии"]},
+    "Бард": {"cantrips": ["Вдохновение насмешки", "Удар грома", "Сообщение"],
+             "level1": ["Лечение ран", "Сон", "Благословение", "Маскировка"]},
+    "Жрец": {"cantrips": ["Руководство", "Священное пламя", "Вспышка света"],
+             "level1": ["Лечение ран", "Благословение", "Обнаружение магии", "Громовая волна"]},
+    "Друид": {"cantrips": ["Руководство", "Фокус-покус", "Удар грома"],
+              "level1": ["Лечение ран", "Опутывание", "Разговор с животными", "Прыжок"]},
+    "Колдун": {"cantrips": ["Мистический залп", "Волшебная рука", "Удар грома"],
+               "level1": ["Гекс", "Доспехи Агатиса", "Щит", "Сон"]},
+    "Чародей": {"cantrips": ["Волшебная рука", "Вспышка света", "Удар грома"],
+                "level1": ["Щит", "Хроматическая сфера", "Сон", "Обнаружение магии"]},
+    "Паладин": {"cantrips": [],
+                "level1": ["Лечение ран", "Божественная кара", "Благословение"]},
+    "Следопыт": {"cantrips": [],
+                 "level1": ["Метка охотника", "Лечение ран", "Прыжок"]},
+    "Артефактор": {"cantrips": ["Починка", "Вспышка света", "Волшебная рука"],
+                   "level1": ["Щит", "Лечение ран", "Обнаружение магии"]},
+}
 
-def get_class_id_map(conn):
-    """Получает словарь соответствия имени класса и ID"""
-    with conn.cursor() as cur:
-        cur.execute("SELECT id, name FROM classes")
-        return {name: id for id, name in cur.fetchall()}
+# Связь классов с заклинаниями (кто какие заклинания может использовать)
+CLASS_SPELLS = {
+    "Волшебник": ["Волшебная рука", "Вспышка света", "Починка", "Сообщение", "Удар грома",
+                  "Лечение ран", "Громовая волна", "Щит", "Хроматическая сфера", "Сон", "Обнаружение магии"],
+    "Бард": ["Вдохновение насмешки", "Удар грома", "Сообщение", "Фокус-покус",
+             "Лечение ран", "Сон", "Благословение", "Маскировка", "Громовая волна"],
+    "Жрец": ["Руководство", "Священное пламя", "Вспышка света",
+             "Лечение ран", "Благословение", "Обнаружение магии", "Громовая волна"],
+    "Друид": ["Руководство", "Фокус-покус", "Удар грома",
+              "Лечение ран", "Опутывание", "Разговор с животными", "Прыжок"],
+    "Колдун": ["Мистический залп", "Волшебная рука", "Удар грома",
+               "Гекс", "Доспехи Агатиса", "Щит", "Сон"],
+    "Чародей": ["Волшебная рука", "Вспышка света", "Удар грома",
+                "Щит", "Хроматическая сфера", "Сон", "Обнаружение магии"],
+    "Паладин": ["Лечение ран", "Божественная кара", "Благословение"],
+    "Следопыт": ["Метка охотника", "Лечение ран", "Прыжок"],
+    "Артефактор": ["Починка", "Вспышка света", "Волшебная рука",
+                   "Щит", "Лечение ран", "Обнаружение магии"],
+}
 
 
-def migrate_spells(conn):
-    """Перенос заклинаний и связей с классами"""
+def migrate_spells(conn, class_id_map):
+    """Перенос заклинаний, связей с классами и рекомендаций"""
     logger.info("\n" + "=" * 50)
-    logger.info("7. ПЕРЕНОС ЗАКЛИНАНИЙ")
+    logger.info("8. ПЕРЕНОС ЗАКЛИНАНИЙ")
     logger.info("=" * 50)
 
-    class_map = get_class_id_map(conn)
+    spell_id_map = {}
 
     with conn.cursor() as cur:
+        # Вставляем заклинания
         for spell in SPELLS_DATA:
-            # Вставляем заклинание
             cur.execute("""
                 INSERT INTO spells (name, level, is_cantrip, description)
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT (id) DO NOTHING
                 RETURNING id
-            """, (
-                spell["name"], spell["level"],
-                spell["is_cantrip"], spell["description"]
-            ))
+            """, (spell["name"], spell["level"], spell["is_cantrip"], spell["description"]))
 
             result = cur.fetchone()
             if result:
-                spell_id = result[0]
-                logger.info(f"  ✅ Заклинание '{spell['name']}' (уровень {spell['level']})")
+                spell_id_map[spell["name"]] = result[0]
+                logger.info(f"  ✅ Заклинание '{spell['name']}'")
 
-                # Связываем с подходящими классами
-                for class_name, class_id in class_map.items():
-                    # Примерные связи (можно расширить)
-                    spellcaster_classes = ["Волшебник", "Бард", "Жрец", "Друид", "Колдун", "Чародей", "Артефактор"]
-                    if class_name in spellcaster_classes:
+        # Связываем заклинания с классами
+        for class_name, spell_names in CLASS_SPELLS.items():
+            if class_name in class_id_map:
+                for spell_name in spell_names:
+                    if spell_name in spell_id_map:
                         cur.execute("""
                             INSERT INTO class_spells (class_id, spell_id, is_available)
                             VALUES (%s, %s, %s)
                             ON CONFLICT (class_id, spell_id) DO NOTHING
-                        """, (class_id, spell_id, True))
-            else:
-                logger.warning(f"  ⚠️ Не удалось добавить заклинание '{spell['name']}'")
+                        """, (class_id_map[class_name], spell_id_map[spell_name], True))
+                logger.info(f"    • {class_name} → {len(spell_names)} заклинаний")
+
+        # Добавляем рекомендованные заклинания
+        for class_name, spells in RECOMMENDED_SPELLS.items():
+            if class_name in class_id_map:
+                priority = 1
+                for spell_name in spells.get("cantrips", []):
+                    if spell_name in spell_id_map:
+                        cur.execute("""
+                            INSERT INTO recommended_spells (class_id, spell_id, is_cantrip, priority)
+                            VALUES (%s, %s, %s, %s)
+                            ON CONFLICT (class_id, spell_id) DO NOTHING
+                        """, (class_id_map[class_name], spell_id_map[spell_name], True, priority))
+                        priority += 1
+
+                priority = 1
+                for spell_name in spells.get("level1", []):
+                    if spell_name in spell_id_map:
+                        cur.execute("""
+                            INSERT INTO recommended_spells (class_id, spell_id, is_cantrip, priority)
+                            VALUES (%s, %s, %s, %s)
+                            ON CONFLICT (class_id, spell_id) DO NOTHING
+                        """, (class_id_map[class_name], spell_id_map[spell_name], False, priority))
+                        priority += 1
+
+                logger.info(
+                    f"    • {class_name} → рекомендовано {len(spells.get('cantrips', [])) + len(spells.get('level1', []))} заклинаний")
 
         conn.commit()
 
-    # Подсчёт
-    with conn.cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM spells")
-        count = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM class_spells")
-        links = cur.fetchone()[0]
-
-    logger.info(f"✅ Перенесено заклинаний: {count}, связей: {links}")
+    logger.info(f"✅ Перенесено заклинаний: {len(SPELLS_DATA)}")
 
 
 # =========================================================
@@ -708,7 +948,6 @@ def main():
         conn = get_connection()
         logger.info(f"✅ Подключено к БД: {DB_CONFIG['dbname']}")
 
-        # Очистка таблиц
         response = input("Очистить таблицы перед заполнением? (yes/no): ").strip().lower()
         if response == 'yes':
             clear_tables(conn)
@@ -718,21 +957,29 @@ def main():
         migrate_classes(conn)
         migrate_backgrounds(conn)
         migrate_weapon_masteries(conn)
-        migrate_fighting_styles(conn)
+
+        # Получаем ID классов для связей
+        class_id_map = {}
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name FROM classes")
+            for row in cur.fetchall():
+                class_id_map[row[1]] = row[0]
+
+        migrate_fighting_styles(conn, class_id_map)
         migrate_invocations(conn)
-        migrate_spells(conn)
+        migrate_weapons(conn, class_id_map)
+        migrate_spells(conn, class_id_map)
 
         print("\n" + "=" * 60)
         logger.info("🎉 БАЗА ДАННЫХ УСПЕШНО НАПОЛНЕНА!")
         print("=" * 60)
 
-        # Показываем статистику
         with conn.cursor() as cur:
             stats = [
                 ("races", "Рас"), ("subraces", "Подрас"), ("classes", "Классов"),
                 ("backgrounds", "Предысторий"), ("spells", "Заклинаний"),
                 ("weapon_masteries", "Оружейных приёмов"), ("fighting_styles", "Боевых стилей"),
-                ("invocations", "Возваний")
+                ("weapons", "Оружия"), ("invocations", "Возваний")
             ]
             print("\n📊 СТАТИСТИКА:")
             for table, name in stats:

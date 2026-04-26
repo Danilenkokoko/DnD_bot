@@ -9,7 +9,6 @@ import logging
 import os
 import re
 import tempfile
-import traceback
 from typing import Dict, Any, Optional, List
 
 from aiogram import Bot, Dispatcher, F
@@ -586,8 +585,57 @@ async def back_to_classes(call: CallbackQuery, state: FSMContext):
 
 
 # ---------------- ШАГ 2: ПРЕДЫСТОРИЯ ----------------
+# ВАЖНО: СНАЧАЛА ИДЕТ ОБРАБОТЧИК ДЛЯ bg_equip_ (БОЛЕЕ КОНКРЕТНЫЙ)
+
+@dp.callback_query(lambda c: c.data.startswith("bg_equip_"))
+async def select_background_equipment(call: CallbackQuery, state: FSMContext):
+    """Обработчик выбора варианта снаряжения (bg_equip_A, bg_equip_B)"""
+    equipment_choice = call.data.replace("bg_equip_", "")
+
+    data = await state.get_data()
+    background = data.get("background")
+
+    logger.info(f"📌 select_background_equipment: choice={equipment_choice}, background='{background}'")
+
+    if not background or background in ["equip_A", "equip_B", "equip_", "A", "B"]:
+        await call.message.answer("❌ Ошибка данных. Начните заново: /start", reply_markup=main_menu())
+        await state.clear()
+        await call.answer()
+        return
+
+    await state.update_data(background_equipment_choice=equipment_choice)
+    await state.set_state(CreateCharacter.backstory_input)
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                if equipment_choice == "A":
+                    cur.execute("SELECT equipment_a FROM backgrounds WHERE name = %s", (background,))
+                else:
+                    cur.execute("SELECT equipment_b FROM backgrounds WHERE name = %s", (background,))
+                row = cur.fetchone()
+                chosen_equipment = row[0] if row and row[0] else "Нет описания"
+    except Exception as e:
+        logger.error(f"❌ Ошибка: {e}")
+        chosen_equipment = "Ошибка загрузки"
+
+    await call.message.delete()
+    await call.message.answer(
+        f"🎒 Выбран вариант {equipment_choice}\n\nСнаряжение:\n{chosen_equipment}\n\n"
+        f"Шаг 11/12: История персонажа\n\n📖 Расскажите историю вашего персонажа:",
+        parse_mode=None,
+        reply_markup=cancel_kb()
+    )
+    await call.answer()
+
+
 @dp.callback_query(lambda c: c.data.startswith("bg_"))
 async def select_background(call: CallbackQuery, state: FSMContext):
+    """Обработчик выбора предыстории"""
+    # Важно: пропускаем callback, которые начинаются с bg_equip_
+    if call.data.startswith("bg_equip_"):
+        return
+
     background = call.data.replace("bg_", "")
     await state.update_data(background=background)
     await state.set_state(CreateCharacter.race_select)
@@ -1098,9 +1146,6 @@ async def spell_info(call: CallbackQuery):
 async def go_to_fighting_style(m: Message, state: FSMContext):
     data = await state.get_data()
     class_name = data.get("class_name")
-    background = data.get("background")
-
-    logger.info(f"📌 go_to_fighting_style: class={class_name}, background='{background}'")
 
     fighting_style_classes = ["Воин", "Паладин", "Следопыт"]
 
@@ -1152,9 +1197,6 @@ async def back_to_equipment(call: CallbackQuery, state: FSMContext):
 async def go_to_invocations(m: Message, state: FSMContext):
     data = await state.get_data()
     class_name = data.get("class_name")
-    background = data.get("background")
-
-    logger.info(f"📌 go_to_invocations: class={class_name}, background='{background}'")
 
     if class_name == "Колдун":
         await state.set_state(CreateCharacter.invocations_select)
@@ -1254,54 +1296,10 @@ async def go_to_background_equipment(m: Message, state: FSMContext):
     )
 
 
-@dp.callback_query(lambda c: c.data.startswith("bg_equip_"))
-async def select_background_equipment(call: CallbackQuery, state: FSMContext):
-    equipment_choice = call.data.replace("bg_equip_", "")
-
-    data = await state.get_data()
-    background = data.get("background")
-
-    logger.info(f"📌 select_background_equipment: choice={equipment_choice}, background='{background}'")
-
-    if not background or background in ["equip_A", "equip_B", "equip_", "A", "B"]:
-        await call.message.answer("❌ Ошибка данных. Начните заново: /start", reply_markup=main_menu())
-        await state.clear()
-        await call.answer()
-        return
-
-    await state.update_data(background_equipment_choice=equipment_choice)
-    await state.set_state(CreateCharacter.backstory_input)
-
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                if equipment_choice == "A":
-                    cur.execute("SELECT equipment_a FROM backgrounds WHERE name = %s", (background,))
-                else:
-                    cur.execute("SELECT equipment_b FROM backgrounds WHERE name = %s", (background,))
-                row = cur.fetchone()
-                chosen_equipment = row[0] if row and row[0] else "Нет описания"
-    except Exception as e:
-        logger.error(f"❌ Ошибка: {e}")
-        chosen_equipment = "Ошибка загрузки"
-
-    await call.message.delete()
-    await call.message.answer(
-        f"🎒 Выбран вариант {equipment_choice}\n\nСнаряжение:\n{chosen_equipment}\n\n"
-        f"Шаг 11/12: История персонажа\n\n📖 Расскажите историю вашего персонажа:",
-        parse_mode=None,
-        reply_markup=cancel_kb()
-    )
-    await call.answer()
-
-
 @dp.callback_query(lambda c: c.data == "back_to_invocations")
 async def back_to_invocations(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     class_name = data.get("class_name")
-    background = data.get("background")
-
-    logger.info(f"📌 back_to_invocations: background='{background}', class='{class_name}'")
 
     if class_name == "Колдун":
         await state.set_state(CreateCharacter.invocations_select)

@@ -34,8 +34,9 @@ from dnd_logic import (
 )
 from pdf_generator import generate_pdf
 
-# Импортируем функции для работы с картинками рас
-from races_data import get_race_image_path, get_race_image_exists, RACE_IMAGES
+# Импортируем функции для работы с картинками
+from races_data import get_race_image_path
+from classes_data import get_class_image_path
 
 # ---------------- CONFIG ----------------
 load_dotenv()
@@ -57,14 +58,14 @@ dp = Dispatcher()
 
 # ---------------- FSM STATES ----------------
 class CreateCharacter(StatesGroup):
-    race = State()  # 1. Выбор расы
-    subrace = State()  # 1а. Выбор подрасы (если есть)
-    char_class = State()  # 2. Выбор класса
-    name = State()  # 3. Ввод имени
-    background = State()  # 4. Выбор предыстории
-    equipment = State()  # 5. Выбор снаряжения А или Б
-    backstory = State()  # 6. Ввод истории
-    image = State()  # 7. Загрузка картинки
+    race = State()          # 1. Выбор расы
+    subrace = State()       # 1а. Выбор подрасы (если есть)
+    char_class = State()    # 2. Выбор класса
+    name = State()          # 3. Ввод имени
+    background = State()    # 4. Выбор предыстории
+    equipment = State()     # 5. Выбор снаряжения А или Б
+    backstory = State()     # 6. Ввод истории
+    image = State()         # 7. Загрузка картинки
 
 
 # ---------------- MENU ----------------
@@ -86,45 +87,6 @@ def cancel_kb() -> ReplyKeyboardMarkup:
         resize_keyboard=True
     )
 
-
-@dp.message(Command("info"))
-async def info_command(m: Message):
-    """Обработчик команды /info"""
-    info_text = (
-        "ℹ️ **О боте D&D Character Creator**\n\n"
-        "**Описание:**\n"
-        "Этот бот помогает создавать персонажей для игры в Dungeons & Dragons 5-й редакции.\n\n"
-        "**Возможности:**\n"
-        "• 16 рас с подробным описанием и изображениями\n"
-        "• 13 классов с характеристиками и умениями\n"
-        "• 17 предысторий с выбором снаряжения\n"
-        "• Генерация PDF-листа персонажа\n"
-        "• Сохранение истории персонажа\n"
-        "• Загрузка портрета персонажа\n\n"
-        "**Технологии:**\n"
-        "• Python + aiogram\n"
-        "• PostgreSQL\n"
-        "• WeasyPrint для генерации PDF\n\n"
-        "**Планы на будущее:**\n"
-        "• Система уровней и опыта\n"
-        "• Боевая система\n"
-        "• Инвентарь и экипировка\n"
-        "• Броски кубиков 🎲\n\n"
-        "Приятной игры! 🎮"
-    )
-    await m.answer(info_text, parse_mode=ParseMode.MARKDOWN)
-
-
-@dp.message(F.text == "ℹ️ О боте")
-async def info_button(m: Message):
-    """Кнопка информации о боте"""
-    await info_command(m)
-
-
-@dp.message(F.text == "❓ Помощь")
-async def help_button(m: Message):
-    """Кнопка помощи"""
-    await help_command(m)
 
 # ---------------- HELP & INFO ----------------
 @dp.message(Command("help"))
@@ -168,10 +130,6 @@ async def info_command(m: Message):
         "• Генерация PDF-листа персонажа\n"
         "• Сохранение истории персонажа\n"
         "• Загрузка портрета персонажа\n\n"
-        "**Технологии:**\n"
-        "• Python + aiogram\n"
-        "• PostgreSQL\n"
-        "• WeasyPrint для генерации PDF\n\n"
         "Приятной игры! 🎮"
     )
     await m.answer(info_text, parse_mode=ParseMode.MARKDOWN)
@@ -300,7 +258,6 @@ def create_delete_keyboard(characters: list) -> InlineKeyboardMarkup:
 async def start(m: Message, state: FSMContext):
     await state.clear()
 
-    # Приветственное сообщение с описанием
     welcome_text = (
         "🎮 **Добро пожаловать в D&D Character Creator!**\n\n"
         "Я помогу тебе создать персонажа для Dungeons & Dragons 5-й редакции.\n\n"
@@ -330,6 +287,7 @@ async def start(m: Message, state: FSMContext):
             parse_mode=ParseMode.MARKDOWN
         )
 
+
 @dp.message(Command("menu"))
 async def menu_command(m: Message, state: FSMContext):
     """Возврат в главное меню"""
@@ -338,6 +296,7 @@ async def menu_command(m: Message, state: FSMContext):
         "🎮 Возвращаемся в главное меню",
         reply_markup=main_menu()
     )
+
 
 @dp.message(F.text == "❌ Отмена")
 async def cancel_creation(m: Message, state: FSMContext):
@@ -355,25 +314,17 @@ async def unknown_command(m: Message, state: FSMContext):
     current_state = await state.get_state()
 
     if current_state:
-        # Если пользователь в процессе создания персонажа
         await m.answer(
             "⏳ Вы находитесь в процессе создания персонажа.\n\n"
             "Пожалуйста, следуйте инструкциям или нажмите «❌ Отмена» чтобы начать заново.",
             reply_markup=cancel_kb()
         )
     else:
-        # Если пользователь не в процессе
         await m.answer(
             "❓ Я не понимаю эту команду.\n\n"
             "Используйте кнопки меню или команду /help для получения справки.",
             reply_markup=main_menu()
         )
-
-
-@dp.message(F.text == "❌ Отмена")
-async def cancel_creation(m: Message, state: FSMContext):
-    await state.clear()
-    await m.answer("❌ Создание персонажа отменено", reply_markup=main_menu())
 
 
 # ---------------- CREATE CHARACTER ----------------
@@ -398,22 +349,17 @@ async def select_race(call: CallbackQuery, state: FSMContext):
     race_info = get_race_info(race)
     subraces = race_info.get("subraces", {})
 
-    # Получаем полное описание расы
-    from races_data import get_race_description
     race_description = get_race_description(race)
 
-    # Получаем путь к картинке расы
     image_path = get_race_image_path(race)
     image_exists = image_path and os.path.exists(image_path)
 
-    # Формируем текст
     text = f"🧝 **{race}**\n\n"
     text += f"📖 {race_description}\n\n"
     text += f"**Скорость:** {race_info.get('speed', 30)} футов\n"
     text += f"**Размер:** {race_info.get('size', 'Средний')}\n"
     text += f"**Языки:** {', '.join(race_info.get('languages', ['Общий']))}\n\n"
 
-    # Бонусы к характеристикам
     bonuses = get_race_ability_bonuses(race, None)
     if bonuses:
         text += "**Бонусы к характеристикам:**\n"
@@ -421,7 +367,6 @@ async def select_race(call: CallbackQuery, state: FSMContext):
             text += f"  • {stat}: +{bonus}\n"
         text += "\n"
 
-    # Особенности
     text += "**Особенности:**\n"
     for trait in race_info.get('traits', []):
         text += f"  • {trait}\n"
@@ -438,13 +383,10 @@ async def select_race(call: CallbackQuery, state: FSMContext):
 
     await state.set_state(new_state)
 
-    # Отправляем сообщение с картинкой (если есть)
     try:
         if image_exists:
             photo = FSInputFile(image_path)
-            # Удаляем старое сообщение
             await call.message.delete()
-            # Отправляем новое с картинкой
             await call.message.answer_photo(
                 photo=photo,
                 caption=text,
@@ -452,7 +394,6 @@ async def select_race(call: CallbackQuery, state: FSMContext):
                 reply_markup=reply_markup
             )
         else:
-            # Если картинки нет - просто редактируем текст
             await call.message.edit_text(
                 text,
                 parse_mode=ParseMode.MARKDOWN,
@@ -501,7 +442,6 @@ async def select_subrace(call: CallbackQuery, state: FSMContext):
 async def back_to_races(call: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.race)
 
-    # Вместо edit_text используем новый ответ
     await call.message.delete()
     await call.message.answer(
         "**Шаг 1/7: Выберите расу**",
@@ -521,12 +461,9 @@ async def select_class(call: CallbackQuery, state: FSMContext):
     class_info = get_class_info(class_name)
     class_description = get_class_description(class_name)
 
-    # Получаем путь к картинке класса
-    from classes_data import get_class_image_path, get_class_image_exists
     image_path = get_class_image_path(class_name)
     image_exists = image_path and os.path.exists(image_path)
 
-    # Формируем текст с описанием
     text = (
         f"⚔️ **{class_name}**\n\n"
         f"📖 {class_description}\n\n"
@@ -537,7 +474,6 @@ async def select_class(call: CallbackQuery, state: FSMContext):
         f"Отправьте имя вашего персонажа:"
     )
 
-    # Отправляем сообщение с картинкой (если есть)
     try:
         await call.message.delete()
 
@@ -718,7 +654,6 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
 
         data = await state.get_data()
 
-        # Получаем данные
         race = data.get("race")
         subrace = data.get("subrace")
         char_class = data.get("char_class")
@@ -727,34 +662,27 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         backstory = data.get("backstory", "Нет истории")
         equipment_choice = data.get("equipment_choice", "A")
 
-        # Подготовка характеристик
         stats = get_initial_stats(race, subrace)
         hp = calc_hp(char_class, stats["CON"])
         ac = calc_ac(stats["DEX"])
 
-        # Получаем информацию о классах, расах, предысториях
         class_info = get_class_info(char_class)
         bg_info = get_background_data(background)
 
-        # Собираем данные для сохранения
         race_traits = get_race_traits_list(race, subrace)
 
-        # Валидация
         valid, msg = validate_character(name, char_class, race, background, stats)
         if not valid:
             await m.answer(f"❌ Ошибка валидации: {msg}")
             await state.clear()
             return
 
-        # Формируем снаряжение из выбранного варианта
         equipment_text = bg_info.get(f"equipment_{equipment_choice.lower()}", "")
         equipment_list = [item.strip() for item in equipment_text.split(",") if item.strip()]
 
-        # Получаем умения ТОЛЬКО для 1-го уровня
         all_features = class_info.get("features", {})
         first_level_features = all_features.get(1, [])
 
-        # Сохраняем в БД
         char_id = save_character(
             user_id=m.from_user.id,
             name=name,
@@ -778,7 +706,6 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
             image_file_id=image_file_id
         )
 
-        # Генерация PDF
         safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{safe_name}.pdf")
         temp_pdf_file = tmp.name
@@ -806,7 +733,6 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
 
         pdf_file = generate_pdf(pdf_data, temp_pdf_file)
 
-        # Отправка результата
         caption = (
             f"✅ **Персонаж создан!**\n\n"
             f"📛 **Имя:** {name}\n"
@@ -820,7 +746,6 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
             f"🧠 INT: {stats['INT']} | 🧙 WIS: {stats['WIS']} | ✨ CHA: {stats['CHA']}"
         )
 
-        # Отправляем картинку если есть
         if image_file_id:
             await m.answer_photo(
                 photo=image_file_id,
@@ -830,7 +755,6 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         else:
             await m.answer(caption, parse_mode=ParseMode.MARKDOWN)
 
-        # Отправляем PDF
         if pdf_file and os.path.exists(pdf_file):
             await m.answer_document(
                 FSInputFile(pdf_file, filename=f"{safe_name}_character_sheet.pdf"),

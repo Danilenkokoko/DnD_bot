@@ -698,18 +698,20 @@ async def select_race(call: CallbackQuery, state: FSMContext):
     else:
         # Нет подрасы → переходим к снаряжению
         await go_to_equipment_choice(call.message, state, race, call)
+        await call.answer()
+        return
 
     img_path = get_race_image_path(race)
     try:
         await call.message.delete()
         if img_path and os.path.exists(img_path):
             photo = FSInputFile(img_path)
-            await call.message.answer_photo(photo=photo, caption=text, parse_mode=None, reply_markup=reply_markup if has_sub else None)
+            await call.message.answer_photo(photo=photo, caption=text, parse_mode=None, reply_markup=reply_markup)
         else:
-            await call.message.answer(text, parse_mode=None, reply_markup=reply_markup if has_sub else None)
+            await call.message.answer(text, parse_mode=None, reply_markup=reply_markup)
     except Exception as e:
         logger.error(f"Ошибка отправки картинки расы: {e}")
-        await call.message.answer(text, parse_mode=None, reply_markup=reply_markup if has_sub else None)
+        await call.message.answer(text, parse_mode=None, reply_markup=reply_markup)
 
     await call.answer()
 
@@ -733,6 +735,23 @@ async def select_subrace(call: CallbackQuery, state: FSMContext):
     await call.message.answer(text, parse_mode=None)
 
     # Переходим к снаряжению
+    await go_to_equipment_choice(call.message, state, race, call)
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "subrace_skip")
+async def skip_subrace(call: CallbackQuery, state: FSMContext):
+    await state.update_data(subrace=None)
+
+    data = await state.get_data()
+    race = data.get("race")
+
+    await call.message.delete()
+    await call.message.answer(
+        f"🧝 Раса: {race}\n\nПереходим к выбору снаряжения...",
+        parse_mode=None
+    )
+
     await go_to_equipment_choice(call.message, state, race, call)
     await call.answer()
 
@@ -1304,9 +1323,21 @@ async def go_to_background_equipment(m: Message, state: FSMContext):
     data = await state.get_data()
     background = data.get("background")
 
+    if not background:
+        logger.error("❌ Предыстория не найдена в state!")
+        await m.answer("Ошибка: предыстория не выбрана.", reply_markup=main_menu())
+        await state.clear()
+        return
+
+    bg_info = get_background_data(background)
+    equipment_a = bg_info.get("equipment_a", "Нет описания")[:60]
+    equipment_b = bg_info.get("equipment_b", "Нет описания")[:60]
+
     await m.answer(
         f"Шаг 10/12: Выберите СНАРЯЖЕНИЕ ОТ ПРЕДЫСТОРИИ\n\n"
         f"🎒 Предыстория {background} предоставляет два варианта стартового снаряжения.\n\n"
+        f"Вариант А: {equipment_a}...\n"
+        f"Вариант Б: {equipment_b}...\n\n"
         f"Выберите вариант А или Б:",
         parse_mode=None,
         reply_markup=create_background_equipment_keyboard(background)
@@ -1317,6 +1348,8 @@ async def go_to_background_equipment(m: Message, state: FSMContext):
 async def select_background_equipment(call: CallbackQuery, state: FSMContext):
     equipment_choice = call.data.replace("bg_equip_", "")
     await state.update_data(background_equipment_choice=equipment_choice)
+
+    # Меняем состояние на ввод истории
     await state.set_state(CreateCharacter.backstory_input)
 
     data = await state.get_data()
@@ -1343,7 +1376,21 @@ async def select_background_equipment(call: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "back_to_invocations")
 async def back_to_invocations(call: CallbackQuery, state: FSMContext):
-    await go_to_invocations(call.message, state)
+    data = await state.get_data()
+    class_name = data.get("class_name")
+
+    if class_name == "Колдун":
+        await state.set_state(CreateCharacter.invocations_select)
+        await call.message.delete()
+        await call.message.answer(
+            f"Шаг 9/12: Выберите ТАИНСТВЕННЫЕ ВОЗВАНИЯ\n\n"
+            f"🔮 Колдун может выбрать таинственные возвания — особые силы.\n\n"
+            f"Доступные возвания (1-2 уровень):",
+            parse_mode=None,
+            reply_markup=create_invocations_keyboard(level=1)
+        )
+    else:
+        await go_to_fighting_style(call.message, state)
     await call.answer()
 
 

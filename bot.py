@@ -283,9 +283,11 @@ def create_masteries_keyboard(weapon_name: str, class_name: str, masteries_count
     for m in all_masteries:
         is_suitable = m['name'] in suitable
         emoji = "⭐" if is_suitable else "•"
-        suitable_text = " ✓" if is_suitable else ""
+        text = f"{emoji} {m['name']}: {m['effect'][:40]}"
+        if is_suitable:
+            text += " ✓"
         buttons.append([InlineKeyboardButton(
-            text=f"{emoji} {m['name']}: {m['effect'][:40]}{suitable_text}",
+            text=text,
             callback_data=f"mastery_{m['id']}"
         )])
 

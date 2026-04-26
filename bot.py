@@ -1447,6 +1447,14 @@ async def cancel_creation_callback(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text("❌ Создание персонажа отменено")
     await call.answer()
 
+@dp.callback_query(lambda c: c.data == "mastery_info")
+async def mastery_info(call: CallbackQuery):
+    await call.answer("Этот приём оптимально подходит для выбранного оружия!", show_alert=False)
+
+
+@dp.callback_query(lambda c: c.data == "masteries_header")
+async def masteries_header(call: CallbackQuery):
+    await call.answer("Звёздочкой отмечены оптимальные приёмы для вашего оружия", show_alert=False)
 
 @dp.message(Command("skip"))
 async def skip_command(m: Message, state: FSMContext):

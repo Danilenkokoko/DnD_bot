@@ -371,8 +371,14 @@ def create_invocations_keyboard(level: int = 1) -> InlineKeyboardMarkup:
 
 def create_background_equipment_keyboard(background: str) -> InlineKeyboardMarkup:
     bg_info = get_background_data(background)
-    equipment_a = bg_info.get("equipment_a", "Нет описания")[:60]
-    equipment_b = bg_info.get("equipment_b", "Нет описания")[:60]
+
+    # Добавляем проверку
+    if not bg_info:
+        equipment_a = "Нет описания"
+        equipment_b = "Нет описания"
+    else:
+        equipment_a = bg_info.get("equipment_a", "Нет описания")[:60]
+        equipment_b = bg_info.get("equipment_b", "Нет описания")[:60]
 
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"📦 Вариант А: {equipment_a}...", callback_data="bg_equip_A")],
@@ -874,7 +880,6 @@ async def auto_calculate_stats(m: Message, state: FSMContext):
         f"Нажмите «Продолжить», чтобы перейти к вводу имени."
     )
 
-    # Не меняем состояние здесь! Оставляем stats_auto
     await m.answer(text, parse_mode=None, reply_markup=continue_kb())
 
 
@@ -1299,7 +1304,7 @@ async def back_to_style(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
-# ---------------- ШАГ 10: СНАРЯЖЕНИЕ ОТ ПРЕДЫСТОРИИ ----------------
+# ---------------- ШАГ 10: СНАРЯЖЕНИЕ ОТ ПРЕДЫСТОРИИ (ИСПРАВЛЕНА) ----------------
 async def go_to_background_equipment(m: Message, state: FSMContext):
     await state.set_state(CreateCharacter.background_equipment_select)
 
@@ -1313,6 +1318,15 @@ async def go_to_background_equipment(m: Message, state: FSMContext):
         return
 
     bg_info = get_background_data(background)
+
+    # Добавляем проверку
+    if not bg_info:
+        logger.error(f"❌ Данные предыстории '{background}' не найдены!")
+        await m.answer(f"Ошибка: данные предыстории '{background}' не найдены. Попробуйте создать персонажа заново.",
+                       reply_markup=main_menu())
+        await state.clear()
+        return
+
     equipment_a = bg_info.get("equipment_a", "Нет описания")[:60]
     equipment_b = bg_info.get("equipment_b", "Нет описания")[:60]
 

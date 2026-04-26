@@ -137,7 +137,7 @@ def calc_ac(dexterity: int, armor_type: str = "none", has_shield: bool = False) 
 
 
 # =========================================================
-# 2. ГЕНЕРАЦИЯ ХАРАКТЕРИСТИК (НОВАЯ ЛОГИКА ДЛЯ 5.5e!)
+# 2. ГЕНЕРАЦИЯ ХАРАКТЕРИСТИК
 # =========================================================
 
 def roll_4d6_drop_lowest() -> int:
@@ -155,13 +155,12 @@ def roll_4d6_drop_lowest() -> int:
 def generate_random_stats() -> Dict[str, int]:
     """
     Генерирует случайные характеристики методом 4d6 (отбросить минимальный)
-    Выполняется 6 бросков, результаты сортируются по убыванию
 
     Returns:
         Dict[str, int]: словарь со значениями STR, DEX, CON, INT, WIS, CHA
     """
     stats_list = [roll_4d6_drop_lowest() for _ in range(6)]
-    stats_list.sort(reverse=True)  # Сортируем по убыванию
+    stats_list.sort(reverse=True)
 
     return {
         "STR": stats_list[0],
@@ -176,9 +175,6 @@ def generate_random_stats() -> Dict[str, int]:
 def get_standard_stats() -> Dict[str, int]:
     """
     Возвращает стандартный набор характеристик (15, 14, 13, 12, 10, 8)
-
-    Returns:
-        Dict[str, int]: стандартные характеристики
     """
     return {
         "STR": 15,
@@ -195,13 +191,6 @@ def apply_background_bonuses(stats: Dict[str, int], background_name: str) -> Dic
     Применяет бонусы к характеристикам от предыстории (D&D 5.5e!)
 
     В 5.5e бонусы даёт ПРЕДЫСТОРИЯ, а не раса!
-
-    Args:
-        stats: базовые характеристики
-        background_name: название предыстории
-
-    Returns:
-        Dict[str, int]: изменённые характеристики
     """
     result = stats.copy()
 
@@ -209,7 +198,6 @@ def apply_background_bonuses(stats: Dict[str, int], background_name: str) -> Dic
     if not bg:
         return result
 
-    # Карта перевода русских названий в коды статов
     stat_map = {
         "Сила": "STR", "Ловкость": "DEX", "Телосложение": "CON",
         "Интеллект": "INT", "Мудрость": "WIS", "Харизма": "CHA"
@@ -217,15 +205,12 @@ def apply_background_bonuses(stats: Dict[str, int], background_name: str) -> Dic
 
     characteristics = bg['characteristics']
 
-    # +2 к первой характеристике
     stat1 = stat_map.get(characteristics[0], "DEX")
     result[stat1] += 2
 
-    # +1 ко второй характеристике
     stat2 = stat_map.get(characteristics[1], "DEX")
     result[stat2] += 1
 
-    # Ограничиваем максимальное значение 20
     for stat in result:
         result[stat] = min(20, result[stat])
 
@@ -239,9 +224,6 @@ def get_initial_stats_by_method(method: str, background_name: str) -> Dict[str, 
     Args:
         method: "random" или "standard"
         background_name: название предыстории
-
-    Returns:
-        Dict[str, int]: финальные характеристики
     """
     if method == "random":
         base_stats = generate_random_stats()
@@ -256,13 +238,10 @@ def get_initial_stats_by_method(method: str, background_name: str) -> Dict[str, 
 # =========================================================
 
 def get_all_races() -> List[Dict[str, Any]]:
-    """Возвращает список всех рас с полной информацией"""
+    """Возвращает список всех рас"""
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, name, speed, size, description, image_path 
-                FROM races ORDER BY name
-            """)
+            cur.execute("SELECT id, name, speed, size, description, image_path FROM races ORDER BY name")
             columns = ['id', 'name', 'speed', 'size', 'description', 'image_path']
             return [dict(zip(columns, row)) for row in cur.fetchall()]
 
@@ -276,7 +255,7 @@ def get_race_list() -> List[str]:
 
 
 def get_race_by_name(race_name: str) -> Optional[Dict[str, Any]]:
-    """Получает полную информацию о расе по названию (с описанием и картинкой!)"""
+    """Получает полную информацию о расе по названию"""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -297,24 +276,24 @@ def get_race_by_name(race_name: str) -> Optional[Dict[str, Any]]:
 
 
 def _get_fallback_race_description(race_name: str) -> str:
-    """Возвращает fallback описание для расы (если в БД пусто)"""
+    """Возвращает fallback описание для расы"""
     descriptions = {
-        "Аасимар": "Аасимары — это смертные, которые несут в своих душах искру Верхних Планов. Они могут раздуть эту искру, чтобы нести свет, исцеление и небесную ярость.",
-        "Гном": "Гномы — миниатюрный народец с большими глазами и заострёнными ушами. Многим гномам нравится ощущение крыши над головой.",
-        "Голиаф": "Возвышающиеся над большинством народов голиафы — отдалённые потомки великанов. Каждый голиаф обладает благоволением первых великанов.",
-        "Дампир": "Дампиры живы, но обладают как способностями вампиров, так и их ужасным голодом.",
-        "Дварф": "Дварфы устойчивы, как горы; они живут около 350 лет. В древние времена дварфы были подняты из земли божеством кузни.",
-        "Драконорожденный": "Драконорождённые выглядят как бескрылые двуногие драконы — чешуйчатые, ширококостные, с рожками на головах.",
-        "Калаштар": "Калаштары происходят от союза человечества и мятежных духов с плана снов, называемых куори.",
-        "Кованный": "Кованые — механические существа, созданные из дерева и металла, способные испытывать боль и эмоции.",
-        "Кхоравар": "Кхоравары — потомки союзов людей и эльфов, создавшие в Кхорваире свои сообщества.",
-        "Орк": "Орки выносливы, решительны и способны видеть в темноте. Они ведут своё сотворение от Груумша, могущественного бога.",
-        "Полурослик": "Общины полуросликов бывают самых разных видов. Они известны своей удачливостью и храбростью.",
-        "Тифлинг": "Тифлинги связаны кровными узами с дьяволом, демоном или другим Исчадием. Эта связь с Нижними планами сулит могущество.",
-        "Человек": "Люди столь же разнообразны, сколь и многочисленны, и они стремятся достичь как можно большего за отведенные им годы жизни.",
-        "Ченжлинг": "Ченжлинги могут сверхъестественным образом принять любой облик, который им нравится.",
-        "Шифтер": "Шифтеры — гуманоиды с явно заметными животными чертами. Они могут временно усилить свои животные черты.",
-        "Эльф": "Созданные богом Кореллоном, первые эльфы могли неограниченно менять свой облик. Они живут около 750 лет."
+        "Аасимар": "Аасимары — это смертные, которые несут в своих душах искру Верхних Планов.",
+        "Гном": "Гномы — миниатюрный народец с большими глазами и заострёнными ушами.",
+        "Голиаф": "Возвышающиеся над большинством народов голиафы — отдалённые потомки великанов.",
+        "Дварф": "Дварфы устойчивы, как горы; они живут около 350 лет.",
+        "Драконорожденный": "Драконорождённые выглядят как бескрылые двуногие драконы.",
+        "Полурослик": "Общины полуросликов бывают самых разных видов.",
+        "Тифлинг": "Тифлинги связаны кровными узами с дьяволом или демоном.",
+        "Человек": "Люди столь же разнообразны, сколь и многочисленны.",
+        "Эльф": "Созданные богом Кореллоном, первые эльфы могли неограниченно менять свой облик.",
+        "Орк": "Орки выносливы, решительны и способны видеть в темноте.",
+        "Калаштар": "Калаштары происходят от союза человечества и духов с плана снов.",
+        "Кованный": "Кованые — механические существа, созданные из дерева и металла.",
+        "Кхоравар": "Кхоравары — потомки союзов людей и эльфов.",
+        "Ченжлинг": "Ченжлинги могут сверхъестественным образом принять любой облик.",
+        "Шифтер": "Шифтеры — гуманоиды с явно заметными животными чертами.",
+        "Дампир": "Дампиры живы, но обладают способностями вампиров."
     }
     return descriptions.get(race_name, "Нет описания для этой расы.")
 
@@ -345,24 +324,15 @@ def get_race_image_path(race_name: str) -> Optional[str]:
     if race and race.get('image_path'):
         return race['image_path']
 
-    # fallback пути к картинкам
     images = {
-        "Аасимар": "images/races/aasimar.jpg",
-        "Гном": "images/races/gnom.jpg",
-        "Голиаф": "images/races/goliaf.jpg",
-        "Дварф": "images/races/dwarf.jpg",
-        "Драконорожденный": "images/races/dragonborn.jpg",
-        "Полурослик": "images/races/halfman.jpg",
-        "Тифлинг": "images/races/tifling.jpg",
-        "Человек": "images/races/man.jpg",
-        "Эльф": "images/races/elf.jpg",
-        "Орк": "images/races/ork.jpg",
-        "Калаштар": "images/races/kalashtar.jpg",
-        "Кованный": "images/races/kowanniy.jpg",
-        "Кхоравар": "images/races/khorawar.jpg",
-        "Ченжлинг": "images/races/changaling.jpg",
-        "Шифтер": "images/races/shifter.jpg",
-        "Дампир": "images/races/dampir.jpg",
+        "Аасимар": "images/races/aasimar.jpg", "Гном": "images/races/gnom.jpg",
+        "Голиаф": "images/races/goliaf.jpg", "Дварф": "images/races/dwarf.jpg",
+        "Драконорожденный": "images/races/dragonborn.jpg", "Полурослик": "images/races/halfman.jpg",
+        "Тифлинг": "images/races/tifling.jpg", "Человек": "images/races/man.jpg",
+        "Эльф": "images/races/elf.jpg", "Орк": "images/races/ork.jpg",
+        "Калаштар": "images/races/kalashtar.jpg", "Кованный": "images/races/kowanniy.jpg",
+        "Кхоравар": "images/races/khorawar.jpg", "Ченжлинг": "images/races/changaling.jpg",
+        "Шифтер": "images/races/shifter.jpg", "Дампир": "images/races/dampir.jpg",
     }
     return images.get(race_name)
 
@@ -407,12 +377,9 @@ def get_subrace_info(race_name: str, subrace_name: str) -> Optional[Dict[str, An
             row = cur.fetchone()
             if row:
                 return {
-                    'id': row[0],
-                    'name': row[1],
-                    'trait': row[2] if row[2] else "",
+                    'id': row[0], 'name': row[1], 'trait': row[2] if row[2] else "",
                     'description': row[3] if row[3] else _get_fallback_subrace_description(subrace_name),
-                    'extra_speed': row[4] if row[4] else 0,
-                    'extra_traits': row[5] if row[5] else []
+                    'extra_speed': row[4] if row[4] else 0, 'extra_traits': row[5] if row[5] else []
                 }
     return None
 
@@ -420,22 +387,22 @@ def get_subrace_info(race_name: str, subrace_name: str) -> Optional[Dict[str, An
 def _get_fallback_subrace_description(subrace_name: str) -> str:
     """Возвращает fallback описание для подрасы"""
     descriptions = {
-        "Протектор": "Протекторы используют силу света для защиты своих союзников.",
+        "Протектор": "Протекторы используют силу света для защиты союзников.",
         "Разоритель": "Разорители черпают силу из разрушения и несут возмездие.",
-        "Несущий скорбь": "Несущие скорбь связаны с некротической энергией и тайнами смерти.",
-        "Лесной гном": "Лесные гномы умеют общаться с животными и прятаться в природе.",
-        "Скальный гном": "Скальные гномы искусны в работе с механизмами и алхимией.",
-        "Горный дварф": "Горные дварфы сильны и выносливы, они искусны в бою.",
-        "Холмовой дварф": "Холмовые дварфы мудры и жизнерадостны, обладают повышенной выносливостью.",
-        "Высший эльф": "Высшие эльфы искусны в магии и получают дополнительное заклинание.",
-        "Лесной эльф": "Лесные эльфы быстры и скрытны, они чувствуют себя в лесу как дома.",
-        "Тёмный эльф (Дроу)": "Дроу живут в подземельях, они чувствительны к свету, но могут использовать магию.",
-        "Легконогий": "Легконогие полурослики умеют прятаться за другими существами.",
+        "Несущий скорбь": "Несущие скорбь связаны с некротической энергией.",
+        "Лесной гном": "Лесные гномы умеют общаться с животными.",
+        "Скальный гном": "Скальные гномы искусны в работе с механизмами.",
+        "Горный дварф": "Горные дварфы сильны и выносливы.",
+        "Холмовой дварф": "Холмовые дварфы мудры и жизнерадостны.",
+        "Высший эльф": "Высшие эльфы искусны в магии.",
+        "Лесной эльф": "Лесные эльфы быстры и скрытны.",
+        "Тёмный эльф (Дроу)": "Дроу живут в подземельях, чувствительны к свету.",
+        "Легконогий": "Легконогие полурослики умеют прятаться.",
         "Крепкостоп": "Крепкостопы выносливы и стойки к ядам.",
-        "Медвежий": "Медвежьи шифтеры получают временные хиты при сдвиге.",
-        "Кошачий": "Кошачьи шифтеры получают бонус к скорости и ловкости.",
-        "Крысиный": "Крысиные шифтеры получают бонус к интеллектуальным проверкам.",
-        "Волчий": "Волчьи шифтеры получают бонус к восприятию и выслеживанию.",
+        "Медвежий": "Медвежьи шифтеры получают временные хиты.",
+        "Кошачий": "Кошачьи шифтеры получают бонус к скорости.",
+        "Крысиный": "Крысиные шифтеры получают бонус к интеллекту.",
+        "Волчий": "Волчьи шифтеры получают бонус к восприятию."
     }
     return descriptions.get(subrace_name, "Нет описания для этой подрасы.")
 
@@ -458,37 +425,23 @@ def get_subrace_trait(race_name: str, subrace_name: str) -> str:
 
 
 def get_race_info(race_name: str) -> Dict[str, Any]:
-    """Возвращает полную информацию о расе (для совместимости со старым кодом)"""
+    """Возвращает полную информацию о расе (для совместимости)"""
     race = get_race_by_name(race_name)
     if not race:
         return {}
 
-    # Получаем подрасы
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT name, trait, description FROM subraces 
-                WHERE race_id = %s
-            """, (race['id'],))
-            subraces = {}
-            for row in cur.fetchall():
-                subraces[row[0]] = {'trait': row[1], 'description': row[2]}
+            cur.execute("SELECT name, trait, description FROM subraces WHERE race_id = %s", (race['id'],))
+            subraces = {row[0]: {'trait': row[1], 'description': row[2]} for row in cur.fetchall()}
 
-    return {
-        'name': race_name,
-        'speed': race['speed'],
-        'size': race['size'],
-        'description': race['description'],
-        'traits': [],
-        'subraces': subraces
-    }
+    return {'name': race_name, 'speed': race['speed'], 'size': race['size'],
+            'description': race['description'], 'traits': [], 'subraces': subraces}
 
 
 def get_race_traits_list(race: str, subrace: Optional[str] = None) -> List[str]:
     """Возвращает особенности расы"""
     traits = []
-
-    # Базовые особенности расы
     race_traits_map = {
         "Аасимар": ["Тёмное зрение", "Небесное наследие", "Исцеляющие руки", "Светоносный"],
         "Гном": ["Тёмное зрение", "Гномья хитрость", "Искусный ремесленник"],
@@ -502,7 +455,6 @@ def get_race_traits_list(race: str, subrace: Optional[str] = None) -> List[str]:
     }
     traits.extend(race_traits_map.get(race, []))
 
-    # Особенности подрасы
     if subrace:
         sub_trait = get_subrace_trait(race, subrace)
         if sub_trait:
@@ -521,13 +473,11 @@ def get_all_classes() -> List[Dict[str, Any]]:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, name, hit_die, primary_stats, saving_throws, 
-                       skill_choices, description, image_path, 
-                       is_spellcaster, spellcasting_ability
+                       skill_choices, description, image_path, is_spellcaster, spellcasting_ability
                 FROM classes ORDER BY name
             """)
             columns = ['id', 'name', 'hit_die', 'primary_stats', 'saving_throws',
-                       'skill_choices', 'description', 'image_path',
-                       'is_spellcaster', 'spellcasting_ability']
+                       'skill_choices', 'description', 'image_path', 'is_spellcaster', 'spellcasting_ability']
             return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
@@ -540,48 +490,43 @@ def get_class_list() -> List[str]:
 
 
 def get_class_by_name(class_name: str) -> Optional[Dict[str, Any]]:
-    """Получает полную информацию о классе по названию (с описанием и картинкой!)"""
+    """Получает полную информацию о классе по названию"""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, name, hit_die, primary_stats, saving_throws, 
-                       skill_choices, description, image_path, 
-                       is_spellcaster, spellcasting_ability
+                       skill_choices, description, image_path, is_spellcaster, spellcasting_ability
                 FROM classes WHERE name = %s
             """, (class_name,))
             row = cur.fetchone()
             if row:
                 return {
-                    'id': row[0],
-                    'name': row[1],
-                    'hit_die': row[2],
+                    'id': row[0], 'name': row[1], 'hit_die': row[2],
                     'primary_stats': row[3] if isinstance(row[3], list) else json.loads(row[3]),
                     'saving_throws': row[4] if isinstance(row[4], list) else json.loads(row[4]),
                     'skill_choices': row[5],
                     'description': row[6] if row[6] else _get_fallback_class_description(class_name),
-                    'image_path': row[7],
-                    'is_spellcaster': row[8],
-                    'spellcasting_ability': row[9]
+                    'image_path': row[7], 'is_spellcaster': row[8], 'spellcasting_ability': row[9]
                 }
     return None
 
 
 def _get_fallback_class_description(class_name: str) -> str:
-    """Возвращает fallback описание для класса (если в БД пусто)"""
+    """Возвращает fallback описание для класса"""
     descriptions = {
-        "Артефактор": "Мастера раскрытия магии в обычных вещах, изобретатели — величайшие выдумщики. Они видят магию как сложную систему, которую нужно расшифровывать и контролировать.",
-        "Бард": "Бард плетёт магию из слов и музыки, вдохновляя союзников, деморализуя противников, манипулируя сознанием и даже исцеляя раны.",
-        "Варвар": "Варваров объединяет их ярость — необузданный, неугасимый и бездумный гнев. Не просто эмоция, их ярость как свирепость загнанного в угол хищника.",
-        "Воин": "Воины мастерски владеют оружием, доспехами и приёмами ведения боя. Странствующие рыцари, военачальники, королевские чемпионы — все они воины.",
-        "Волшебник": "Волшебники — адепты высшей магии, способные создавать заклинания взрывного огня, искрящихся молний и тонкого обмана. Их магия вызывает чудовищ с других планов.",
-        "Друид": "Друиды воплощают незыблемость, приспособляемость и гнев природы. Они ни в коем случае не владыки природы — вместо этого друиды ощущают себя частью её неодолимой воли.",
-        "Жрец": "Жрецы являются посредниками между миром смертных и далёкими мирами богов. Настолько же разные, насколько боги, которым они служат, жрецы воплощают работу своих божеств.",
-        "Колдун": "Колдуны — искатели знаний, через договор с таинственными существами открывающие магические эффекты. Они подпитывают свои силы древними знаниями.",
-        "Монах": "Монахи управляют энергией, текущей в их телах, проявляя выдающиеся боевые способности, чуть заметное усиление защиты и скорости.",
-        "Паладин": "Паладинов объединяет их клятва противостоять силам зла. Принесённая перед алтарём бога или в момент отчаяния, клятва паладина — могущественный договор.",
-        "Плут": "Плуты полагаются на мастерство, скрытность и уязвимые места врагов. У них достаточно сноровки для нахождения решения в любой ситуации.",
-        "Следопыт": "Следопыты несут свой бесконечный дозор вдали от суеты городов и посёлков, среди плотно стоящих деревьев и на просторах необъятных равнин.",
-        "Чародей": "Чародеи являются носителями магии, дарованной им при рождении их экзотической родословной. Сила сама выбирает носителя."
+        "Артефактор": "Мастера раскрытия магии в обычных вещах, величайшие выдумщики.",
+        "Бард": "Бард плетёт магию из слов и музыки, вдохновляя союзников.",
+        "Варвар": "Варваров объединяет их ярость — необузданный и бездумный гнев.",
+        "Воин": "Воины мастерски владеют оружием, доспехами и приёмами боя.",
+        "Волшебник": "Волшебники — адепты высшей магии, способные создавать заклинания.",
+        "Друид": "Друиды воплощают незыблемость, приспособляемость и гнев природы.",
+        "Жрец": "Жрецы являются посредниками между миром смертных и богами.",
+        "Колдун": "Колдуны — искатели знаний, через договор открывающие магию.",
+        "Монах": "Монахи управляют энергией, текущей в их телах.",
+        "Паладин": "Паладинов объединяет их клятва противостоять силам зла.",
+        "Плут": "Плуты полагаются на мастерство, скрытность и уязвимые места врагов.",
+        "Следопыт": "Следопыты несут свой бесконечный дозор вдали от городов.",
+        "Чародей": "Чародеи являются носителями магии, дарованной им при рождении."
     }
     return descriptions.get(class_name, "Нет описания для этого класса.")
 
@@ -600,20 +545,13 @@ def get_class_image_path(class_name: str) -> Optional[str]:
     if class_data and class_data.get('image_path'):
         return class_data['image_path']
 
-    # fallback пути к картинкам
     images = {
-        "Артефактор": "images/classes/artifactor.jpg",
-        "Бард": "images/classes/bard.jpg",
-        "Варвар": "images/classes/barbarian.jpg",
-        "Воин": "images/classes/fighter.jpg",
-        "Волшебник": "images/classes/wizard.jpg",
-        "Друид": "images/classes/druid.jpg",
-        "Жрец": "images/classes/cleric.jpg",
-        "Колдун": "images/classes/warlock.jpg",
-        "Монах": "images/classes/monk.jpg",
-        "Паладин": "images/classes/paladin.jpg",
-        "Плут": "images/classes/rogue.jpg",
-        "Следопыт": "images/classes/ranger.jpg",
+        "Артефактор": "images/classes/artifactor.jpg", "Бард": "images/classes/bard.jpg",
+        "Варвар": "images/classes/barbarian.jpg", "Воин": "images/classes/fighter.jpg",
+        "Волшебник": "images/classes/wizard.jpg", "Друид": "images/classes/druid.jpg",
+        "Жрец": "images/classes/cleric.jpg", "Колдун": "images/classes/warlock.jpg",
+        "Монах": "images/classes/monk.jpg", "Паладин": "images/classes/paladin.jpg",
+        "Плут": "images/classes/rogue.jpg", "Следопыт": "images/classes/ranger.jpg",
         "Чародей": "images/classes/sorcerer.jpg",
     }
     return images.get(class_name)
@@ -636,57 +574,57 @@ def get_class_info(class_name: str) -> Dict[str, Any]:
     }
 
 
-def get_class_hit_die(class_name: str) -> int:
-    """Возвращает хитовый кубик класса"""
+def get_class_features(class_name: str, level: int = 1) -> List[str]:
+    """Возвращает особенности класса на уровне"""
     class_data = get_class_by_name(class_name)
-    return class_data['hit_die'] if class_data else 6
+    if not class_data:
+        return []
 
+    features = []
+    if class_data['is_spellcaster']:
+        features.append("Заклинания")
 
-def get_class_skill_choices(class_name: str) -> List[str]:
-    """Возвращает список доступных навыков для класса"""
-    skills_map = {
-        "Бард": ["Акробатика", "Выступление", "Обман", "Убеждение", "Проницательность", "Скрытность", "История",
-                 "Магия"],
-        "Воин": ["Атлетика", "Запугивание", "Восприятие", "Выживание", "История", "Проницательность"],
-        "Волшебник": ["Тайная магия", "История", "Религия", "Расследование", "Медицина", "Проницательность"],
-        "Жрец": ["Религия", "Медицина", "Убеждение", "Проницательность", "История"],
-        "Плут": ["Ловкость рук", "Скрытность", "Обман", "Восприятие", "Расследование", "Акробатика"],
-        "Следопыт": ["Выживание", "Восприятие", "Скрытность", "Природа", "Обращение с животными"],
-        "Друид": ["Природа", "Выживание", "Восприятие", "Обращение с животными", "Медицина"],
-        "Паладин": ["Убеждение", "Проницательность", "Религия", "Атлетика", "Запугивание"],
-        "Чародей": ["Обман", "Убеждение", "Проницательность", "Запугивание", "Магия"],
-        "Колдун": ["Магия", "Обман", "История", "Запугивание", "Расследование"],
-        "Монах": ["Акробатика", "Атлетика", "История", "Проницательность", "Религия", "Скрытность"],
-        "Варвар": ["Атлетика", "Запугивание", "Восприятие", "Выживание", "Природа"],
-        "Артефактор": ["Магия", "История", "Расследование", "Медицина", "Восприятие"]
+    class_specific = {
+        "Бард": ["Вдохновение барда"], "Варвар": ["Ярость", "Бездоспешная защита"],
+        "Воин": ["Второе дыхание", "Боевой стиль"], "Волшебник": ["Книга заклинаний", "Восстановление магии"],
+        "Друид": ["Друидийский язык"], "Жрец": ["Божественное вдохновение"],
+        "Колдун": ["Потусторонний покровитель", "Магия договора"],
+        "Монах": ["Боевые искусства", "Бездоспешная защита"],
+        "Паладин": ["Божественное чутьё", "Наложение рук"],
+        "Плут": ["Скрытая атака", "Взломщик", "Воровской жаргон"],
+        "Следопыт": ["Избранный враг", "Следопыт"],
+        "Чародей": ["Магия крови"], "Артефактор": ["Магия артефактов", "Владение инструментами"]
     }
-    return skills_map.get(class_name, ["Восприятие", "Скрытность"])
+
+    return features + class_specific.get(class_name, [])
 
 
 # =========================================================
 # 5. РАБОТА С ПОДКЛАССАМИ
 # =========================================================
 
-def get_subclasses_for_class(class_name: str) -> List[Dict[str, Any]]:
-    """Возвращает подклассы для указанного класса"""
-    class_data = get_class_by_name(class_name)
-    if not class_data:
-        return []
-
+def get_subclasses_for_class(class_name: str, level: int = 1) -> List[Dict[str, Any]]:
+    """Возвращает подклассы для указанного класса, доступные на уровне"""
     with get_connection() as conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
+            result = cur.fetchone()
+            if not result:
+                return []
+            class_id = result[0]
+
             cur.execute("""
                 SELECT id, name, level_acquired, description, features
                 FROM subclasses 
-                WHERE class_id = %s
+                WHERE class_id = %s AND level_acquired <= %s
                 ORDER BY level_acquired, name
-            """, (class_data['id'],))
+            """, (class_id, level))
             columns = ['id', 'name', 'level_acquired', 'description', 'features']
             return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
 # =========================================================
-# 6. РАБОТА С ПРЕДЫСТОРИЯМИ (из БД) - КЛЮЧЕВОЕ ДЛЯ 5.5e!
+# 6. РАБОТА С ПРЕДЫСТОРИЯМИ
 # =========================================================
 
 def get_all_backgrounds() -> List[Dict[str, Any]]:
@@ -722,7 +660,6 @@ def get_background_by_name(background_name: str) -> Optional[Dict[str, Any]]:
             """, (background_name,))
             row = cur.fetchone()
             if row:
-                # Обрабатываем skills (может быть строкой JSON или списком)
                 skills = row[6]
                 if isinstance(skills, str):
                     try:
@@ -731,14 +668,10 @@ def get_background_by_name(background_name: str) -> Optional[Dict[str, Any]]:
                         skills = []
 
                 return {
-                    'id': row[0],
-                    'name': row[1],
+                    'id': row[0], 'name': row[1],
                     'characteristics': [row[2], row[3], row[4]],
-                    'trait': row[5],
-                    'skills': skills,
-                    'tools': row[7],
-                    'equipment_a': row[8],
-                    'equipment_b': row[9],
+                    'trait': row[5], 'skills': skills, 'tools': row[7],
+                    'equipment_a': row[8], 'equipment_b': row[9],
                     'description': row[10] if row[10] else f"Предыстория {background_name}"
                 }
     return None
@@ -751,18 +684,15 @@ def get_background_data(background_name: str) -> Dict[str, Any]:
         return {}
 
     return {
-        'characteristics': bg['characteristics'],
-        'trait': bg['trait'],
-        'skills': bg['skills'],
-        'tools': bg['tools'],
-        'equipment_a': bg['equipment_a'],
-        'equipment_b': bg['equipment_b'],
+        'characteristics': bg['characteristics'], 'trait': bg['trait'],
+        'skills': bg['skills'], 'tools': bg['tools'],
+        'equipment_a': bg['equipment_a'], 'equipment_b': bg['equipment_b'],
         'description': bg['description']
     }
 
 
 def get_background_characteristics(background_name: str) -> List[str]:
-    """Возвращает бонусы к характеристикам от предыстории (КЛЮЧЕВО ДЛЯ 5.5e!)"""
+    """Возвращает бонусы к характеристикам от предыстории"""
     bg = get_background_by_name(background_name)
     return bg['characteristics'] if bg else ["Ловкость", "Ловкость", "Ловкость"]
 
@@ -799,25 +729,8 @@ def get_equipment_choice(background_name: str, choice: str = "A") -> str:
     return bg['equipment_a'] if choice.upper() == "A" else bg['equipment_b']
 
 
-def format_background_for_display(background: str) -> str:
-    """Форматирует информацию о предыстории для отображения"""
-    bg = get_background_by_name(background)
-    if not bg:
-        return f"❌ Предыстория '{background}' не найдена"
-
-    info = f"📜 **{bg['name']}**\n\n"
-    info += f"**Описание:** {bg['description'][:200]}...\n\n"
-    info += f"**Черта:** {bg['trait']}\n"
-    info += f"**Характеристики:** +2 к {bg['characteristics'][0]}, +1 к {bg['characteristics'][1]}\n"
-    info += f"**Навыки:** {', '.join(bg['skills'])}\n"
-    info += f"**Инструменты:** {bg['tools']}\n\n"
-    info += f"**Снаряжение А:** {bg['equipment_a'][:100]}...\n"
-    info += f"**Снаряжение Б:** {bg['equipment_b'][:100]}..."
-    return info
-
-
 # =========================================================
-# 7. РАБОТА С ОРУЖЕЙНЫМИ ПРИЁМАМИ
+# 7. РАБОТА С ОРУЖИЕМ И ПРИЁМАМИ
 # =========================================================
 
 def get_all_weapon_masteries() -> List[Dict[str, Any]]:
@@ -829,18 +742,63 @@ def get_all_weapon_masteries() -> List[Dict[str, Any]]:
             return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
-def get_weapon_mastery_by_name(name: str) -> Optional[Dict[str, Any]]:
-    """Получает информацию о приёме по названию"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, name, trigger_condition, effect, weapons 
-                FROM weapon_masteries WHERE name = %s
-            """, (name,))
-            row = cur.fetchone()
-            if row:
-                return {'id': row[0], 'name': row[1], 'trigger_condition': row[2], 'effect': row[3], 'weapons': row[4]}
-    return None
+def get_weapons_for_class(class_name: str) -> List[Dict[str, Any]]:
+    """Возвращает список оружия, доступного для класса"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
+                class_result = cur.fetchone()
+                if not class_result:
+                    return []
+                class_id = class_result[0]
+
+                cur.execute("""
+                    SELECT w.id, w.name, w.category, w.damage_dice, w.damage_type, w.properties, w.suitable_masteries
+                    FROM weapons w
+                    JOIN class_weapons cw ON w.id = cw.weapon_id
+                    WHERE cw.class_id = %s
+                    ORDER BY w.category, w.name
+                """, (class_id,))
+                columns = ['id', 'name', 'category', 'damage_dice', 'damage_type', 'properties', 'suitable_masteries']
+                return [dict(zip(columns, row)) for row in cur.fetchall()]
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить оружие для класса {class_name}: {e}")
+        return []
+
+
+def get_masteries_for_weapon(weapon_name: str) -> List[str]:
+    """Возвращает список подходящих оружейных приёмов для указанного оружия"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT suitable_masteries FROM weapons WHERE name = %s", (weapon_name,))
+                result = cur.fetchone()
+                if result and result[0]:
+                    if isinstance(result[0], list):
+                        return result[0]
+                    try:
+                        return json.loads(result[0])
+                    except:
+                        return []
+                return []
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить приёмы для оружия {weapon_name}: {e}")
+        return []
+
+
+def check_mastery_compatibility(weapon_name: str, mastery_name: str) -> Tuple[bool, str]:
+    """
+    Проверяет, подходит ли приём к выбранному оружию
+
+    Returns:
+        Tuple[bool, str]: (подходит ли, сообщение)
+    """
+    suitable = get_masteries_for_weapon(weapon_name)
+    if mastery_name in suitable:
+        return True, f"✅ Приём '{mastery_name}' подходит для оружия '{weapon_name}'"
+    else:
+        return False, f"⚠️ ВНИМАНИЕ: Приём '{mastery_name}' не предназначен для оружия '{weapon_name}'. Вы всё равно можете его выбрать, но эффект может быть неоптимальным."
 
 
 # =========================================================
@@ -856,19 +814,33 @@ def get_all_fighting_styles() -> List[Dict[str, Any]]:
             return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
-def get_fighting_style_by_name(name: str) -> Optional[Dict[str, Any]]:
-    """Получает информацию о стиле по названию"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, name, description FROM fighting_styles WHERE name = %s", (name,))
-            row = cur.fetchone()
-            if row:
-                return {'id': row[0], 'name': row[1], 'description': row[2]}
-    return None
+def get_fighting_styles_for_class(class_name: str) -> List[Dict[str, Any]]:
+    """Возвращает боевые стили, доступные для класса (с фильтрацией)"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
+                class_result = cur.fetchone()
+                if not class_result:
+                    return []
+                class_id = class_result[0]
+
+                cur.execute("""
+                    SELECT fs.id, fs.name, fs.description
+                    FROM fighting_styles fs
+                    JOIN class_fighting_styles cfs ON fs.id = cfs.style_id
+                    WHERE cfs.class_id = %s
+                    ORDER BY fs.name
+                """, (class_id,))
+                columns = ['id', 'name', 'description']
+                return [dict(zip(columns, row)) for row in cur.fetchall()]
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить боевые стили для класса {class_name}: {e}")
+        return []
 
 
 # =========================================================
-# 9. РАБОТА С ТАИНСТВЕННЫМИ ВОЗВАНИЯМИ
+# 9. РАБОТА С ВОЗВАНИЯМИ
 # =========================================================
 
 def get_all_invocations(level: int = 1) -> List[Dict[str, Any]]:
@@ -883,23 +855,6 @@ def get_all_invocations(level: int = 1) -> List[Dict[str, Any]]:
             """, (level,))
             columns = ['id', 'name', 'level_required', 'effect', 'requires_pact_boon', 'pact_boon_type']
             return [dict(zip(columns, row)) for row in cur.fetchall()]
-
-
-def get_invocation_by_name(name: str) -> Optional[Dict[str, Any]]:
-    """Получает информацию о возвании по названию"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, name, level_required, effect, requires_pact_boon, pact_boon_type 
-                FROM invocations WHERE name = %s
-            """, (name,))
-            row = cur.fetchone()
-            if row:
-                return {
-                    'id': row[0], 'name': row[1], 'level_required': row[2],
-                    'effect': row[3], 'requires_pact_boon': row[4], 'pact_boon_type': row[5]
-                }
-    return None
 
 
 # =========================================================
@@ -937,14 +892,40 @@ def get_spells_for_class(class_name: str, level: int = 1, is_cantrip: bool = Non
             return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
-def get_cantrips_for_class(class_name: str) -> List[Dict[str, Any]]:
-    """Возвращает заговоры для указанного класса"""
-    return get_spells_for_class(class_name, is_cantrip=True)
+def get_recommended_spells(class_name: str) -> Dict[str, List[Dict[str, Any]]]:
+    """Возвращает рекомендованные заклинания для класса"""
+    result = {"cantrips": [], "level1": []}
 
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
+                class_result = cur.fetchone()
+                if not class_result:
+                    return result
+                class_id = class_result[0]
 
-def get_level1_spells_for_class(class_name: str) -> List[Dict[str, Any]]:
-    """Возвращает заклинания 1 уровня для указанного класса"""
-    return get_spells_for_class(class_name, level=1, is_cantrip=False)
+                cur.execute("""
+                    SELECT s.id, s.name, s.level, s.is_cantrip, s.description
+                    FROM spells s
+                    JOIN recommended_spells rs ON s.id = rs.spell_id
+                    WHERE rs.class_id = %s
+                    ORDER BY rs.priority, s.name
+                """, (class_id,))
+
+                spells = cur.fetchall()
+                for spell in spells:
+                    if spell[3]:  # is_cantrip
+                        result["cantrips"].append({'id': spell[0], 'name': spell[1], 'level': spell[2],
+                                                   'is_cantrip': spell[3], 'description': spell[4]})
+                    else:
+                        result["level1"].append({'id': spell[0], 'name': spell[1], 'level': spell[2],
+                                                 'is_cantrip': spell[3], 'description': spell[4]})
+
+                return result
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить рекомендованные заклинания для {class_name}: {e}")
+        return result
 
 
 # =========================================================
@@ -1025,41 +1006,6 @@ def validate_character(name: str, class_name: str, race: str, background: str, s
 
 
 # =========================================================
-# 12. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (для совместимости)
-# =========================================================
-
-def get_class_features(class_name: str, level: int = 1) -> List[str]:
-    """Возвращает особенности класса на уровне"""
-    class_data = get_class_by_name(class_name)
-    if not class_data:
-        return []
-
-    # Базовые особенности для 1 уровня
-    features = []
-    if class_data['is_spellcaster']:
-        features.append("Заклинания")
-
-    # Специфические для класса
-    class_specific = {
-        "Бард": ["Вдохновение барда"],
-        "Варвар": ["Ярость", "Бездоспешная защита"],
-        "Воин": ["Второе дыхание", "Боевой стиль"],
-        "Волшебник": ["Книга заклинаний", "Восстановление магии"],
-        "Друид": ["Друидийский язык"],
-        "Жрец": ["Божественное вдохновение"],
-        "Колдун": ["Потусторонний покровитель", "Магия договора"],
-        "Монах": ["Боевые искусства", "Бездоспешная защита"],
-        "Паладин": ["Божественное чутьё", "Наложение рук"],
-        "Плут": ["Скрытая атака", "Взломщик", "Воровской жаргон"],
-        "Следопыт": ["Избранный враг", "Следопыт"],
-        "Чародей": ["Магия крови"],
-        "Артефактор": ["Магия артефактов", "Владение инструментами"]
-    }
-
-    return features + class_specific.get(class_name, [])
-
-
-# =========================================================
 # ТЕСТИРОВАНИЕ
 # =========================================================
 
@@ -1070,49 +1016,50 @@ if __name__ == "__main__":
 
     # 1. Тест генерации характеристик
     print("\n1. ТЕСТ ГЕНЕРАЦИИ ХАРАКТЕРИСТИК:")
-    print("\n   Случайный метод (4d6):")
     for i in range(3):
         stats = generate_random_stats()
-        print(f"     Попытка {i + 1}: STR={stats['STR']}, DEX={stats['DEX']}, CON={stats['CON']}, "
-              f"INT={stats['INT']}, WIS={stats['WIS']}, CHA={stats['CHA']} "
-              f"(сумма: {sum(stats.values())})")
-
-    print("\n   Стандартный набор:")
-    stats = get_standard_stats()
-    print(f"     STR=15, DEX=14, CON=13, INT=12, WIS=10, CHA=8 (сумма: {sum(stats.values())})")
+        print(f"   Попытка {i + 1}: STR={stats['STR']}, DEX={stats['DEX']}, CON={stats['CON']}, "
+              f"INT={stats['INT']}, WIS={stats['WIS']}, CHA={stats['CHA']}")
 
     # 2. Тест бонусов от предыстории
-    print("\n2. ТЕСТ БОНУСОВ ОТ ПРЕДЫСТОРИИ (5.5e):")
+    print("\n2. ТЕСТ БОНУСОВ ОТ ПРЕДЫСТОРИИ:")
     backgrounds = get_background_list()
     for bg in backgrounds[:3]:
         stats = get_initial_stats_by_method("standard", bg)
         chars = get_background_characteristics(bg)
-        print(f"   {bg}: +2 {chars[0]}, +1 {chars[1]} → STR={stats['STR']}, DEX={stats['DEX']}, "
-              f"CON={stats['CON']}, INT={stats['INT']}, WIS={stats['WIS']}, CHA={stats['CHA']}")
+        print(f"   {bg}: +2 {chars[0]}, +1 {chars[1]} → STR={stats['STR']}, DEX={stats['DEX']}")
 
     # 3. Тест рас
     print("\n3. ТЕСТ РАС:")
-    races = get_race_list()
-    print(f"   Всего рас: {len(races)}")
-    for race in races[:5]:
+    for race in get_race_list()[:5]:
         desc = get_race_description(race)
         print(f"   • {race}: {desc[:60]}...")
 
     # 4. Тест классов
     print("\n4. ТЕСТ КЛАССОВ:")
-    classes = get_class_list()
-    print(f"   Всего классов: {len(classes)}")
-    for cls in classes[:5]:
+    for cls in get_class_list()[:5]:
         desc = get_class_description(cls)
         print(f"   • {cls}: {desc[:60]}...")
 
-    # 5. Тест предысторий
-    print("\n5. ТЕСТ ПРЕДЫСТОРИЙ:")
-    backgrounds = get_background_list()
-    print(f"   Всего предысторий: {len(backgrounds)}")
-    for bg in backgrounds[:5]:
-        chars = get_background_characteristics(bg)
-        print(f"   • {bg}: бонусы +2 {chars[0]}, +1 {chars[1]}")
+    # 5. Тест оружия для воина
+    print("\n5. ТЕСТ ОРУЖИЯ ДЛЯ ВОИНА:")
+    weapons = get_weapons_for_class("Воин")
+    print(f"   Доступно оружия: {len(weapons)}")
+    for w in weapons[:5]:
+        masteries = get_masteries_for_weapon(w['name'])
+        print(f"   • {w['name']} ({w['damage_dice']}) → подходит: {', '.join(masteries)}")
+
+    # 6. Тест боевых стилей для паладина
+    print("\n6. ТЕСТ БОЕВЫХ СТИЛЕЙ ДЛЯ ПАЛАДИНА:")
+    styles = get_fighting_styles_for_class("Паладин")
+    for s in styles:
+        print(f"   • {s['name']}")
+
+    # 7. Тест заклинаний
+    print("\n7. ТЕСТ РЕКОМЕНДОВАННЫХ ЗАКЛИНАНИЙ:")
+    rec = get_recommended_spells("Волшебник")
+    print(f"   Заговоры: {', '.join([s['name'] for s in rec['cantrips']])}")
+    print(f"   Заклинания 1 ур.: {', '.join([s['name'] for s in rec['level1']])}")
 
     print("\n" + "=" * 60)
     print("✅ МОДУЛЬ DND_LOGIC.PY ГОТОВ К РАБОТЕ!")

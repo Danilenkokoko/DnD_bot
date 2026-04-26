@@ -109,7 +109,7 @@ async def help_command(m: Message):
         "**Другие возможности:**\n"
         "• 📋 Мои персонажи - посмотреть список всех персонажей\n"
         "• 🗑 Удалить персонажа - удалить ненужного персонажа\n\n"
-        "Есть идеи или нашли ошибку? Пишите @danilenkokoko007_official"
+        "Есть идеи или нашли ошибку? Пишите @danilenkokoko007_official\n"
     )
     await m.answer(help_text, parse_mode=ParseMode.MARKDOWN)
 

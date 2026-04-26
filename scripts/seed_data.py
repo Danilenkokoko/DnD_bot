@@ -4,7 +4,8 @@
 seed_data.py - Наполнение базы данных D&D 5.5e (2024) данными
 Запуск: python seed_data.py
 Скрипт не зависит от внешних файлов — все данные встроены в код.
-Включает: расы, классы, предыстории, заклинания, оружие, боевые стили, возвания.
+Включает: расы, классы, предыстории, заклинания, оружие, броню,
+снаряжение классов, оружейные приёмы.
 """
 
 import psycopg2
@@ -44,7 +45,7 @@ def clear_tables(conn):
         "class_fighting_styles", "class_weapons", "recommended_spells",
         "class_spells", "spells", "subclasses", "classes",
         "subraces", "races", "backgrounds", "weapon_masteries",
-        "fighting_styles", "weapons", "invocations"
+        "fighting_styles", "weapons", "invocations", "armor", "class_equipment"
     ]
 
     with conn.cursor() as cur:
@@ -468,7 +469,7 @@ def migrate_backgrounds(conn):
 
 
 # =========================================================
-# 4. ДАННЫЕ ОРУЖЕЙНЫХ ПРИЁМОВ
+# 4. ДАННЫЕ ОРУЖЕЙНЫХ ПРИЁМОВ (БАЗОВЫЕ)
 # =========================================================
 
 WEAPON_MASTERIES = [
@@ -492,9 +493,9 @@ WEAPON_MASTERIES = [
 
 
 def migrate_weapon_masteries(conn):
-    """Перенос оружейных приёмов"""
+    """Перенос базовых оружейных приёмов"""
     logger.info("\n" + "=" * 50)
-    logger.info("4. ПЕРЕНОС ОРУЖЕЙНЫХ ПРИЁМОВ")
+    logger.info("4. ПЕРЕНОС ОРУЖЕЙНЫХ ПРИЁМОВ (БАЗОВЫЕ)")
     logger.info("=" * 50)
 
     with conn.cursor() as cur:
@@ -533,7 +534,6 @@ FIGHTING_STYLES = [
     {"name": "Стрельба", "description": "Вы получаете +2 к броскам атаки дальнобойным оружием."},
 ]
 
-# Связь классов с боевыми стилями
 CLASS_FIGHTING_STYLES = {
     "Воин": ["Дуэлянт", "Защита", "Оборона", "Перехват", "Сражение без оружия",
              "Сражение большим оружием", "Сражение вслепую", "Сражение двумя оружиями",
@@ -554,7 +554,6 @@ def migrate_fighting_styles(conn, class_id_map):
     style_id_map = {}
 
     with conn.cursor() as cur:
-        # Вставляем стили
         for style in FIGHTING_STYLES:
             cur.execute("""
                 INSERT INTO fighting_styles (name, description)
@@ -567,7 +566,6 @@ def migrate_fighting_styles(conn, class_id_map):
                 style_id_map[style["name"]] = result[0]
                 logger.info(f"  ✅ Стиль '{style['name']}'")
 
-        # Связываем стили с классами
         for class_name, styles in CLASS_FIGHTING_STYLES.items():
             if class_name in class_id_map:
                 for style_name in styles:
@@ -698,6 +696,16 @@ WEAPONS_DATA = [
      "properties": ["легкое", "метательное"], "suitable_masteries": ["Выпад"]},
     {"name": "Метательный топор", "category": "simple", "damage_dice": "1d6", "damage_type": "slashing",
      "properties": ["легкое", "метательное"], "suitable_masteries": ["Подавление"]},
+    {"name": "Скимитар", "category": "martial", "damage_dice": "1d6", "damage_type": "slashing",
+     "properties": ["изящное"], "suitable_masteries": ["Выпад"]},
+    {"name": "Короткий меч", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
+     "properties": ["изящное", "легкое"], "suitable_masteries": ["Подавление"]},
+    {"name": "Цеп", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
+     "properties": [], "suitable_masteries": ["Изнурение"]},
+    {"name": "Боевой посох", "category": "simple", "damage_dice": "1d6", "damage_type": "bludgeoning",
+     "properties": ["универсальное"], "suitable_masteries": ["Толкание"]},
+    {"name": "Секира", "category": "martial", "damage_dice": "1d8", "damage_type": "slashing",
+     "properties": ["универсальное"], "suitable_masteries": ["Опрокидывание"]},
 ]
 
 
@@ -710,7 +718,6 @@ def migrate_weapons(conn, class_id_map):
     weapon_id_map = {}
 
     with conn.cursor() as cur:
-        # Вставляем оружие
         for weapon in WEAPONS_DATA:
             cur.execute("""
                 INSERT INTO weapons (name, category, damage_dice, damage_type, properties, suitable_masteries)
@@ -728,7 +735,6 @@ def migrate_weapons(conn, class_id_map):
                 logger.info(f"  ✅ Оружие '{weapon['name']}'")
 
         # Связываем оружие с классами
-        # Воины получают всё оружие
         if "Воин" in class_id_map:
             for weapon_name, weapon_id in weapon_id_map.items():
                 cur.execute("""
@@ -738,42 +744,40 @@ def migrate_weapons(conn, class_id_map):
                 """, (class_id_map["Воин"], weapon_id))
             logger.info(f"    • Воин → всё оружие ({len(weapon_id_map)} шт.)")
 
-        # Паладины получают воинское оружие
+        martial_weapons = [w["name"] for w in WEAPONS_DATA if w["category"] == "martial"]
+        simple_weapons = [w["name"] for w in WEAPONS_DATA if w["category"] == "simple"]
+
         if "Паладин" in class_id_map:
-            for weapon_name, weapon_id in weapon_id_map.items():
-                weapon_data = next((w for w in WEAPONS_DATA if w["name"] == weapon_name), {})
-                if weapon_data.get("category") == "martial":
+            for w_name in martial_weapons + simple_weapons:
+                if w_name in weapon_id_map:
                     cur.execute("""
                         INSERT INTO class_weapons (class_id, weapon_id)
                         VALUES (%s, %s)
                         ON CONFLICT (class_id, weapon_id) DO NOTHING
-                    """, (class_id_map["Паладин"], weapon_id))
-            logger.info(f"    • Паладин → воинское оружие")
+                    """, (class_id_map["Паладин"], weapon_id_map[w_name]))
+            logger.info(f"    • Паладин → всё оружие")
 
-        # Следопыты получают воинское оружие (кроме тяжёлого?)
         if "Следопыт" in class_id_map:
-            for weapon_name, weapon_id in weapon_id_map.items():
-                weapon_data = next((w for w in WEAPONS_DATA if w["name"] == weapon_name), {})
-                if weapon_data.get("category") == "martial" and "тяжёлое" not in weapon_data.get("properties", []):
+            light_weapons = ["Короткий меч", "Кинжал", "Лёгкий молот", "Метательный топор", "Короткий лук",
+                             "Длинный лук"]
+            for w_name in light_weapons + simple_weapons:
+                if w_name in weapon_id_map:
                     cur.execute("""
                         INSERT INTO class_weapons (class_id, weapon_id)
                         VALUES (%s, %s)
                         ON CONFLICT (class_id, weapon_id) DO NOTHING
-                    """, (class_id_map["Следопыт"], weapon_id))
-            logger.info(f"    • Следопыт → воинское оружие (без тяжёлого)")
+                    """, (class_id_map["Следопыт"], weapon_id_map[w_name]))
+            logger.info(f"    • Следопыт → лёгкое и простое оружие")
 
-        # Варвары и Плуты получают простое + некоторые воинские
         for class_name in ["Варвар", "Плут"]:
             if class_name in class_id_map:
-                for weapon_name, weapon_id in weapon_id_map.items():
-                    weapon_data = next((w for w in WEAPONS_DATA if w["name"] == weapon_name), {})
-                    if weapon_data.get("category") == "simple" or weapon_name in ["Рапира", "Короткий лук",
-                                                                                  "Длинный меч"]:
+                for w_name in simple_weapons + ["Рапира", "Короткий лук", "Длинный меч", "Короткий меч"]:
+                    if w_name in weapon_id_map:
                         cur.execute("""
                             INSERT INTO class_weapons (class_id, weapon_id)
                             VALUES (%s, %s)
                             ON CONFLICT (class_id, weapon_id) DO NOTHING
-                        """, (class_id_map[class_name], weapon_id))
+                        """, (class_id_map[class_name], weapon_id_map[w_name]))
                 logger.info(f"    • {class_name} → простое + избранное воинское")
 
         conn.commit()
@@ -781,7 +785,116 @@ def migrate_weapons(conn, class_id_map):
 
 
 # =========================================================
-# 8. ДАННЫЕ ЗАКЛИНАНИЙ И РЕКОМЕНДАЦИЙ
+# 8. ДАННЫЕ БРОНИ
+# =========================================================
+
+ARMOR_DATA = [
+    {"name": "Проклёпанный кожаный доспех", "ac_base": 12, "ac_modifier": "dex", "has_shield": False},
+    {"name": "Кожаный доспех", "ac_base": 11, "ac_modifier": "dex", "has_shield": False},
+    {"name": "Кольчуга", "ac_base": 16, "ac_modifier": "none", "has_shield": False},
+    {"name": "Кольчужная рубаха", "ac_base": 13, "ac_modifier": "dex_max2", "has_shield": False},
+    {"name": "Щит", "ac_base": 2, "ac_modifier": "shield", "has_shield": True},
+]
+
+
+def migrate_armor(conn):
+    """Перенос брони"""
+    logger.info("\n" + "=" * 50)
+    logger.info("8. ПЕРЕНОС БРОНИ")
+    logger.info("=" * 50)
+
+    with conn.cursor() as cur:
+        for armor in ARMOR_DATA:
+            cur.execute("""
+                INSERT INTO armor (name, ac_base, ac_modifier, has_shield)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (name) DO NOTHING
+            """, (armor["name"], armor["ac_base"], armor["ac_modifier"], armor["has_shield"]))
+            logger.info(f"  ✅ Броня '{armor['name']}'")
+
+        conn.commit()
+    logger.info(f"✅ Перенесено брони: {len(ARMOR_DATA)}")
+
+
+# =========================================================
+# 9. ДАННЫЕ СНАРЯЖЕНИЯ ПО КЛАССАМ
+# =========================================================
+
+CLASS_EQUIPMENT_DATA = [
+    {"class": "Артефактор", "choice": None, "armor": "Проклёпанный кожаный доспех",
+     "weapon": "Кинжал", "secondary": None,
+     "other": "Воровские инструменты, Инструменты ремонтника, Набор исследователя подземелий", "coins": 16},
+    {"class": "Бард", "choice": None, "armor": "Кожаный доспех",
+     "weapon": "Кинжал", "secondary": "Кинжал", "other": "Музыкальный инструмент (любой), Набор артиста", "coins": 19},
+    {"class": "Варвар", "choice": None, "armor": None,
+     "weapon": "Секира", "secondary": None, "other": "4 Одноручных топора, Набор путешественника", "coins": 15},
+    {"class": "Воин", "choice": "A", "armor": "Кольчуга",
+     "weapon": "Двуручный меч", "secondary": "Цеп", "other": "8 Метательных копий, Набор исследователя подземелий",
+     "coins": 4},
+    {"class": "Воин", "choice": "B", "armor": "Проклёпанный кожаный доспех",
+     "weapon": "Скимитар", "secondary": "Короткий меч",
+     "other": "Длинный лук, 20 Стрел, Колчан, Набор исследователя подземелий", "coins": 11},
+    {"class": "Волшебник", "choice": None, "armor": None,
+     "weapon": "Кинжал", "secondary": "Кинжал",
+     "other": "Магическая фокусировка (Боевой посох), Мантия, Книга заклинаний, Набор учёного", "coins": 5},
+    {"class": "Друид", "choice": None, "armor": "Кожаный доспех",
+     "weapon": "Серп", "secondary": None,
+     "other": "Щит, Друидическая фокусировка (Боевой посох), Набор путешественника, Набор травника", "coins": 9},
+    {"class": "Жрец", "choice": None, "armor": "Кольчужная рубаха",
+     "weapon": "Булава", "secondary": None, "other": "Щит, Священный символ, Набор священника", "coins": 7},
+    {"class": "Колдун", "choice": None, "armor": "Кожаный доспех",
+     "weapon": "Серп", "secondary": "Кинжал",
+     "other": "Кинжал, Магическая фокусировка (сфера), Книга (оккультные знания), Набор учёного", "coins": 15},
+    {"class": "Монах", "choice": None, "armor": None,
+     "weapon": "Копьё", "secondary": None,
+     "other": "5 Кинжалов, Ремесленные или Музыкальный инструмент, Набор путешественника", "coins": 11},
+    {"class": "Паладин", "choice": None, "armor": "Кольчуга",
+     "weapon": "Длинный меч", "secondary": None,
+     "other": "Щит, 6 Метательных копий, Священный символ, Набор священника", "coins": 9},
+    {"class": "Плут", "choice": None, "armor": "Кожаный доспех",
+     "weapon": "Кинжал", "secondary": "Короткий меч",
+     "other": "Кинжал, Короткий лук, 20 Стрел, Колчан, Воровские инструменты, Набор взломщика", "coins": 8},
+    {"class": "Следопыт", "choice": None, "armor": "Проклёпанный кожаный доспех",
+     "weapon": "Скимитар", "secondary": "Короткий меч",
+     "other": "Длинный лук, 20 Стрел, Колчан, Друидическая фокусировка (веточка омелы), Набор путешественника",
+     "coins": 7},
+    {"class": "Чародей", "choice": None, "armor": None,
+     "weapon": "Копьё", "secondary": "Кинжал",
+     "other": "Кинжал, Магическая фокусировка (кристалл), Набор исследователя подземелий", "coins": 28},
+]
+
+
+def migrate_class_equipment(conn, class_id_map):
+    """Перенос снаряжения по классам"""
+    logger.info("\n" + "=" * 50)
+    logger.info("9. ПЕРЕНОС СНАРЯЖЕНИЯ ПО КЛАССАМ")
+    logger.info("=" * 50)
+
+    with conn.cursor() as cur:
+        for eq in CLASS_EQUIPMENT_DATA:
+            if eq["class"] in class_id_map:
+                cur.execute("""
+                    INSERT INTO class_equipment (class_id, choice, armor, weapon, secondary_weapon, other_items, coins)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (class_id, choice) DO NOTHING
+                """, (
+                    class_id_map[eq["class"]],
+                    eq["choice"],
+                    eq["armor"],
+                    eq["weapon"],
+                    eq["secondary"],
+                    eq["other"],
+                    eq["coins"]
+                ))
+                logger.info(
+                    f"  ✅ Снаряжение для '{eq['class']}' (вариант {eq['choice'] if eq['choice'] else 'стандарт'})")
+
+        conn.commit()
+    logger.info(f"✅ Перенесено снаряжения: {len(CLASS_EQUIPMENT_DATA)}")
+
+
+# =========================================================
+# 10. ДАННЫЕ ЗАКЛИНАНИЙ И РЕКОМЕНДАЦИЙ
 # =========================================================
 
 SPELLS_DATA = [
@@ -824,7 +937,6 @@ SPELLS_DATA = [
      "description": "Получаете временные хиты и ледяную защиту."},
 ]
 
-# Рекомендованные заклинания по классам
 RECOMMENDED_SPELLS = {
     "Волшебник": {"cantrips": ["Волшебная рука", "Вспышка света", "Починка"],
                   "level1": ["Щит", "Хроматическая сфера", "Сон", "Обнаружение магии"]},
@@ -846,7 +958,6 @@ RECOMMENDED_SPELLS = {
                    "level1": ["Щит", "Лечение ран", "Обнаружение магии"]},
 }
 
-# Связь классов с заклинаниями (кто какие заклинания может использовать)
 CLASS_SPELLS = {
     "Волшебник": ["Волшебная рука", "Вспышка света", "Починка", "Сообщение", "Удар грома",
                   "Лечение ран", "Громовая волна", "Щит", "Хроматическая сфера", "Сон", "Обнаружение магии"],
@@ -870,13 +981,12 @@ CLASS_SPELLS = {
 def migrate_spells(conn, class_id_map):
     """Перенос заклинаний, связей с классами и рекомендаций"""
     logger.info("\n" + "=" * 50)
-    logger.info("8. ПЕРЕНОС ЗАКЛИНАНИЙ")
+    logger.info("10. ПЕРЕНОС ЗАКЛИНАНИЙ")
     logger.info("=" * 50)
 
     spell_id_map = {}
 
     with conn.cursor() as cur:
-        # Вставляем заклинания
         for spell in SPELLS_DATA:
             cur.execute("""
                 INSERT INTO spells (name, level, is_cantrip, description)
@@ -890,7 +1000,6 @@ def migrate_spells(conn, class_id_map):
                 spell_id_map[spell["name"]] = result[0]
                 logger.info(f"  ✅ Заклинание '{spell['name']}'")
 
-        # Связываем заклинания с классами
         for class_name, spell_names in CLASS_SPELLS.items():
             if class_name in class_id_map:
                 for spell_name in spell_names:
@@ -902,7 +1011,6 @@ def migrate_spells(conn, class_id_map):
                         """, (class_id_map[class_name], spell_id_map[spell_name], True))
                 logger.info(f"    • {class_name} → {len(spell_names)} заклинаний")
 
-        # Добавляем рекомендованные заклинания
         for class_name, spells in RECOMMENDED_SPELLS.items():
             if class_name in class_id_map:
                 priority = 1
@@ -968,6 +1076,8 @@ def main():
         migrate_fighting_styles(conn, class_id_map)
         migrate_invocations(conn)
         migrate_weapons(conn, class_id_map)
+        migrate_armor(conn)
+        migrate_class_equipment(conn, class_id_map)
         migrate_spells(conn, class_id_map)
 
         print("\n" + "=" * 60)
@@ -979,7 +1089,8 @@ def main():
                 ("races", "Рас"), ("subraces", "Подрас"), ("classes", "Классов"),
                 ("backgrounds", "Предысторий"), ("spells", "Заклинаний"),
                 ("weapon_masteries", "Оружейных приёмов"), ("fighting_styles", "Боевых стилей"),
-                ("weapons", "Оружия"), ("invocations", "Возваний")
+                ("weapons", "Оружия"), ("invocations", "Возваний"),
+                ("armor", "Брони"), ("class_equipment", "Снаряжения классов")
             ]
             print("\n📊 СТАТИСТИКА:")
             for table, name in stats:

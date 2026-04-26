@@ -264,37 +264,6 @@ def create_equipment_choice_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-async def go_to_equipment_choice(m: Message, state: FSMContext, race: str, call: Optional[CallbackQuery] = None):
-    """Переход к выбору снаряжения (только если у класса есть выбор)"""
-    data = await state.get_data()
-    class_name = data.get("class_name")
-
-    # Получаем снаряжение для класса
-    equipment_list = get_class_equipment(class_name)
-
-    if not equipment_list:
-        # Нет снаряжения → сразу к характеристикам
-        await auto_calculate_stats(m, state)
-        return
-
-    # Если есть выбор (несколько вариантов) — предлагаем выбрать
-    if len(equipment_list) > 1:
-        await state.set_state(CreateCharacter.equipment_choice_select)
-        await m.answer(
-            f"Шаг 4/12: Выберите вариант снаряжения для {class_name}\n\n"
-            f"У этого класса есть два варианта стартового снаряжения.\n\n"
-            f"⚔️ Вариант А: {equipment_list[0].get('weapon', 'нет')}, {equipment_list[0].get('armor', 'нет брони')}\n"
-            f"🏹 Вариант Б: {equipment_list[1].get('weapon', 'нет')}, {equipment_list[1].get('armor', 'нет брони')}\n\n"
-            f"Выберите подходящий вариант:",
-            parse_mode=None,
-            reply_markup=create_equipment_choice_keyboard()
-        )
-    else:
-        # Единственный вариант — применяем автоматически
-        eq = equipment_list[0]
-        await apply_equipment_and_masteries(m, state, eq, class_name)
-
-
 def create_spells_method_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎯 Рекомендованный набор (для новичков)", callback_data="spells_recommended")],
@@ -756,23 +725,6 @@ async def skip_subrace(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
-@dp.callback_query(lambda c: c.data == "subrace_skip")
-async def skip_subrace(call: CallbackQuery, state: FSMContext):
-    await state.update_data(subrace=None)
-
-    data = await state.get_data()
-    race = data.get("race")
-
-    await call.message.delete()
-    await call.message.answer(
-        f"🧝 Раса: {race}\n\nПереходим к выбору снаряжения...",
-        parse_mode=None
-    )
-
-    await go_to_equipment_choice(call.message, state, race, call)
-    await call.answer()
-
-
 @dp.callback_query(lambda c: c.data == "back_to_races")
 async def back_to_races(call: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.race_select)
@@ -786,6 +738,37 @@ async def back_to_races(call: CallbackQuery, state: FSMContext):
 
 
 # ---------------- ШАГ 4: СНАРЯЖЕНИЕ ОТ КЛАССА ----------------
+async def go_to_equipment_choice(m: Message, state: FSMContext, race: str, call: Optional[CallbackQuery] = None):
+    """Переход к выбору снаряжения (только если у класса есть выбор)"""
+    data = await state.get_data()
+    class_name = data.get("class_name")
+
+    # Получаем снаряжение для класса
+    equipment_list = get_class_equipment(class_name)
+
+    if not equipment_list:
+        # Нет снаряжения → сразу к характеристикам
+        await auto_calculate_stats(m, state)
+        return
+
+    # Если есть выбор (несколько вариантов) — предлагаем выбрать
+    if len(equipment_list) > 1:
+        await state.set_state(CreateCharacter.equipment_choice_select)
+        await m.answer(
+            f"Шаг 4/12: Выберите вариант снаряжения для {class_name}\n\n"
+            f"У этого класса есть два варианта стартового снаряжения.\n\n"
+            f"⚔️ Вариант А: {equipment_list[0].get('weapon', 'нет')}, {equipment_list[0].get('armor', 'нет брони')}\n"
+            f"🏹 Вариант Б: {equipment_list[1].get('weapon', 'нет')}, {equipment_list[1].get('armor', 'нет брони')}\n\n"
+            f"Выберите подходящий вариант:",
+            parse_mode=None,
+            reply_markup=create_equipment_choice_keyboard()
+        )
+    else:
+        # Единственный вариант — применяем автоматически
+        eq = equipment_list[0]
+        await apply_equipment_and_masteries(m, state, eq, class_name)
+
+
 @dp.callback_query(lambda c: c.data.startswith("equipment_"))
 async def select_equipment_choice(call: CallbackQuery, state: FSMContext):
     choice = call.data.replace("equipment_", "")

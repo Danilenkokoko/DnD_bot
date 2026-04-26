@@ -892,6 +892,16 @@ def get_spells_for_class(class_name: str, level: int = 1, is_cantrip: bool = Non
             return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
+def get_cantrips_for_class(class_name: str) -> List[Dict[str, Any]]:
+    """Возвращает заговоры для указанного класса"""
+    return get_spells_for_class(class_name, is_cantrip=True)
+
+
+def get_level1_spells_for_class(class_name: str) -> List[Dict[str, Any]]:
+    """Возвращает заклинания 1 уровня для указанного класса"""
+    return get_spells_for_class(class_name, level=1, is_cantrip=False)
+
+
 def get_recommended_spells(class_name: str) -> Dict[str, List[Dict[str, Any]]]:
     """Возвращает рекомендованные заклинания для класса"""
     result = {"cantrips": [], "level1": []}
@@ -926,6 +936,55 @@ def get_recommended_spells(class_name: str) -> Dict[str, List[Dict[str, Any]]]:
     except Exception as e:
         logger.warning(f"Не удалось загрузить рекомендованные заклинания для {class_name}: {e}")
         return result
+
+
+# ========== НОВЫЕ ФУНКЦИИ ДЛЯ РУЧНОГО ВЫБОРА ЗАКЛИНАНИЙ ==========
+
+def get_cantrips_for_class_with_details(class_name: str) -> List[Dict[str, Any]]:
+    """
+    Возвращает все доступные заговоры для класса с деталями
+    """
+    return get_spells_for_class(class_name, is_cantrip=True)
+
+
+def get_level1_spells_for_class_with_details(class_name: str) -> List[Dict[str, Any]]:
+    """
+    Возвращает все доступные заклинания 1 уровня для класса с деталями
+    """
+    return get_spells_for_class(class_name, level=1, is_cantrip=False)
+
+
+def get_spell_details(spell_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Возвращает детали заклинания по ID
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, name, level, is_cantrip, school, casting_time, 
+                       range, components, duration, description
+                FROM spells WHERE id = %s
+            """, (spell_id,))
+            row = cur.fetchone()
+            if row:
+                return {
+                    'id': row[0], 'name': row[1], 'level': row[2],
+                    'is_cantrip': row[3], 'school': row[4],
+                    'casting_time': row[5], 'range': row[6],
+                    'components': row[7], 'duration': row[8], 'description': row[9]
+                }
+    return None
+
+
+def get_spell_description(spell_name: str) -> str:
+    """
+    Возвращает описание заклинания по имени
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT description FROM spells WHERE name = %s", (spell_name,))
+            result = cur.fetchone()
+            return result[0] if result else "Описание не найдено"
 
 
 # =========================================================
@@ -1060,6 +1119,13 @@ if __name__ == "__main__":
     rec = get_recommended_spells("Волшебник")
     print(f"   Заговоры: {', '.join([s['name'] for s in rec['cantrips']])}")
     print(f"   Заклинания 1 ур.: {', '.join([s['name'] for s in rec['level1']])}")
+
+    # 8. Тест новых функций для заклинаний
+    print("\n8. ТЕСТ НОВЫХ ФУНКЦИЙ ДЛЯ ЗАКЛИНАНИЙ:")
+    cantrips = get_cantrips_for_class_with_details("Волшебник")
+    print(f"   Доступно заговоров для Волшебника: {len(cantrips)}")
+    if cantrips:
+        print(f"   Пример: {cantrips[0]['name']} — {cantrips[0].get('description', 'Нет описания')[:50]}...")
 
     print("\n" + "=" * 60)
     print("✅ МОДУЛЬ DND_LOGIC.PY ГОТОВ К РАБОТЕ!")

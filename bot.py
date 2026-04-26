@@ -8,6 +8,7 @@ bot.py - D&D Character Creator Bot for D&D 5.5e (2024)
 - выбора оружия и оружейных приёмов
 - фильтрации боевых стилей по классам
 - выбора таинственных возваний для колдуна
+- ручного выбора заклинаний (заговоры и 1 уровень)
 """
 
 import asyncio
@@ -64,6 +65,7 @@ from dnd_logic import (
 
     # Заклинания
     get_recommended_spells, get_spells_for_class,
+    get_cantrips_for_class_with_details, get_level1_spells_for_class_with_details,
 
     # Оружие и приёмы
     get_all_weapon_masteries, get_weapons_for_class, get_masteries_for_weapon,
@@ -257,6 +259,80 @@ def create_spells_method_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📖 Выбрать самому", callback_data="spells_manual")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_name")]
     ])
+
+
+def create_cantrips_keyboard(class_name: str, selected: List[str], max_count: int) -> InlineKeyboardMarkup:
+    """Клавиатура выбора заговоров"""
+    cantrips = get_cantrips_for_class_with_details(class_name)
+    buttons = []
+
+    # Информационная строка
+    buttons.append([InlineKeyboardButton(
+        text=f"📖 Выберите {max_count} заговора(ов) | Выбрано: {len(selected)}/{max_count}",
+        callback_data="cantrips_info"
+    )])
+
+    # Кнопки с заговорами
+    for spell in cantrips:
+        is_selected = spell['name'] in selected
+        emoji = "✅" if is_selected else "🔘"
+        school_emoji = {
+            "Очарование": "🎭", "Некромантия": "💀", "Превращение": "🔄",
+            "Вызов": "🔮", "Воплощение": "⚡", "Иллюзия": "👻",
+            "Прорицание": "👁️", "Abjuration": "🛡️"
+        }.get(spell.get('school', ''), "✨")
+
+        buttons.append([InlineKeyboardButton(
+            text=f"{emoji} {school_emoji} {spell['name']}",
+            callback_data=f"cantrip_{spell['id']}"
+        )])
+        buttons.append([InlineKeyboardButton(
+            text=f"   📖 {spell.get('description', 'Нет описания')[:60]}...",
+            callback_data="spell_info"
+        )])
+
+    # Кнопки управления
+    buttons.append([InlineKeyboardButton(text="✅ Подтвердить выбор", callback_data="cantrips_confirm")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_spells_method")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def create_level1_spells_keyboard(class_name: str, selected: List[str], max_count: int) -> InlineKeyboardMarkup:
+    """Клавиатура выбора заклинаний 1 уровня"""
+    spells = get_level1_spells_for_class_with_details(class_name)
+    buttons = []
+
+    # Информационная строка
+    buttons.append([InlineKeyboardButton(
+        text=f"🔮 Выберите {max_count} заклинание(й) 1 ур. | Выбрано: {len(selected)}/{max_count}",
+        callback_data="level1_info"
+    )])
+
+    # Кнопки с заклинаниями
+    for spell in spells:
+        is_selected = spell['name'] in selected
+        emoji = "✅" if is_selected else "🔘"
+        school_emoji = {
+            "Очарование": "🎭", "Некромантия": "💀", "Превращение": "🔄",
+            "Вызов": "🔮", "Воплощение": "⚡", "Иллюзия": "👻",
+            "Прорицание": "👁️", "Abjuration": "🛡️"
+        }.get(spell.get('school', ''), "✨")
+
+        buttons.append([InlineKeyboardButton(
+            text=f"{emoji} {school_emoji} {spell['name']}",
+            callback_data=f"level1_{spell['id']}"
+        )])
+        buttons.append([InlineKeyboardButton(
+            text=f"   📖 {spell.get('description', 'Нет описания')[:60]}...",
+            callback_data="spell_info"
+        )])
+
+    # Кнопки управления
+    buttons.append([InlineKeyboardButton(text="✅ Подтвердить выбор", callback_data="level1_confirm")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад к заговорам", callback_data="back_to_cantrips")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def create_weapon_keyboard(class_name: str) -> InlineKeyboardMarkup:
@@ -696,7 +772,7 @@ async def back_to_races(call: CallbackQuery, state: FSMContext):
 
 
 # ---------------- ШАГ 4: ГЕНЕРАЦИЯ ХАРАКТЕРИСТИК ----------------
-@dp.callback_query(lambda c: c.data.startswith("stats_") and c.data != "stats_confirm")  # ← ИСПРАВЛЕНО!
+@dp.callback_query(lambda c: c.data.startswith("stats_") and c.data != "stats_confirm")
 async def select_stats_method(call: CallbackQuery, state: FSMContext):
     logger.info(f"🔍 select_stats_method вызвана с data={call.data}")
     method = call.data.replace("stats_", "")
@@ -787,6 +863,7 @@ async def set_name(m: Message, state: FSMContext):
         return
 
     await state.update_data(name=m.text.strip())
+    logger.info(f"✅ Имя сохранено: {m.text.strip()}")
     await m.answer(f"✅ Имя: {m.text.strip()}")
 
     data = await state.get_data()
@@ -856,14 +933,226 @@ async def use_recommended_spells(call: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "spells_manual")
 async def manual_spells(call: CallbackQuery, state: FSMContext):
-    await call.message.edit_text(
-        "📖 **Ручной выбор заклинаний**\n\n"
-        "(В разработке: полноценный выбор заклинаний будет добавлен позже)\n\n"
-        "Пока что будут выбраны рекомендованные заклинания.",
-        parse_mode=ParseMode.MARKDOWN
+    data = await state.get_data()
+    class_name = data.get("class_name")
+
+    # Определяем, сколько заговоров нужно выбрать
+    cantrips_count_map = {
+        "Волшебник": 3, "Бард": 2, "Жрец": 3, "Друид": 2,
+        "Колдун": 2, "Чародей": 4, "Артефактор": 2
+    }
+    max_cantrips = cantrips_count_map.get(class_name, 2)
+
+    await state.update_data(max_cantrips=max_cantrips)
+    await state.update_data(selected_cantrips=[])
+    await state.update_data(selected_level1_spells=[])
+    await state.set_state(CreateCharacter.spells_cantrips_select)
+
+    text = (
+        f"**Шаг 6/12: Выбор ЗАГОВОРОВ (кантрипов)**\n\n"
+        f"📖 Класс **{class_name}** может выбрать **{max_cantrips}** заговора(ов).\n\n"
+        f"🔘 Нажмите на заклинание, чтобы выбрать/отменить.\n"
+        f"✅ Зелёной галочкой отмечены выбранные.\n\n"
+        f"**Доступные заговоры:**"
     )
-    await asyncio.sleep(2)
-    await use_recommended_spells(call, state)
+
+    await call.message.delete()
+    await call.message.answer(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=create_cantrips_keyboard(class_name, [], max_cantrips)
+    )
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("cantrip_") and c.data != "cantrips_confirm")
+async def select_cantrip(call: CallbackQuery, state: FSMContext):
+    spell_id = int(call.data.replace("cantrip_", ""))
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT name FROM spells WHERE id = %s", (spell_id,))
+            result = cur.fetchone()
+            spell_name = result[0] if result else None
+
+    if not spell_name:
+        await call.answer("❌ Заклинание не найдено")
+        return
+
+    data = await state.get_data()
+    selected = data.get("selected_cantrips", [])
+    max_cantrips = data.get("max_cantrips", 2)
+    class_name = data.get("class_name")
+
+    if spell_name in selected:
+        selected.remove(spell_name)
+        await call.answer(f"❌ Заговор '{spell_name}' удалён")
+    else:
+        if len(selected) >= max_cantrips:
+            await call.answer(f"⚠️ Можно выбрать не более {max_cantrips} заговоров!", show_alert=True)
+            return
+        selected.append(spell_name)
+        await call.answer(f"✅ Заговор '{spell_name}' добавлен")
+
+    await state.update_data(selected_cantrips=selected)
+
+    try:
+        await call.message.edit_reply_markup(
+            reply_markup=create_cantrips_keyboard(class_name, selected, max_cantrips)
+        )
+    except Exception as e:
+        logger.error(f"Ошибка обновления клавиатуры: {e}")
+
+
+@dp.callback_query(lambda c: c.data == "cantrips_confirm")
+async def confirm_cantrips(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    selected = data.get("selected_cantrips", [])
+    max_cantrips = data.get("max_cantrips", 2)
+    class_name = data.get("class_name")
+
+    if len(selected) < max_cantrips:
+        await call.answer(f"⚠️ Нужно выбрать {max_cantrips} заговора(ов)! Выбрано: {len(selected)}", show_alert=True)
+        return
+
+    await state.update_data(selected_spells=selected.copy())
+
+    # Переходим к выбору заклинаний 1 уровня
+    level1_count_map = {
+        "Волшебник": 4, "Бард": 4, "Жрец": 4, "Друид": 4,
+        "Колдун": 2, "Чародей": 2, "Артефактор": 2
+    }
+    max_level1 = level1_count_map.get(class_name, 2)
+    await state.update_data(max_level1=max_level1)
+    await state.update_data(selected_level1_spells=[])
+    await state.set_state(CreateCharacter.spells_level1_select)
+
+    text = (
+        f"**Шаг 6/12: Выбор ЗАКЛИНАНИЙ 1 УРОВНЯ**\n\n"
+        f"🔮 Класс **{class_name}** может выбрать **{max_level1}** заклинание(й).\n\n"
+        f"✅ Вы выбрали заговоры: {', '.join(selected)}\n\n"
+        f"**Доступные заклинания 1 уровня:**"
+    )
+
+    await call.message.delete()
+    await call.message.answer(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=create_level1_spells_keyboard(class_name, [], max_level1)
+    )
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("level1_") and c.data != "level1_confirm")
+async def select_level1_spell(call: CallbackQuery, state: FSMContext):
+    spell_id = int(call.data.replace("level1_", ""))
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT name FROM spells WHERE id = %s", (spell_id,))
+            result = cur.fetchone()
+            spell_name = result[0] if result else None
+
+    if not spell_name:
+        await call.answer("❌ Заклинание не найдено")
+        return
+
+    data = await state.get_data()
+    selected = data.get("selected_level1_spells", [])
+    max_level1 = data.get("max_level1", 2)
+    class_name = data.get("class_name")
+    selected_cantrips = data.get("selected_cantrips", [])
+
+    if spell_name in selected:
+        selected.remove(spell_name)
+        await call.answer(f"❌ Заклинание '{spell_name}' удалено")
+    else:
+        if len(selected) >= max_level1:
+            await call.answer(f"⚠️ Можно выбрать не более {max_level1} заклинаний!", show_alert=True)
+            return
+        selected.append(spell_name)
+        await call.answer(f"✅ Заклинание '{spell_name}' добавлено")
+
+    await state.update_data(selected_level1_spells=selected)
+
+    try:
+        await call.message.edit_reply_markup(
+            reply_markup=create_level1_spells_keyboard(class_name, selected, max_level1)
+        )
+    except Exception as e:
+        logger.error(f"Ошибка обновления клавиатуры: {e}")
+
+
+@dp.callback_query(lambda c: c.data == "level1_confirm")
+async def confirm_level1_spells(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    selected = data.get("selected_level1_spells", [])
+    max_level1 = data.get("max_level1", 2)
+    selected_cantrips = data.get("selected_cantrips", [])
+
+    if len(selected) < max_level1:
+        await call.answer(f"⚠️ Нужно выбрать {max_level1} заклинание(й)! Выбрано: {len(selected)}", show_alert=True)
+        return
+
+    # Сохраняем все выбранные заклинания
+    all_selected = selected_cantrips + selected
+    await state.update_data(selected_spells=all_selected)
+
+    text = (
+        f"**✅ Заклинания выбраны!**\n\n"
+        f"📖 **Заговоры ({len(selected_cantrips)}):** {', '.join(selected_cantrips)}\n\n"
+        f"🔮 **Заклинания 1 уровня ({len(selected)}):** {', '.join(selected)}\n\n"
+        f"Нажмите «Продолжить» для перехода к выбору оружия."
+    )
+
+    await state.set_state(CreateCharacter.weapon_select)
+    await call.message.delete()
+    await call.message.answer(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="▶️ Продолжить")]],
+            resize_keyboard=True
+        )
+    )
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "back_to_spells_method")
+async def back_to_spells_method(call: CallbackQuery, state: FSMContext):
+    await state.set_state(CreateCharacter.spells_method_select)
+    await call.message.delete()
+    await call.message.answer(
+        f"**Шаг 6/12: Выбор ЗАКЛИНАНИЙ**\n\nВыберите, как хотите получить заклинания:",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=create_spells_method_keyboard()
+    )
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "back_to_cantrips")
+async def back_to_cantrips(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    class_name = data.get("class_name")
+    selected_cantrips = data.get("selected_cantrips", [])
+    max_cantrips = data.get("max_cantrips", 2)
+
+    await state.set_state(CreateCharacter.spells_cantrips_select)
+    await call.message.delete()
+    await call.message.answer(
+        f"**Шаг 6/12: Выбор ЗАГОВОРОВ (кантрипов)**\n\n"
+        f"📖 Класс **{class_name}** может выбрать **{max_cantrips}** заговора(ов).\n\n"
+        f"🔘 Нажмите на заклинание, чтобы выбрать/отменить.\n\n"
+        f"**Доступные заговоры:**",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=create_cantrips_keyboard(class_name, selected_cantrips, max_cantrips)
+    )
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "spell_info")
+async def spell_info(call: CallbackQuery):
+    await call.answer("Нажмите на название заклинания, чтобы выбрать/отменить", show_alert=False)
 
 
 @dp.message(F.text == "▶️ Продолжить")
@@ -1086,7 +1375,7 @@ async def go_to_invocations(m: Message, state: FSMContext):
         await go_to_equipment(m, state)
 
 
-@dp.callback_query(lambda c: c.data.startswith("inv_"))
+@dp.callback_query(lambda c: c.data.startswith("inv_") and c.data != "inv_confirm")
 async def select_invocation(call: CallbackQuery, state: FSMContext):
     inv_id = int(call.data.replace("inv_", ""))
 
@@ -1247,6 +1536,15 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
 
         if not stats:
             stats = data.get("stats", {})
+
+        # Проверка имени
+        if not name:
+            logger.error("❌ Имя персонажа не найдено в state!")
+            await m.answer("❌ Ошибка: имя персонажа не сохранено. Попробуйте ещё раз.")
+            await state.clear()
+            return
+
+        logger.info(f"📛 Сохраняем персонажа: {name}")
 
         race_id = subrace_id = class_id = background_id = None
 
@@ -1452,12 +1750,12 @@ async def cancel_creation_callback(call: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "mastery_info")
 async def mastery_info(call: CallbackQuery):
-    await call.answer("Этот приём оптимально подходит для выбранного оружия!", show_alert=False)
+    await call.answer()
 
 
 @dp.callback_query(lambda c: c.data == "masteries_header")
 async def masteries_header(call: CallbackQuery):
-    await call.answer("Звёздочкой отмечены оптимальные приёмы для вашего оружия", show_alert=False)
+    await call.answer()
 
 
 @dp.message(Command("skip"))

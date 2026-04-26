@@ -264,6 +264,37 @@ def create_equipment_choice_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
+async def go_to_equipment_choice(m: Message, state: FSMContext, race: str, call: Optional[CallbackQuery] = None):
+    """Переход к выбору снаряжения (только если у класса есть выбор)"""
+    data = await state.get_data()
+    class_name = data.get("class_name")
+
+    # Получаем снаряжение для класса
+    equipment_list = get_class_equipment(class_name)
+
+    if not equipment_list:
+        # Нет снаряжения → сразу к характеристикам
+        await auto_calculate_stats(m, state)
+        return
+
+    # Если есть выбор (несколько вариантов) — предлагаем выбрать
+    if len(equipment_list) > 1:
+        await state.set_state(CreateCharacter.equipment_choice_select)
+        await m.answer(
+            f"Шаг 4/12: Выберите вариант снаряжения для {class_name}\n\n"
+            f"У этого класса есть два варианта стартового снаряжения.\n\n"
+            f"⚔️ Вариант А: {equipment_list[0].get('weapon', 'нет')}, {equipment_list[0].get('armor', 'нет брони')}\n"
+            f"🏹 Вариант Б: {equipment_list[1].get('weapon', 'нет')}, {equipment_list[1].get('armor', 'нет брони')}\n\n"
+            f"Выберите подходящий вариант:",
+            parse_mode=None,
+            reply_markup=create_equipment_choice_keyboard()
+        )
+    else:
+        # Единственный вариант — применяем автоматически
+        eq = equipment_list[0]
+        await apply_equipment_and_masteries(m, state, eq, class_name)
+
+
 def create_spells_method_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎯 Рекомендованный набор (для новичков)", callback_data="spells_recommended")],
@@ -663,24 +694,22 @@ async def select_race(call: CallbackQuery, state: FSMContext):
         text += f"\nШаг 3a/12: Выберите ПОДРАСУ"
         reply_markup = create_subrace_keyboard(race)
         next_state = CreateCharacter.subrace_select
+        await state.set_state(next_state)
     else:
-        text += f"\n\nШаг 4/12: Выберите снаряжение для класса"
-        reply_markup = create_equipment_choice_keyboard()
-        next_state = CreateCharacter.equipment_choice_select
-
-    await state.set_state(next_state)
+        # Нет подрасы → переходим к снаряжению
+        await go_to_equipment_choice(call.message, state, race, call)
 
     img_path = get_race_image_path(race)
     try:
         await call.message.delete()
         if img_path and os.path.exists(img_path):
             photo = FSInputFile(img_path)
-            await call.message.answer_photo(photo=photo, caption=text, parse_mode=None, reply_markup=reply_markup)
+            await call.message.answer_photo(photo=photo, caption=text, parse_mode=None, reply_markup=reply_markup if has_sub else None)
         else:
-            await call.message.answer(text, parse_mode=None, reply_markup=reply_markup)
+            await call.message.answer(text, parse_mode=None, reply_markup=reply_markup if has_sub else None)
     except Exception as e:
         logger.error(f"Ошибка отправки картинки расы: {e}")
-        await call.message.answer(text, parse_mode=None, reply_markup=reply_markup)
+        await call.message.answer(text, parse_mode=None, reply_markup=reply_markup if has_sub else None)
 
     await call.answer()
 
@@ -697,33 +726,31 @@ async def select_subrace(call: CallbackQuery, state: FSMContext):
 
     text = (
         f"🧝 {race} — {subrace}\n\n📖 {sub_desc}\n\n✨ Особенность: {sub_trait}\n\n"
-        f"Шаг 4/12: Выберите снаряжение для класса"
+        f"Переходим к выбору снаряжения..."
     )
 
-    await state.set_state(CreateCharacter.equipment_choice_select)
     await call.message.delete()
-    await call.message.answer(
-        text,
-        parse_mode=None,
-        reply_markup=create_equipment_choice_keyboard()
-    )
+    await call.message.answer(text, parse_mode=None)
+
+    # Переходим к снаряжению
+    await go_to_equipment_choice(call.message, state, race, call)
     await call.answer()
 
 
 @dp.callback_query(lambda c: c.data == "subrace_skip")
 async def skip_subrace(call: CallbackQuery, state: FSMContext):
     await state.update_data(subrace=None)
-    await state.set_state(CreateCharacter.equipment_choice_select)
 
     data = await state.get_data()
     race = data.get("race")
 
     await call.message.delete()
     await call.message.answer(
-        f"🧝 Раса: {race}\n\nШаг 4/12: Выберите снаряжение для класса",
-        parse_mode=None,
-        reply_markup=create_equipment_choice_keyboard()
+        f"🧝 Раса: {race}\n\nПереходим к выбору снаряжения...",
+        parse_mode=None
     )
+
+    await go_to_equipment_choice(call.message, state, race, call)
     await call.answer()
 
 
@@ -845,7 +872,7 @@ async def auto_calculate_stats(m: Message, state: FSMContext):
         f"Нажмите «Продолжить», чтобы перейти к вводу имени."
     )
 
-    await state.set_state(CreateCharacter.name_input)
+    # Не меняем состояние здесь! Оставляем stats_auto
     await m.answer(text, parse_mode=None, reply_markup=continue_kb())
 
 
@@ -855,8 +882,15 @@ async def continue_after_stats(m: Message, state: FSMContext):
     current_state = await state.get_state()
 
     if current_state == CreateCharacter.stats_auto.state:
-        await auto_calculate_stats(m, state)
+        # Только что рассчитали характеристики → переходим к имени
+        await state.set_state(CreateCharacter.name_input)
+        await m.answer(
+            "Шаг 6/12: Введите ИМЯ персонажа\n\nОтправьте имя вашего персонажа:",
+            parse_mode=None,
+            reply_markup=cancel_kb()
+        )
     elif current_state == CreateCharacter.name_input.state:
+        # Имя уже введено → переходим к заклинаниям
         await go_to_spells(m, state)
     else:
         await m.answer("⏳ Следуйте инструкциям...")

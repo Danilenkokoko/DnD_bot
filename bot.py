@@ -496,7 +496,7 @@ async def create_char_start(m: Message, state: FSMContext):
         "Класс определяет вашу роль в приключении.\n"
         "Нажмите на класс, чтобы увидеть описание:",
         parse_mode=None,
-        reply_markup=ReplyKeyboardRemove()  # Убираем Reply-клавиатуру
+        reply_markup=ReplyKeyboardRemove()
     )
     await m.answer("Выберите класс:", reply_markup=create_class_keyboard())
 

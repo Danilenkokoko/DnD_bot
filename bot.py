@@ -101,54 +101,57 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ========== ДЕБАГ state - ДОБАВИТЬ В НАЧАЛО bot.py ==========
+# ========== ДЕБАГ state - УПРОЩЕННАЯ ВЕРСИЯ ==========
 import traceback
-from aiogram.fsm.storage.memory import MemoryStorage
+
+# Добавьте эту вспомогательную функцию в начало файла
+async def safe_update_background(state: FSMContext, new_background: str):
+    """Безопасное обновление background с проверкой"""
+    if new_background in ["equip_A", "equip_B", "equip_", "A", "B"]:
+        logger.error(f"🚨 ПОПЫТКА УСТАНОВИТЬ НЕКОРРЕКТНЫЙ background: '{new_background}'")
+        return False
+    await safe_update_background(state,new_background)
+    logger.info(f"✅ background установлен: '{new_background}'")
+    return True
+
+# Простой обработчик для логирования всех callback
+@dp.callback_query()
+async def monitor_all_callbacks(call: CallbackQuery, state: FSMContext):
+    """Мониторит все callback запросы"""
+    data = await state.get_data()
+    background = data.get('background', 'НЕТ')
+    logger.info(f"📞 CALLBACK: {call.data}, текущий background='{background}'")
+
+    # Если видим, что background стал equip_A - логируем
+    if background == 'equip_A':
+        logger.error(f"🚨 ОБНАРУЖЕН ИСПОРЧЕННЫЙ BACKGROUND в callback {call.data}!")
+
+    # Не нужно вызывать continue_propagation, просто возвращаем None
+    # Обработка продолжится дальше
 
 
-# Глобальный логгер для отслеживания изменений state
-def debug_state_change(func):
-    """Декоратор для отслеживания всех изменений state"""
-
-    async def wrapper(*args, **kwargs):
-        # Находим state
-        state = None
-        for arg in args:
-            if isinstance(arg, FSMContext):
-                state = arg
-                break
-        if not state and 'state' in kwargs:
-            state = kwargs['state']
-
-        # Логируем ДО
-        if state:
-            try:
-                data = await state.get_data()
-                background = data.get('background', 'НЕТ')
-                logger.info(
-                    f"🔵 ДО {func.__name__}: background='{background}', stack={traceback.format_stack()[-3].strip()}")
-            except:
-                pass
-
-        # Вызываем функцию
-        result = await func(*args, **kwargs)
-
-        # Логируем ПОСЛЕ
-        if state:
-            try:
-                data = await state.get_data()
-                background = data.get('background', 'НЕТ')
-                logger.info(f"🔴 ПОСЛЕ {func.__name__}: background='{background}'")
-            except:
-                pass
-
-        return result
-
-    return wrapper
+# Мониторинг update_data через перехват
+_original_update_data = FSMContext.update_data
 
 
-# Применяем декоратор ко всем callback обработчикам
-original_callback = dp.callback_query
+async def _monitored_update_data(self, **kwargs):
+    """Отслеживает все вызовы update_data"""
+    if 'background' in kwargs:
+        old = await self.get_data()
+        old_bg = old.get('background', 'НЕТ')
+        new_bg = kwargs['background']
+        logger.warning(f"📝 UPDATE_DATA: background '{old_bg}' -> '{new_bg}'")
+        if new_bg == 'equip_A':
+            logger.error(f"🚨 ИСПОРЧЕННЫЙ BACKGROUND УСТАНОВЛЕН!")
+            # Получаем стек вызовов
+            stack = traceback.extract_stack()
+            for frame in stack[-5:-1]:
+                logger.error(f"    {frame.filename}:{frame.lineno} in {frame.name}")
+    return await _original_update_data(self, **kwargs)
+
+
+# Включаем мониторинг (раскомментируйте для отладки)
+FSMContext.update_data = _monitored_update_data
 
 
 # ---------------- FSM STATES ----------------
@@ -777,7 +780,7 @@ async def select_background(call: CallbackQuery, state: FSMContext):
     background = call.data.replace("bg_", "")
 
     # Сохраняем background
-    await state.update_data(background=background)
+    await safe_update_background(state,background)
 
     # Сразу проверяем, что сохранилось
     data = await state.get_data()
@@ -822,6 +825,22 @@ async def select_background(call: CallbackQuery, state: FSMContext):
     await call.message.answer(text, parse_mode=None, reply_markup=create_race_keyboard())
     await call.answer()
 
+
+@dp.callback_query(lambda c: c.data.startswith("bg_"))
+async def select_background(call: CallbackQuery, state: FSMContext):
+    background = call.data.replace("bg_", "")
+    await safe_update_background(state,background)
+
+    # ========== ПРОВЕРКА ==========
+    data = await state.get_data()
+    saved_bg = data.get('background')
+    logger.info(f"📌 ВЫБРАНА ПРЕДЫСТОРИЯ: '{background}', сохранено в state: '{saved_bg}'")
+
+    if saved_bg != background:
+        logger.error(f"🚨 КРИТИЧЕСКАЯ ОШИБКА: background не сохранился!")
+    # =============================
+
+    await state.set_state(CreateCharacter.race_select)
 
 @dp.callback_query(lambda c: c.data == "back_to_background")
 async def back_to_background(call: CallbackQuery, state: FSMContext):
@@ -877,6 +896,21 @@ async def select_race(call: CallbackQuery, state: FSMContext):
 
     await call.answer()
 
+
+@dp.callback_query(lambda c: c.data.startswith("race_"))
+async def select_race(call: CallbackQuery, state: FSMContext):
+    # ========== ПРОВЕРКА ==========
+    data = await state.get_data()
+    background = data.get('background')
+    logger.info(f"📌 ВЫБОР РАСЫ, текущий background='{background}'")
+
+    if background in ["equip_A", "equip_B", None]:
+        logger.error(f"🚨 background испорчен перед выбором расы: '{background}'")
+    # =============================
+
+    race = call.data.replace("race_", "")
+    await state.update_data(race=race)
+    # ... остальной код
 
 @dp.callback_query(lambda c: c.data.startswith("subrace_") and c.data != "subrace_skip")
 async def select_subrace(call: CallbackQuery, state: FSMContext):
@@ -1516,7 +1550,7 @@ async def go_to_background_equipment(m: Message, state: FSMContext):
         if possible_bg:
             # Восстанавливаем
             logger.info(f"✅ ВОССТАНАВЛИВАЕМ background: '{possible_bg}'")
-            await state.update_data(background=possible_bg)
+            await safe_update_background(state,possible_bg)
             background = possible_bg
         else:
             await m.answer(

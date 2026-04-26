@@ -696,7 +696,7 @@ async def back_to_races(call: CallbackQuery, state: FSMContext):
 
 
 # ---------------- ШАГ 4: ГЕНЕРАЦИЯ ХАРАКТЕРИСТИК ----------------
-@dp.callback_query(lambda c: c.data.startswith("stats_"))
+@dp.callback_query(lambda c: c.data.startswith("stats_") and c.data != "stats_confirm")  # ← ИСПРАВЛЕНО!
 async def select_stats_method(call: CallbackQuery, state: FSMContext):
     logger.info(f"🔍 select_stats_method вызвана с data={call.data}")
     method = call.data.replace("stats_", "")

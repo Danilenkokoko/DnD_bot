@@ -1117,6 +1117,16 @@ def migrate_database():
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
+                # Добавляем колонку detailed_masteries в таблицу weapons
+                try:
+                    cur.execute("""
+                        ALTER TABLE weapons 
+                        ADD COLUMN IF NOT EXISTS detailed_masteries JSONB DEFAULT '[]'
+                    """)
+                    logger.info("✅ Добавлена колонка: detailed_masteries в weapons")
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось добавить detailed_masteries: {e}")
+
                 new_columns = [
                     ("selected_armor", "VARCHAR(50)"),
                 ]

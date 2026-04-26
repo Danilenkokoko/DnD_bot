@@ -1025,7 +1025,7 @@ async def go_to_fighting_style(m: Message, state: FSMContext):
         await go_to_invocations(m, state)
 
 
-@dp.callback_query(lambda c: c.data.startswith("style_"))
+@dp.callback_query(lambda c: c.data.startswith("style_") and c.data != "style_confirm")
 async def select_fighting_style(call: CallbackQuery, state: FSMContext):
     style_id = int(call.data.replace("style_", ""))
 

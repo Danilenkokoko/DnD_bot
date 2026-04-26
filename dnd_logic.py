@@ -188,6 +188,22 @@ def get_race_description_text(race: str, subrace: Optional[str] = None) -> str:
     """
     return get_race_description(race, subrace)
 
+def get_class_description(class_name: str) -> str:
+    """Возвращает описание класса"""
+    class_data = get_class_info(class_name)
+    return class_data.get("description", "Нет описания")
+
+def get_class_image_path(class_name: str) -> Optional[str]:
+    """Возвращает путь к картинке класса"""
+    from classes_data import get_class_image_path as _get_path
+    return _get_path(class_name)
+
+
+def get_class_image_exists(class_name: str) -> bool:
+    """Проверяет существование картинки класса"""
+    from classes_data import get_class_image_exists as _get_exists
+    return _get_exists(class_name)
+
 
 def get_race_image(race: str) -> Optional[str]:
     """

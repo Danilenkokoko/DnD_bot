@@ -29,7 +29,8 @@ from dnd_logic import (
     get_race_info, get_class_info, get_background_data,
     get_race_traits_list, get_class_skill_choices,
     calculate_proficiency_bonus, format_background_for_display,
-    get_equipment_choice, get_race_description, get_race_ability_bonuses
+    get_equipment_choice, get_race_description, get_race_ability_bonuses,
+    get_class_description
 )
 from pdf_generator import generate_pdf
 
@@ -361,18 +362,47 @@ async def select_class(call: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.name)
 
     class_info = get_class_info(class_name)
+    class_description = get_class_description(class_name)
 
-    await call.message.delete()
-    await call.message.answer(
-        f"⚔️ **Выбран класс: {class_name}**\n\n"
+    # Получаем путь к картинке класса
+    from classes_data import get_class_image_path, get_class_image_exists
+    image_path = get_class_image_path(class_name)
+    image_exists = image_path and os.path.exists(image_path)
+
+    # Формируем текст с описанием
+    text = (
+        f"⚔️ **{class_name}**\n\n"
+        f"📖 {class_description}\n\n"
+        f"❤️ **Хитовый кубик:** d{class_info.get('hit_die', 6)}\n"
+        f"🎯 **Основные характеристики:** {', '.join(class_info.get('primary_stats', []))}\n"
+        f"🛡️ **Спасброски:** {', '.join(class_info.get('saving_throws', []))}\n\n"
         f"**Шаг 3/7: Введите имя персонажа**\n\n"
-        f"📖 Описание класса: {class_info.get('description', 'Нет описания')}\n"
-        f"❤️ Хитовый кубик: d{class_info.get('hit_die', 6)}\n"
-        f"🎯 Основные характеристики: {', '.join(class_info.get('primary_stats', []))}\n"
-        f"🛡️ Спасброски: {', '.join(class_info.get('saving_throws', []))}\n\n"
-        f"Отправьте имя вашего персонажа:",
-        parse_mode=ParseMode.MARKDOWN
+        f"Отправьте имя вашего персонажа:"
     )
+
+    # Отправляем сообщение с картинкой (если есть)
+    try:
+        await call.message.delete()
+
+        if image_exists:
+            photo = FSInputFile(image_path)
+            await call.message.answer_photo(
+                photo=photo,
+                caption=text,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            await call.message.answer(
+                text,
+                parse_mode=ParseMode.MARKDOWN
+            )
+    except Exception as e:
+        logger.error(f"Ошибка при отправке картинки класса: {e}")
+        await call.message.answer(
+            text,
+            parse_mode=ParseMode.MARKDOWN
+        )
+
     await call.answer()
 
 

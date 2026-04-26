@@ -731,8 +731,9 @@ async def select_stats_method(call: CallbackQuery, state: FSMContext):
     race_text = f"{race} ({subrace})" if subrace else race
 
     text = (
-        f"🧝 **Раса:** {race_text}\n📜 **Предыстория:** {background}\n\n"
-        f"**Шаг 4/12: Характеристики сгенерированы!**\n\n"
+        f"🧝 **Раса:** {race_text}\n"
+        f"📜 **Предыстория:** {background}\n\n"
+        f"**Характеристики сгенерированы!**\n\n"
         f"📊 **Метод:** {'Случайный (4d6)' if method == 'random' else 'Стандартный набор'}\n"
         f"✨ **Бонусы от предыстории уже применены!**\n\n"
         f"**Ваши характеристики:**\n"
@@ -757,6 +758,7 @@ async def select_stats_method(call: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "stats_confirm")
 async def confirm_stats(call: CallbackQuery, state: FSMContext):
+    # ✅ Важно: меняем состояние на name_input!
     await state.set_state(CreateCharacter.name_input)
 
     data = await state.get_data()
@@ -769,11 +771,11 @@ async def confirm_stats(call: CallbackQuery, state: FSMContext):
     race_text = f"{race} ({subrace})" if subrace else race
 
     text = (
-        f"**Шаг 5/12: Введите ИМЯ персонажа**\n\n"
+        f"**Введите ИМЯ персонажа**\n\n"
         f"✅ Характеристики подтверждены!\n\n"
         f"🧝 **Раса:** {race_text}\n"
         f"📜 **Предыстория:** {background}\n"
-        f"📊 **Метод:** {'Случайный (4d6)' if method == 'random' else 'Стандартный набор'}\n\n"
+        f"📊 **Метод генерации:** {'Случайный (4d6)' if method == 'random' else 'Стандартный набор'}\n\n"
         f"**Финальные характеристики:**\n"
         f"💪 STR: {stats.get('STR', 10)} ({modifier(stats.get('STR', 10)):+d})\n"
         f"🤸 DEX: {stats.get('DEX', 10)} ({modifier(stats.get('DEX', 10)):+d})\n"

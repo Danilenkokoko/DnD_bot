@@ -101,6 +101,55 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# ========== ДЕБАГ state - ДОБАВИТЬ В НАЧАЛО bot.py ==========
+import traceback
+from aiogram.fsm.storage.memory import MemoryStorage
+
+
+# Глобальный логгер для отслеживания изменений state
+def debug_state_change(func):
+    """Декоратор для отслеживания всех изменений state"""
+
+    async def wrapper(*args, **kwargs):
+        # Находим state
+        state = None
+        for arg in args:
+            if isinstance(arg, FSMContext):
+                state = arg
+                break
+        if not state and 'state' in kwargs:
+            state = kwargs['state']
+
+        # Логируем ДО
+        if state:
+            try:
+                data = await state.get_data()
+                background = data.get('background', 'НЕТ')
+                logger.info(
+                    f"🔵 ДО {func.__name__}: background='{background}', stack={traceback.format_stack()[-3].strip()}")
+            except:
+                pass
+
+        # Вызываем функцию
+        result = await func(*args, **kwargs)
+
+        # Логируем ПОСЛЕ
+        if state:
+            try:
+                data = await state.get_data()
+                background = data.get('background', 'НЕТ')
+                logger.info(f"🔴 ПОСЛЕ {func.__name__}: background='{background}'")
+            except:
+                pass
+
+        return result
+
+    return wrapper
+
+
+# Применяем декоратор ко всем callback обработчикам
+original_callback = dp.callback_query
+
 
 # ---------------- FSM STATES ----------------
 class CreateCharacter(StatesGroup):
@@ -490,6 +539,42 @@ def create_delete_keyboard(characters: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+# ========== МОНИТОРИНГ ВСЕХ CALLBACK ==========
+@dp.callback_query()
+async def monitor_all_callbacks(call: CallbackQuery, state: FSMContext):
+    """Мониторит все callback запросы"""
+    data = await state.get_data()
+    background = data.get('background', 'НЕТ')
+    logger.info(f"📞 CALLBACK: {call.data}, текущий background='{background}'")
+
+    # Если видим, что background стал equip_A - логируем стек
+    if background == 'equip_A':
+        logger.error(f"🚨 ОБНАРУЖЕН ИСПОРЧЕННЫЙ BACKGROUND в callback {call.data}!")
+        logger.error(f"Стек вызовов: {traceback.format_stack()}")
+
+    # Пропускаем дальше (важно!)
+    await call.continue_propagation()
+
+
+# Добавим также мониторинг update_data
+original_update = FSMContext.update_data
+
+
+async def monitored_update_data(self, **kwargs):
+    """Отслеживает все вызовы update_data"""
+    if 'background' in kwargs:
+        old = await self.get_data()
+        old_bg = old.get('background', 'НЕТ')
+        new_bg = kwargs['background']
+        logger.info(f"📝 UPDATE_DATA: background '{old_bg}' -> '{new_bg}'")
+        if new_bg == 'equip_A':
+            logger.error(f"🚨 ИСПОРЧЕННЫЙ BACKGROUND УСТАНОВЛЕН! Стек: {traceback.format_stack()}")
+    return await original_update(self, **kwargs)
+
+
+# Подменяем метод (только для отладки)
+FSMContext.update_data = monitored_update_data
+
 # ---------------- START ----------------
 @dp.message(Command("start"))
 async def start(m: Message, state: FSMContext):
@@ -690,7 +775,18 @@ async def back_to_classes(call: CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data.startswith("bg_"))
 async def select_background(call: CallbackQuery, state: FSMContext):
     background = call.data.replace("bg_", "")
+
+    # Сохраняем background
     await state.update_data(background=background)
+
+    # Сразу проверяем, что сохранилось
+    data = await state.get_data()
+    saved_bg = data.get('background')
+    logger.info(f"📌 select_background: сохранили background='{background}', прочитано='{saved_bg}'")
+
+    if saved_bg != background:
+        logger.error(f"🚨 background не сохранился! Было '{background}', стало '{saved_bg}'")
+
     await state.set_state(CreateCharacter.race_select)
 
     bg_info = get_background_data_direct(background)
@@ -1393,20 +1489,43 @@ async def back_to_style(call: CallbackQuery, state: FSMContext):
 
 # ---------------- ШАГ 10: СНАРЯЖЕНИЕ ОТ ПРЕДЫСТОРИИ ----------------
 async def go_to_background_equipment(m: Message, state: FSMContext):
-    data = await state.get_data()
-    background = data.get("background")
+    # Сначала выводим ВЕСЬ state
+    full_state = await state.get_data()
+    logger.info("=" * 50)
+    logger.info("ВЕСЬ STATE В go_to_background_equipment:")
+    for key, value in full_state.items():
+        logger.info(f"  {key}: {value}")
+    logger.info("=" * 50)
 
-    logger.info(f"=== go_to_background_equipment: background = '{background}' ===")
+    background = full_state.get("background")
 
-    if not background or background in ["equip_A", "equip_B", "equip_", "A", "B"]:
-        logger.error(f"❌ НЕКОРРЕКТНЫЙ background: '{background}'")
-        await m.answer(
-            "❌ Ошибка: данные о предыстории потеряны.\n\n"
-            "Пожалуйста, начните создание персонажа заново: /start",
-            reply_markup=main_menu()
-        )
-        await state.clear()
-        return
+    # Если background испорчен - пытаемся восстановить
+    if background in ["equip_A", "equip_B", "equip_", "A", "B"]:
+        logger.error(f"❌ ИСПОРЧЕННЫЙ background='{background}'")
+
+        # Пытаемся найти правильный background в state
+        possible_bg = None
+        # Проверяем, может быть предыстория сохранена в другом ключе?
+        for key, value in full_state.items():
+            if key not in ['background', 'background_equipment_choice', 'equipment_choice']:
+                if value in get_background_list():
+                    possible_bg = value
+                    logger.info(f"🔍 Найден возможный background: '{possible_bg}' в ключе '{key}'")
+                    break
+
+        if possible_bg:
+            # Восстанавливаем
+            logger.info(f"✅ ВОССТАНАВЛИВАЕМ background: '{possible_bg}'")
+            await state.update_data(background=possible_bg)
+            background = possible_bg
+        else:
+            await m.answer(
+                "❌ Ошибка: данные о предыстории потеряны.\n\n"
+                "Пожалуйста, начните создание персонажа заново: /start",
+                reply_markup=main_menu()
+            )
+            await state.clear()
+            return
 
     await state.set_state(CreateCharacter.background_equipment_select)
 

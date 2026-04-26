@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 bot.py - D&D Character Creator Bot for D&D 5.5e (2024)
-Полностью исправленная версия с поддержкой картинок и описаний классов/рас
+Полностью исправленная версия с поддержкой картинок, описаний и новой БД
 """
 
 import asyncio
@@ -26,11 +26,12 @@ from aiogram.enums import ParseMode
 from dotenv import load_dotenv
 
 from db import (
-    save_character as db_save_character,
+    save_character,
     get_user_characters,
     get_character_by_id,
     delete_character,
-    get_user_characters_count
+    get_user_characters_count,
+    get_connection
 )
 from dnd_logic import (
     # Основные функции
@@ -402,7 +403,6 @@ async def select_class(call: CallbackQuery, state: FSMContext):
     class_desc = get_class_description(class_name)
     class_info = get_class_info(class_name)
     class_data = get_class_by_name(class_name)
-    class_id = class_data['id'] if class_data else None
 
     # Получаем подклассы
     subclasses = get_subclasses_for_class(class_name)
@@ -418,7 +418,6 @@ async def select_class(call: CallbackQuery, state: FSMContext):
         f"• 🔮 **Заклинания:** {'Да' if class_info.get('spellcasting', False) else 'Нет'}\n"
     )
 
-    # Добавляем информацию о подклассах
     if subclasses:
         text += f"\n**📖 Доступные подклассы (с уровня {subclasses[0]['level_acquired']}):**\n"
         for sub in subclasses[:3]:
@@ -803,6 +802,7 @@ async def set_name(m: Message, state: FSMContext):
         return
 
     await state.update_data(name=m.text.strip())
+    await m.answer(f"✅ Имя: {m.text.strip()}")
 
     # Определяем, нужно ли выбирать заклинания
     data = await state.get_data()
@@ -830,7 +830,15 @@ async def set_name(m: Message, state: FSMContext):
 
 @dp.message(F.text == "▶️ Продолжить")
 async def continue_after_spells(m: Message, state: FSMContext):
-    await go_to_masteries(m, state)
+    current_state = await state.get_state()
+    if current_state == CreateCharacter.spells_cantrips_select.state:
+        await go_to_masteries(m, state)
+    elif current_state == CreateCharacter.masteries_select.state:
+        await go_to_fighting_style(m, state)
+    elif current_state == CreateCharacter.fighting_style_select.state:
+        await go_to_invocations(m, state)
+    elif current_state == CreateCharacter.invocations_select.state:
+        await go_to_equipment(m, state)
 
 
 async def go_to_masteries(m: Message, state: FSMContext):
@@ -867,17 +875,6 @@ async def go_to_masteries(m: Message, state: FSMContext):
         )
     else:
         await go_to_fighting_style(m, state)
-
-
-@dp.message(F.text == "▶️ Продолжить")
-async def continue_after_masteries(m: Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state == CreateCharacter.masteries_select.state:
-        await go_to_fighting_style(m, state)
-    elif current_state == CreateCharacter.fighting_style_select.state:
-        await go_to_invocations(m, state)
-    elif current_state == CreateCharacter.invocations_select.state:
-        await go_to_equipment(m, state)
 
 
 async def go_to_fighting_style(m: Message, state: FSMContext):
@@ -1034,9 +1031,9 @@ async def set_image(m: Message, state: FSMContext):
     await finalize_character(m, state, image_file_id=file_id)
 
 
-# ---------------- ФИНАЛЬНОЕ СОХРАНЕНИЕ ----------------
+# ---------------- ФИНАЛЬНОЕ СОХРАНЕНИЕ (ИСПРАВЛЕННАЯ ВЕРСИЯ) ----------------
 async def finalize_character(m: Message, state: FSMContext, image_file_id: Optional[str] = None):
-    """Финальное сохранение персонажа и генерация PDF"""
+    """Финальное сохранение персонажа и генерация PDF (исправленная версия)"""
     temp_pdf_file = None
 
     try:
@@ -1044,6 +1041,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
 
         data = await state.get_data()
 
+        # Получаем данные из состояния
         class_name = data.get("class_name")
         background = data.get("background")
         race = data.get("race")
@@ -1051,13 +1049,47 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         name = data.get("name")
         backstory = data.get("backstory", "Нет истории")
         equipment_choice = data.get("equipment_choice", "A")
-        stats = data.get("final_stats", get_initial_stats(background))
+        stats = data.get("final_stats", {})
 
-        # Получаем ID классов и предысторий
-        class_data = get_class_by_name(class_name)
-        class_id = class_data['id'] if class_data else None
-        bg_data = get_background_by_name(background)
-        bg_id = bg_data['id'] if bg_data else None
+        # Если final_stats нет, берём stats
+        if not stats:
+            stats = data.get("stats", {})
+
+        # Получаем ID из БД по названиям
+        race_id = None
+        subrace_id = None
+        class_id = None
+        background_id = None
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Получаем ID расы
+                if race:
+                    cur.execute("SELECT id FROM races WHERE name = %s", (race,))
+                    result = cur.fetchone()
+                    race_id = result[0] if result else None
+                    logger.info(f"Race ID for {race}: {race_id}")
+
+                # Получаем ID подрасы
+                if subrace and race_id:
+                    cur.execute("SELECT id FROM subraces WHERE name = %s AND race_id = %s", (subrace, race_id))
+                    result = cur.fetchone()
+                    subrace_id = result[0] if result else None
+                    logger.info(f"Subrace ID for {subrace}: {subrace_id}")
+
+                # Получаем ID класса
+                if class_name:
+                    cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
+                    result = cur.fetchone()
+                    class_id = result[0] if result else None
+                    logger.info(f"Class ID for {class_name}: {class_id}")
+
+                # Получаем ID предыстории
+                if background:
+                    cur.execute("SELECT id FROM backgrounds WHERE name = %s", (background,))
+                    result = cur.fetchone()
+                    background_id = result[0] if result else None
+                    logger.info(f"Background ID for {background}: {background_id}")
 
         # Расчёт HP и AC
         hp = calc_hp(class_id, stats.get("CON", 10), 1) if class_id else 10
@@ -1066,12 +1098,12 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         # Особенности
         race_traits = get_race_traits_list(race, subrace)
         class_features = get_class_features(class_name, 1)
+        bg_info = get_background_data(background)
         bg_skills = get_background_skills(background)
         bg_trait = get_background_trait(background)
         bg_tools = get_background_tools(background)
 
         # Снаряжение
-        bg_info = get_background_data(background)
         equipment_text = bg_info.get(f"equipment_{equipment_choice.lower()}", "")
         equipment_list = [item.strip() for item in equipment_text.split(",") if item.strip()]
 
@@ -1082,29 +1114,33 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
             await state.clear()
             return
 
-        # Сохранение в БД
-        char_id = db_save_character(
+        # Сохранение в БД (новая версия с ID)
+        char_id = save_character(
             user_id=m.from_user.id,
             name=name,
-            race=race,
-            class_name=class_name,
-            background=background,
-            backstory=backstory,
+            race_id=race_id,
+            subrace_id=subrace_id,
+            class_id=class_id,
+            subclass_id=None,  # Пока не реализован выбор подкласса
+            background_id=background_id,
+            level=1,
+            experience=0,
             stats=stats,
             hp=hp,
             ac=ac,
-            race_traits=race_traits,
-            class_features=class_features,
-            skills=bg_skills,
-            tools=[bg_tools] if bg_tools else [],
-            equipment=equipment_list,
-            spells=[],
-            background_trait=bg_trait,
-            background_skills=bg_skills,
-            background_tools=bg_tools,
-            background_equipment_choice=equipment_choice,
-            image_file_id=image_file_id
+            speed=30,
+            selected_skills=bg_skills,
+            selected_masteries=[],
+            selected_fighting_style=None,
+            selected_invocations=[],
+            selected_spells=[],
+            selected_equipment_choice=equipment_choice,
+            backstory=backstory,
+            image_file_id=image_file_id,
+            alignment="Нейтральное"
         )
+
+        logger.info(f"✅ Персонаж сохранён с ID: {char_id}")
 
         # Генерация PDF
         pdf_data = {
@@ -1203,9 +1239,9 @@ async def view_character(call: CallbackQuery):
 
     info = (
         f"📛 **{character['name']}**\n\n"
-        f"🧝 **Раса:** {character['race']}\n"
-        f"⚔️ **Класс:** {character['class_name']}\n"
-        f"📜 **Предыстория:** {character.get('background', 'Нет')}\n"
+        f"🧝 **Раса:** {character.get('race_name', 'Неизвестно')}\n"
+        f"⚔️ **Класс:** {character.get('class_name', 'Неизвестно')}\n"
+        f"📜 **Предыстория:** {character.get('background_name', 'Нет')}\n"
         f"📊 **Уровень:** {character['level']}\n"
         f"❤️ **HP:** {character['hp']} | 🛡️ **AC:** {character['ac']}\n\n"
         f"**Характеристики:**\n"

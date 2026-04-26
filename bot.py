@@ -280,23 +280,14 @@ def create_masteries_keyboard(weapon_name: str, class_name: str, masteries_count
     suitable = get_masteries_for_weapon(weapon_name)
     buttons = []
 
-    buttons.append([InlineKeyboardButton(
-        text=f"🎯 Рекомендованные приёмы для {weapon_name}",
-        callback_data="masteries_header"
-    )])
-
     for m in all_masteries:
         is_suitable = m['name'] in suitable
         emoji = "⭐" if is_suitable else "•"
+        suitable_text = " ✓" if is_suitable else ""
         buttons.append([InlineKeyboardButton(
-            text=f"{emoji} {m['name']}: {m['effect'][:40]}...",
+            text=f"{emoji} {m['name']}: {m['effect'][:40]}{suitable_text}",
             callback_data=f"mastery_{m['id']}"
         )])
-        if is_suitable:
-            buttons.append([InlineKeyboardButton(
-                text=f"   ✓ подходит для {weapon_name}",
-                callback_data="mastery_info"
-            )])
 
     buttons.append([InlineKeyboardButton(text="✅ Готово", callback_data="masteries_confirm")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к оружию", callback_data="back_to_weapon")])

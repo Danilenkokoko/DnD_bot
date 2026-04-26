@@ -515,7 +515,7 @@ async def info_button(m: Message):
         "• Боевые стили с фильтрацией по классам\n"
         "• Таинственные возвания для колдуна\n"
         "• Генерация PDF листа персонажа\n\n"
-        "Есть идеи? Пишите: @danilenkokoko007_official\n\n"
+        "Есть идеи или нашли ошибку? Пишите @danilenkokoko007_official\n\n"
         "Приятной игры! 🎲"
     )
     await m.answer(info_text, parse_mode=None)

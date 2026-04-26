@@ -245,14 +245,8 @@ def apply_intelligent_background_bonuses(stats: Dict[str, int], background_name:
     if not bg:
         return result
 
-    stat_map = {
-        "Сила": "STR", "Ловкость": "DEX", "Телосложение": "CON",
-        "Интеллект": "INT", "Мудрость": "WIS", "Харизма": "CHA"
-    }
-
-    # Характеристики предыстории (3 штуки)
-    bg_stats_ru = bg['characteristics']
-    bg_stats_codes = [stat_map[s] for s in bg_stats_ru]
+    # Характеристики предыстории (уже в кодах STR, DEX и т.д.)
+    bg_stats_codes = bg['characteristics']
 
     # Основные характеристики класса
     class_primary = get_class_primary_stats(class_name)
@@ -270,9 +264,8 @@ def apply_intelligent_background_bonuses(stats: Dict[str, int], background_name:
         result[matches[0]] += 2
         # +1 в самую высокую из оставшихся характеристик предыстории
         if bg_stats_codes_filtered:
-            remaining_bg = bg_stats_codes_filtered
             # Выбираем характеристику с наибольшим значением
-            best = max(remaining_bg, key=lambda s: result.get(s, 0))
+            best = max(bg_stats_codes_filtered, key=lambda s: result.get(s, 0))
             result[best] += 1
     else:
         # Нет совпадений → +1 во все три характеристики предыстории
@@ -299,7 +292,6 @@ def get_initial_stats_intelligent(background_name: str, class_name: str) -> Dict
     """
     base_stats = get_standard_stats()
     return apply_intelligent_background_bonuses(base_stats, background_name, class_name)
-
 
 # =========================================================
 # 3. РАБОТА С РАСАМИ (из БД)

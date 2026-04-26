@@ -4,6 +4,7 @@
 dnd_logic.py - D&D 5.5e (2024) Character Logic Module
 Модуль с игровой логикой для создания персонажей
 Все данные берутся из PostgreSQL
+Поддерживает автоматическое распределение характеристик, снаряжения и оружейных приёмов
 """
 
 import psycopg2
@@ -107,9 +108,47 @@ def calc_hp(class_id: int, constitution: int, level: int = 1) -> int:
         return hit_die + max(1, con_mod) + (level - 1) * (avg_roll + max(1, con_mod))
 
 
+def calc_ac_with_armor(dexterity: int, armor_name: Optional[str], has_shield: bool = False) -> int:
+    """
+    Расчёт Класса Брони (AC) с учётом брони
+
+    Args:
+        dexterity: значение ловкости
+        armor_name: название брони
+        has_shield: есть ли щит
+
+    Returns:
+        int: Класс Брони
+    """
+    dex_mod = modifier(dexterity)
+
+    if not armor_name:
+        return 10 + dex_mod
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT ac_base, ac_modifier FROM armor WHERE name = %s", (armor_name,))
+            result = cur.fetchone()
+            if not result:
+                return 10 + dex_mod
+
+            ac_base, ac_modifier = result
+
+    if ac_modifier == 'dex':
+        ac_base += dex_mod
+    elif ac_modifier == 'dex_max2':
+        ac_base += min(2, dex_mod)
+    # 'none' - ничего не добавляем
+
+    if has_shield:
+        ac_base += 2
+
+    return ac_base
+
+
 def calc_ac(dexterity: int, armor_type: str = "none", has_shield: bool = False) -> int:
     """
-    Расчёт Класса Брони (AC)
+    Расчёт Класса Брони (AC) - упрощённая версия для совместимости
 
     Args:
         dexterity: значение ловкости
@@ -137,40 +176,8 @@ def calc_ac(dexterity: int, armor_type: str = "none", has_shield: bool = False) 
 
 
 # =========================================================
-# 2. ГЕНЕРАЦИЯ ХАРАКТЕРИСТИК
+# 2. ГЕНЕРАЦИЯ ХАРАКТЕРИСТИК (АВТОМАТИЧЕСКАЯ)
 # =========================================================
-
-def roll_4d6_drop_lowest() -> int:
-    """
-    Бросает 4 кубика d6, отбрасывает минимальный, возвращает сумму
-
-    Returns:
-        int: сумма трёх наибольших кубиков
-    """
-    rolls = [random.randint(1, 6) for _ in range(4)]
-    rolls.remove(min(rolls))
-    return sum(rolls)
-
-
-def generate_random_stats() -> Dict[str, int]:
-    """
-    Генерирует случайные характеристики методом 4d6 (отбросить минимальный)
-
-    Returns:
-        Dict[str, int]: словарь со значениями STR, DEX, CON, INT, WIS, CHA
-    """
-    stats_list = [roll_4d6_drop_lowest() for _ in range(6)]
-    stats_list.sort(reverse=True)
-
-    return {
-        "STR": stats_list[0],
-        "DEX": stats_list[1],
-        "CON": stats_list[2],
-        "INT": stats_list[3],
-        "WIS": stats_list[4],
-        "CHA": stats_list[5]
-    }
-
 
 def get_standard_stats() -> Dict[str, int]:
     """
@@ -186,11 +193,51 @@ def get_standard_stats() -> Dict[str, int]:
     }
 
 
-def apply_background_bonuses(stats: Dict[str, int], background_name: str) -> Dict[str, int]:
+def get_class_primary_stats(class_name: str) -> List[str]:
     """
-    Применяет бонусы к характеристикам от предыстории (D&D 5.5e!)
+    Возвращает основные характеристики класса
 
-    В 5.5e бонусы даёт ПРЕДЫСТОРИЯ, а не раса!
+    Args:
+        class_name: название класса
+
+    Returns:
+        List[str]: список основных характеристик (1-2)
+    """
+    class_primary_map = {
+        "Артефактор": ["INT"],
+        "Бард": ["CHA"],
+        "Варвар": ["STR", "CON"],
+        "Воин": ["STR", "DEX"],
+        "Волшебник": ["INT"],
+        "Друид": ["WIS"],
+        "Жрец": ["WIS"],
+        "Колдун": ["CHA"],
+        "Монах": ["DEX", "WIS"],
+        "Паладин": ["STR", "CHA"],
+        "Плут": ["DEX"],
+        "Следопыт": ["DEX", "WIS"],
+        "Чародей": ["CHA"]
+    }
+    return class_primary_map.get(class_name, ["STR"])
+
+
+def apply_intelligent_background_bonuses(stats: Dict[str, int], background_name: str, class_name: str) -> Dict[
+    str, int]:
+    """
+    Умное распределение бонусов характеристик от предыстории с учётом класса
+
+    Принцип:
+    1. Если есть совпадение между характеристиками предыстории и основными класса → +2 в неё
+    2. +1 в следующую по приоритету
+    3. Если совпадений нет → +1 во все три характеристики предыстории
+
+    Args:
+        stats: базовые характеристики (стандартный набор)
+        background_name: название предыстории
+        class_name: название класса
+
+    Returns:
+        Dict[str, int]: изменённые характеристики
     """
     result = stats.copy()
 
@@ -203,34 +250,55 @@ def apply_background_bonuses(stats: Dict[str, int], background_name: str) -> Dic
         "Интеллект": "INT", "Мудрость": "WIS", "Харизма": "CHA"
     }
 
-    characteristics = bg['characteristics']
+    # Характеристики предыстории (3 штуки)
+    bg_stats_ru = bg['characteristics']
+    bg_stats_codes = [stat_map[s] for s in bg_stats_ru]
 
-    stat1 = stat_map.get(characteristics[0], "DEX")
-    result[stat1] += 2
+    # Основные характеристики класса
+    class_primary = get_class_primary_stats(class_name)
 
-    stat2 = stat_map.get(characteristics[1], "DEX")
-    result[stat2] += 1
+    # Находим совпадения
+    matches = [s for s in bg_stats_codes if s in class_primary]
+    bg_stats_codes_filtered = [s for s in bg_stats_codes if s not in matches]
 
+    if len(matches) >= 2:
+        # Полное совпадение (оба бонуса уходят в основные характеристики класса)
+        result[matches[0]] += 2
+        result[matches[1]] += 1
+    elif len(matches) == 1:
+        # Одно совпадение
+        result[matches[0]] += 2
+        # +1 в самую высокую из оставшихся характеристик предыстории
+        if bg_stats_codes_filtered:
+            remaining_bg = bg_stats_codes_filtered
+            # Выбираем характеристику с наибольшим значением
+            best = max(remaining_bg, key=lambda s: result.get(s, 0))
+            result[best] += 1
+    else:
+        # Нет совпадений → +1 во все три характеристики предыстории
+        for stat in bg_stats_codes:
+            result[stat] += 1
+
+    # Ограничиваем максимальное значение 20
     for stat in result:
         result[stat] = min(20, result[stat])
 
     return result
 
 
-def get_initial_stats_by_method(method: str, background_name: str) -> Dict[str, int]:
+def get_initial_stats_intelligent(background_name: str, class_name: str) -> Dict[str, int]:
     """
-    Получает начальные характеристики выбранным методом с учётом предыстории
+    Получает начальные характеристики с учётом предыстории и класса (умное распределение)
 
     Args:
-        method: "random" или "standard"
         background_name: название предыстории
-    """
-    if method == "random":
-        base_stats = generate_random_stats()
-    else:
-        base_stats = get_standard_stats()
+        class_name: название класса
 
-    return apply_background_bonuses(base_stats, background_name)
+    Returns:
+        Dict[str, int]: финальные характеристики
+    """
+    base_stats = get_standard_stats()
+    return apply_intelligent_background_bonuses(base_stats, background_name, class_name)
 
 
 # =========================================================
@@ -730,20 +798,11 @@ def get_equipment_choice(background_name: str, choice: str = "A") -> str:
 
 
 # =========================================================
-# 7. РАБОТА С ОРУЖИЕМ И ПРИЁМАМИ
+# 7. РАБОТА СО СНАРЯЖЕНИЕМ КЛАССОВ И БРОНЁЙ
 # =========================================================
 
-def get_all_weapon_masteries() -> List[Dict[str, Any]]:
-    """Возвращает список всех оружейных приёмов"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, name, trigger_condition, effect, weapons FROM weapon_masteries ORDER BY name")
-            columns = ['id', 'name', 'trigger_condition', 'effect', 'weapons']
-            return [dict(zip(columns, row)) for row in cur.fetchall()]
-
-
-def get_weapons_for_class(class_name: str) -> List[Dict[str, Any]]:
-    """Возвращает список оружия, доступного для класса"""
+def get_class_equipment(class_name: str, choice: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Получает снаряжение для класса"""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -753,26 +812,81 @@ def get_weapons_for_class(class_name: str) -> List[Dict[str, Any]]:
                     return []
                 class_id = class_result[0]
 
-                cur.execute("""
-                    SELECT w.id, w.name, w.category, w.damage_dice, w.damage_type, w.properties, w.suitable_masteries
-                    FROM weapons w
-                    JOIN class_weapons cw ON w.id = cw.weapon_id
-                    WHERE cw.class_id = %s
-                    ORDER BY w.category, w.name
-                """, (class_id,))
-                columns = ['id', 'name', 'category', 'damage_dice', 'damage_type', 'properties', 'suitable_masteries']
+                if choice:
+                    cur.execute("""
+                        SELECT class_id, choice, armor, weapon, secondary_weapon, other_items, coins
+                        FROM class_equipment 
+                        WHERE class_id = %s AND choice = %s
+                    """, (class_id, choice))
+                else:
+                    cur.execute("""
+                        SELECT class_id, choice, armor, weapon, secondary_weapon, other_items, coins
+                        FROM class_equipment 
+                        WHERE class_id = %s
+                        ORDER BY choice
+                    """, (class_id,))
+                columns = ['class_id', 'choice', 'armor', 'weapon', 'secondary_weapon', 'other_items', 'coins']
                 return [dict(zip(columns, row)) for row in cur.fetchall()]
     except Exception as e:
-        logger.warning(f"Не удалось загрузить оружие для класса {class_name}: {e}")
+        logger.warning(f"Не удалось загрузить снаряжение для класса {class_name}: {e}")
         return []
 
 
-def get_masteries_for_weapon(weapon_name: str) -> List[str]:
-    """Возвращает список подходящих оружейных приёмов для указанного оружия"""
+def get_armor_by_name(armor_name: str) -> Optional[Dict[str, Any]]:
+    """Получает броню по названию"""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT suitable_masteries FROM weapons WHERE name = %s", (weapon_name,))
+                cur.execute("SELECT id, name, ac_base, ac_modifier, has_shield FROM armor WHERE name = %s",
+                            (armor_name,))
+                row = cur.fetchone()
+                if row:
+                    return {'id': row[0], 'name': row[1], 'ac_base': row[2], 'ac_modifier': row[3],
+                            'has_shield': row[4]}
+                return None
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить броню {armor_name}: {e}")
+        return None
+
+
+# =========================================================
+# 8. РАБОТА С ОРУЖИЕМ И ПРИЁМАМИ (АВТОМАТИЧЕСКИЕ)
+# =========================================================
+
+def get_weapon_by_name(weapon_name: str) -> Optional[Dict[str, Any]]:
+    """Получает оружие по названию"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, name, category, damage_dice, damage_type, properties, suitable_masteries, detailed_masteries FROM weapons WHERE name = %s",
+                    (weapon_name,))
+                row = cur.fetchone()
+                if row:
+                    return {
+                        'id': row[0], 'name': row[1], 'category': row[2],
+                        'damage_dice': row[3], 'damage_type': row[4],
+                        'properties': row[5] if isinstance(row[5], list) else json.loads(row[5]),
+                        'suitable_masteries': row[6] if isinstance(row[6], list) else json.loads(row[6]),
+                        'detailed_masteries': row[7] if isinstance(row[7], list) else json.loads(row[7])
+                    }
+                return None
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить оружие {weapon_name}: {e}")
+        return None
+
+
+def get_detailed_masteries_for_weapon(weapon_name: str) -> List[Dict[str, Any]]:
+    """
+    Возвращает детальные оружейные приёмы для указанного оружия
+
+    Returns:
+        List[Dict]: список приёмов с полями name, description, optimal
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT detailed_masteries FROM weapons WHERE name = %s", (weapon_name,))
                 result = cur.fetchone()
                 if result and result[0]:
                     if isinstance(result[0], list):
@@ -783,26 +897,69 @@ def get_masteries_for_weapon(weapon_name: str) -> List[str]:
                         return []
                 return []
     except Exception as e:
-        logger.warning(f"Не удалось загрузить приёмы для оружия {weapon_name}: {e}")
+        logger.warning(f"Не удалось загрузить детальные приёмы для оружия {weapon_name}: {e}")
         return []
 
 
-def check_mastery_compatibility(weapon_name: str, mastery_name: str) -> Tuple[bool, str]:
+def auto_assign_masteries(weapon_name: str, class_name: str) -> List[str]:
     """
-    Проверяет, подходит ли приём к выбранному оружию
+    Автоматически выбирает оружейные приёмы для оружия (без участия игрока)
+
+    Принцип:
+    - Воин получает 2 приёма, остальные воинские классы — 1
+    - Если приёмов достаточно — берём отмеченные как optimal
+    - Если optimal нет или их меньше — берём случайные или все доступные
+
+    Args:
+        weapon_name: название оружия
+        class_name: название класса
 
     Returns:
-        Tuple[bool, str]: (подходит ли, сообщение)
+        List[str]: список выбранных приёмов
     """
-    suitable = get_masteries_for_weapon(weapon_name)
-    if mastery_name in suitable:
-        return True, f"✅ Приём '{mastery_name}' подходит для оружия '{weapon_name}'"
+    masteries = get_detailed_masteries_for_weapon(weapon_name)
+
+    if not masteries:
+        return []
+
+    # Определяем количество приёмов
+    martial_classes = ["Воин", "Паладин", "Следопыт", "Варвар", "Плут"]
+    if class_name not in martial_classes:
+        return []
+
+    masteries_count = 2 if class_name == "Воин" else 1
+
+    if len(masteries) <= masteries_count:
+        return [m['name'] for m in masteries]
+
+    # Сначала выбираем оптимальные
+    optimal = [m for m in masteries if m.get('optimal', False)]
+    selected = []
+
+    if len(optimal) >= masteries_count:
+        selected = [m['name'] for m in optimal[:masteries_count]]
     else:
-        return False, f"⚠️ ВНИМАНИЕ: Приём '{mastery_name}' не предназначен для оружия '{weapon_name}'. Вы всё равно можете его выбрать, но эффект может быть неоптимальным."
+        selected = [m['name'] for m in optimal]
+        remaining = [m for m in masteries if m not in optimal]
+        needed = masteries_count - len(selected)
+        if remaining and needed > 0:
+            random.shuffle(remaining)
+            selected += [m['name'] for m in remaining[:needed]]
+
+    return selected
+
+
+def get_all_weapon_masteries() -> List[Dict[str, Any]]:
+    """Возвращает список всех базовых оружейных приёмов"""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, name, trigger_condition, effect, weapons FROM weapon_masteries ORDER BY name")
+            columns = ['id', 'name', 'trigger_condition', 'effect', 'weapons']
+            return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
 # =========================================================
-# 8. РАБОТА С БОЕВЫМИ СТИЛЯМИ
+# 9. РАБОТА С БОЕВЫМИ СТИЛЯМИ
 # =========================================================
 
 def get_all_fighting_styles() -> List[Dict[str, Any]]:
@@ -840,7 +997,7 @@ def get_fighting_styles_for_class(class_name: str) -> List[Dict[str, Any]]:
 
 
 # =========================================================
-# 9. РАБОТА С ВОЗВАНИЯМИ
+# 10. РАБОТА С ВОЗВАНИЯМИ
 # =========================================================
 
 def get_all_invocations(level: int = 1) -> List[Dict[str, Any]]:
@@ -858,7 +1015,7 @@ def get_all_invocations(level: int = 1) -> List[Dict[str, Any]]:
 
 
 # =========================================================
-# 10. РАБОТА С ЗАКЛИНАНИЯМИ
+# 11. РАБОТА С ЗАКЛИНАНИЯМИ
 # =========================================================
 
 def get_spells_for_class(class_name: str, level: int = 1, is_cantrip: bool = None) -> List[Dict[str, Any]]:
@@ -902,6 +1059,16 @@ def get_level1_spells_for_class(class_name: str) -> List[Dict[str, Any]]:
     return get_spells_for_class(class_name, level=1, is_cantrip=False)
 
 
+def get_cantrips_for_class_with_details(class_name: str) -> List[Dict[str, Any]]:
+    """Возвращает все доступные заговоры для класса с деталями"""
+    return get_spells_for_class(class_name, is_cantrip=True)
+
+
+def get_level1_spells_for_class_with_details(class_name: str) -> List[Dict[str, Any]]:
+    """Возвращает все доступные заклинания 1 уровня для класса с деталями"""
+    return get_spells_for_class(class_name, level=1, is_cantrip=False)
+
+
 def get_recommended_spells(class_name: str) -> Dict[str, List[Dict[str, Any]]]:
     """Возвращает рекомендованные заклинания для класса"""
     result = {"cantrips": [], "level1": []}
@@ -938,57 +1105,8 @@ def get_recommended_spells(class_name: str) -> Dict[str, List[Dict[str, Any]]]:
         return result
 
 
-# ========== НОВЫЕ ФУНКЦИИ ДЛЯ РУЧНОГО ВЫБОРА ЗАКЛИНАНИЙ ==========
-
-def get_cantrips_for_class_with_details(class_name: str) -> List[Dict[str, Any]]:
-    """
-    Возвращает все доступные заговоры для класса с деталями
-    """
-    return get_spells_for_class(class_name, is_cantrip=True)
-
-
-def get_level1_spells_for_class_with_details(class_name: str) -> List[Dict[str, Any]]:
-    """
-    Возвращает все доступные заклинания 1 уровня для класса с деталями
-    """
-    return get_spells_for_class(class_name, level=1, is_cantrip=False)
-
-
-def get_spell_details(spell_id: int) -> Optional[Dict[str, Any]]:
-    """
-    Возвращает детали заклинания по ID
-    """
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, name, level, is_cantrip, school, casting_time, 
-                       range, components, duration, description
-                FROM spells WHERE id = %s
-            """, (spell_id,))
-            row = cur.fetchone()
-            if row:
-                return {
-                    'id': row[0], 'name': row[1], 'level': row[2],
-                    'is_cantrip': row[3], 'school': row[4],
-                    'casting_time': row[5], 'range': row[6],
-                    'components': row[7], 'duration': row[8], 'description': row[9]
-                }
-    return None
-
-
-def get_spell_description(spell_name: str) -> str:
-    """
-    Возвращает описание заклинания по имени
-    """
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT description FROM spells WHERE name = %s", (spell_name,))
-            result = cur.fetchone()
-            return result[0] if result else "Описание не найдено"
-
-
 # =========================================================
-# 11. ВАЛИДАЦИЯ
+# 12. ВАЛИДАЦИЯ
 # =========================================================
 
 def validate_name(name: str) -> Tuple[bool, str]:
@@ -1073,59 +1191,52 @@ if __name__ == "__main__":
     print("ТЕСТ D&D LOGIC MODULE (PostgreSQL версия)")
     print("=" * 60)
 
-    # 1. Тест генерации характеристик
-    print("\n1. ТЕСТ ГЕНЕРАЦИИ ХАРАКТЕРИСТИК:")
-    for i in range(3):
-        stats = generate_random_stats()
-        print(f"   Попытка {i + 1}: STR={stats['STR']}, DEX={stats['DEX']}, CON={stats['CON']}, "
+    # 1. Тест умного распределения характеристик
+    print("\n1. ТЕСТ УМНОГО РАСПРЕДЕЛЕНИЯ ХАРАКТЕРИСТИК:")
+    test_cases = [
+        ("Воин", "Солдат"),
+        ("Волшебник", "Мудрец"),
+        ("Следопыт", "Отшельник"),
+        ("Паладин", "Дворянин"),
+    ]
+
+    for class_name, bg_name in test_cases:
+        stats = get_initial_stats_intelligent(bg_name, class_name)
+        class_primary = get_class_primary_stats(class_name)
+        bg_chars = get_background_characteristics(bg_name)
+        print(f"   {class_name} + {bg_name}:")
+        print(f"     Основные класса: {class_primary}")
+        print(f"     Бонусы предыстории: +2 и +1 к {bg_chars[0]}, {bg_chars[1]}")
+        print(f"     Результат: STR={stats['STR']}, DEX={stats['DEX']}, CON={stats['CON']}, "
               f"INT={stats['INT']}, WIS={stats['WIS']}, CHA={stats['CHA']}")
 
-    # 2. Тест бонусов от предыстории
-    print("\n2. ТЕСТ БОНУСОВ ОТ ПРЕДЫСТОРИИ:")
-    backgrounds = get_background_list()
-    for bg in backgrounds[:3]:
-        stats = get_initial_stats_by_method("standard", bg)
-        chars = get_background_characteristics(bg)
-        print(f"   {bg}: +2 {chars[0]}, +1 {chars[1]} → STR={stats['STR']}, DEX={stats['DEX']}")
+    # 2. Тест снаряжения классов
+    print("\n2. ТЕСТ СНАРЯЖЕНИЯ КЛАССОВ:")
+    for class_name in ["Воин", "Волшебник", "Паладин"]:
+        equipment = get_class_equipment(class_name)
+        print(f"   {class_name}:")
+        for eq in equipment:
+            print(
+                f"     Вариант {eq['choice'] if eq['choice'] else 'стандарт'}: оружие {eq['weapon']}, броня {eq['armor']}")
 
-    # 3. Тест рас
-    print("\n3. ТЕСТ РАС:")
+    # 3. Тест автоматических приёмов
+    print("\n3. ТЕСТ АВТОМАТИЧЕСКИХ ПРИЁМОВ:")
+    test_weapons = [("Двуручный меч", "Воин"), ("Длинный меч", "Паладин"), ("Короткий лук", "Следопыт")]
+    for weapon_name, class_name in test_weapons:
+        masteries = auto_assign_masteries(weapon_name, class_name)
+        print(f"   {class_name} с {weapon_name}: {', '.join(masteries) if masteries else 'нет приёмов'}")
+
+    # 4. Тест рас
+    print("\n4. ТЕСТ РАС:")
     for race in get_race_list()[:5]:
         desc = get_race_description(race)
         print(f"   • {race}: {desc[:60]}...")
 
-    # 4. Тест классов
-    print("\n4. ТЕСТ КЛАССОВ:")
+    # 5. Тест классов
+    print("\n5. ТЕСТ КЛАССОВ:")
     for cls in get_class_list()[:5]:
         desc = get_class_description(cls)
         print(f"   • {cls}: {desc[:60]}...")
-
-    # 5. Тест оружия для воина
-    print("\n5. ТЕСТ ОРУЖИЯ ДЛЯ ВОИНА:")
-    weapons = get_weapons_for_class("Воин")
-    print(f"   Доступно оружия: {len(weapons)}")
-    for w in weapons[:5]:
-        masteries = get_masteries_for_weapon(w['name'])
-        print(f"   • {w['name']} ({w['damage_dice']}) → подходит: {', '.join(masteries)}")
-
-    # 6. Тест боевых стилей для паладина
-    print("\n6. ТЕСТ БОЕВЫХ СТИЛЕЙ ДЛЯ ПАЛАДИНА:")
-    styles = get_fighting_styles_for_class("Паладин")
-    for s in styles:
-        print(f"   • {s['name']}")
-
-    # 7. Тест заклинаний
-    print("\n7. ТЕСТ РЕКОМЕНДОВАННЫХ ЗАКЛИНАНИЙ:")
-    rec = get_recommended_spells("Волшебник")
-    print(f"   Заговоры: {', '.join([s['name'] for s in rec['cantrips']])}")
-    print(f"   Заклинания 1 ур.: {', '.join([s['name'] for s in rec['level1']])}")
-
-    # 8. Тест новых функций для заклинаний
-    print("\n8. ТЕСТ НОВЫХ ФУНКЦИЙ ДЛЯ ЗАКЛИНАНИЙ:")
-    cantrips = get_cantrips_for_class_with_details("Волшебник")
-    print(f"   Доступно заговоров для Волшебника: {len(cantrips)}")
-    if cantrips:
-        print(f"   Пример: {cantrips[0]['name']} — {cantrips[0].get('description', 'Нет описания')[:50]}...")
 
     print("\n" + "=" * 60)
     print("✅ МОДУЛЬ DND_LOGIC.PY ГОТОВ К РАБОТЕ!")

@@ -159,7 +159,6 @@ async def info_command(m: Message):
     """Обработчик команды /info"""
     info_text = (
         "ℹ️ **О боте D&D Character Creator**\n\n"
-        "**Версия:** 2.0.0\n\n"
         "**Описание:**\n"
         "Этот бот помогает создавать персонажей для игры в Dungeons & Dragons 5-й редакции.\n\n"
         "**Возможности:**\n"
@@ -169,6 +168,10 @@ async def info_command(m: Message):
         "• Генерация PDF-листа персонажа\n"
         "• Сохранение истории персонажа\n"
         "• Загрузка портрета персонажа\n\n"
+        "**Технологии:**\n"
+        "• Python + aiogram\n"
+        "• PostgreSQL\n"
+        "• WeasyPrint для генерации PDF\n\n"
         "Приятной игры! 🎮"
     )
     await m.answer(info_text, parse_mode=ParseMode.MARKDOWN)
@@ -176,13 +179,13 @@ async def info_command(m: Message):
 
 @dp.message(F.text == "❓ Помощь")
 async def help_button(m: Message):
-    """Кнопка помощи в главном меню"""
+    """Кнопка помощи"""
     await help_command(m)
 
 
 @dp.message(F.text == "ℹ️ О боте")
 async def info_button(m: Message):
-    """Кнопка информации о боте в главном меню"""
+    """Кнопка информации о боте"""
     await info_command(m)
 
 

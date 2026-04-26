@@ -407,7 +407,20 @@ def create_invocations_keyboard(level: int = 1) -> InlineKeyboardMarkup:
 
 
 def create_background_equipment_keyboard(background: str) -> InlineKeyboardMarkup:
-    bg_info = get_background_data_direct(background)  # ← заменили
+    # ВАЖНО: параметр background должен быть строкой с названием предыстории
+    # Например: "Артист", а НЕ "equip_A"
+
+    logger.info(f"Создание клавиатуры для предыстории: {background}")
+
+    # Проверяем, что background - это название предыстории, а не "equip_A"
+    if background in ["equip_A", "equip_B", "equip_"]:
+        logger.error(f"❌ create_background_equipment_keyboard получил неверный background: {background}")
+        # Возвращаем клавиатуру с заглушкой
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Ошибка: выберите класс заново", callback_data="cancel_creation")]
+        ])
+
+    bg_info = get_background_data(background)
 
     if not bg_info:
         equipment_a = "Нет описания"
@@ -1352,13 +1365,24 @@ async def go_to_background_equipment(m: Message, state: FSMContext):
     data = await state.get_data()
     background = data.get("background")
 
+    # ОТЛАДКА
+    logger.info(f"=== ШАГ 10: background = '{background}', тип = {type(background)} ===")
+
+    # Проверяем, что background не испорчен
+    if background in ["equip_A", "equip_B", "equip_"] or background is None:
+        logger.error(f"❌ background испорчен! Значение: {background}")
+        await m.answer("❌ Ошибка: данные предыстории повреждены. Пожалуйста, начните создание персонажа заново.",
+                       reply_markup=main_menu())
+        await state.clear()
+        return
+
     if not background:
         logger.error("❌ Предыстория не найдена в state!")
         await m.answer("Ошибка: предыстория не выбрана.", reply_markup=main_menu())
         await state.clear()
         return
 
-    bg_info = get_background_data_direct(background)  # ← заменили
+    bg_info = get_background_data(background)
 
     if not bg_info:
         logger.error(f"❌ Данные предыстории '{background}' не найдены!")
@@ -1384,15 +1408,35 @@ async def go_to_background_equipment(m: Message, state: FSMContext):
 @dp.callback_query(lambda c: c.data.startswith("bg_equip_"))
 async def select_background_equipment(call: CallbackQuery, state: FSMContext):
     equipment_choice = call.data.replace("bg_equip_", "")
+
+    # ВАЖНО: НЕ перезаписываем background, только equipment_choice!
     await state.update_data(background_equipment_choice=equipment_choice)
+
+    # ОТЛАДКА - проверяем, что background не изменился
+    data = await state.get_data()
+    background = data.get("background")
+    logger.info(f"=== ВЫБРАН ВАРИАНТ: {equipment_choice}, background={background} ===")
+
+    # Проверяем, что background не стал "equip_A"
+    if background in ["equip_A", "equip_B", "equip_"]:
+        logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА: background испорчен! Значение: {background}")
+        await call.message.answer("Ошибка: данные предыстории повреждены. Начните создание заново.",
+                                  reply_markup=main_menu())
+        await state.clear()
+        return
 
     await state.set_state(CreateCharacter.backstory_input)
 
-    data = await state.get_data()
-    background = data.get("background")
-    bg_info = get_background_data_direct(background)  # ← заменили
+    # Получаем данные предыстории
+    bg_info = get_background_data(background)
 
-    chosen_equipment = bg_info.get(f"equipment_{equipment_choice.lower()}", "Нет описания") if bg_info else "Нет описания"
+    if not bg_info:
+        logger.error(f"❌ Данные предыстории '{background}' не найдены!")
+        await call.message.answer(f"Ошибка: данные предыстории '{background}' не найдены.", reply_markup=main_menu())
+        await state.clear()
+        return
+
+    chosen_equipment = bg_info.get(f"equipment_{equipment_choice.lower()}", "Нет описания")
 
     await call.message.delete()
     await call.message.answer(

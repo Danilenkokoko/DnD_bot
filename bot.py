@@ -109,7 +109,7 @@ async def help_command(m: Message):
         "**Другие возможности:**\n"
         "• 📋 Мои персонажи - посмотреть список всех персонажей\n"
         "• 🗑 Удалить персонажа - удалить ненужного персонажа\n\n"
-        "По всем вопросам обращайтесь к @danila6022000"
+        "Есть идеи или нашли ошибку? Пишите @danilenkokoko007_official"
     )
     await m.answer(help_text, parse_mode=ParseMode.MARKDOWN)
 
@@ -119,8 +119,6 @@ async def info_command(m: Message):
     """Обработчик команды /info"""
     info_text = (
         "ℹ️ **О боте D&D Character Creator**\n\n"
-        "**Версия:** 2.0.0\n"
-        "**Разработчик:** @danila6022000\n\n"
         "**Описание:**\n"
         "Этот бот помогает создавать персонажей для игры в Dungeons & Dragons 5-й редакции.\n\n"
         "**Возможности:**\n"

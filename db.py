@@ -2,7 +2,7 @@
 """
 D&D 5.5e (2024) Database Module
 Модуль для работы с PostgreSQL базой данных
-Поддерживает все таблицы для D&D 5.5e, включая оружие, заклинания и подклассы
+Поддерживает все таблицы для D&D 5.5e, включая оружие, заклинания, броню и снаряжение классов
 """
 
 import psycopg2
@@ -207,6 +207,7 @@ def init_database():
                         damage_type VARCHAR(20), -- slashing, piercing, bludgeoning
                         properties JSONB DEFAULT '[]', -- ["light", "finesse"]
                         suitable_masteries JSONB DEFAULT '[]', -- ["Выпад", "Подавление"]
+                        detailed_masteries JSONB DEFAULT '[]', -- детальные приёмы из файла
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
@@ -237,7 +238,37 @@ def init_database():
                 """)
                 logger.info("✅ Таблица weapon_masteries готова")
 
-                # ===== 12. ТАБЛИЦА БОЕВЫХ СТИЛЕЙ =====
+                # ===== 12. ТАБЛИЦА БРОНИ (НОВАЯ!) =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS armor (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(50) NOT NULL UNIQUE,
+                        ac_base INTEGER NOT NULL,
+                        ac_modifier VARCHAR(10) DEFAULT 'dex',
+                        has_shield BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                logger.info("✅ Таблица armor готова")
+
+                # ===== 13. ТАБЛИЦА СНАРЯЖЕНИЯ ПО КЛАССАМ (НОВАЯ!) =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS class_equipment (
+                        id SERIAL PRIMARY KEY,
+                        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+                        choice VARCHAR(1),
+                        armor VARCHAR(50),
+                        weapon VARCHAR(50),
+                        secondary_weapon VARCHAR(50),
+                        other_items TEXT,
+                        coins INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(class_id, choice)
+                    )
+                """)
+                logger.info("✅ Таблица class_equipment готова")
+
+                # ===== 14. ТАБЛИЦА БОЕВЫХ СТИЛЕЙ =====
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS fighting_styles (
                         id SERIAL PRIMARY KEY,
@@ -248,7 +279,7 @@ def init_database():
                 """)
                 logger.info("✅ Таблица fighting_styles готова")
 
-                # ===== 13. ДОСТУПНЫЕ БОЕВЫЕ СТИЛИ ПО КЛАССАМ =====
+                # ===== 15. ДОСТУПНЫЕ БОЕВЫЕ СТИЛИ ПО КЛАССАМ =====
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS class_fighting_styles (
                         id SERIAL PRIMARY KEY,
@@ -259,7 +290,7 @@ def init_database():
                 """)
                 logger.info("✅ Таблица class_fighting_styles готова")
 
-                # ===== 14. ТАБЛИЦА ТАИНСТВЕННЫХ ВОЗВАНИЙ =====
+                # ===== 16. ТАБЛИЦА ТАИНСТВЕННЫХ ВОЗВАНИЙ =====
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS invocations (
                         id SERIAL PRIMARY KEY,
@@ -273,7 +304,7 @@ def init_database():
                 """)
                 logger.info("✅ Таблица invocations готова")
 
-                # ===== 15. ТАБЛИЦА ПЕРСОНАЖЕЙ (обновлённая структура для 5.5e) =====
+                # ===== 17. ТАБЛИЦА ПЕРСОНАЖЕЙ (обновлённая структура для 5.5e) =====
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS characters (
                         id SERIAL PRIMARY KEY,
@@ -301,6 +332,7 @@ def init_database():
                         selected_invocations JSONB DEFAULT '[]',
                         selected_spells JSONB DEFAULT '[]',
                         selected_weapon VARCHAR(50),
+                        selected_armor VARCHAR(50),
                         selected_equipment_choice VARCHAR(1),
                         backstory TEXT,
                         image_file_id VARCHAR(255),
@@ -326,6 +358,8 @@ def init_database():
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_class_weapons_class_id ON class_weapons(class_id)")
                 cur.execute(
                     "CREATE INDEX IF NOT EXISTS idx_class_fighting_styles_class_id ON class_fighting_styles(class_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_armor_name ON armor(name)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_class_equipment_class_id ON class_equipment(class_id)")
                 logger.info("✅ Все индексы созданы")
 
                 conn.commit()
@@ -359,6 +393,7 @@ def save_character(
         selected_invocations: Optional[List[str]] = None,
         selected_spells: Optional[List[str]] = None,
         selected_weapon: Optional[str] = None,
+        selected_armor: Optional[str] = None,
         selected_equipment_choice: str = "A",
         backstory: str = "",
         image_file_id: Optional[str] = None,
@@ -386,9 +421,9 @@ def save_character(
                     background_id, level, experience, str, dex, con, int, wis, cha,
                     hp, ac, speed, selected_skills, selected_masteries,
                     selected_fighting_style, selected_invocations, selected_spells,
-                    selected_weapon, selected_equipment_choice, backstory, image_file_id, alignment
+                    selected_weapon, selected_armor, selected_equipment_choice, backstory, image_file_id, alignment
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """, (
                 user_id, name, race_id, subrace_id, class_id, subclass_id,
@@ -398,7 +433,7 @@ def save_character(
                 hp, ac, speed,
                 Json(selected_skills), Json(selected_masteries),
                 selected_fighting_style, Json(selected_invocations), Json(selected_spells),
-                selected_weapon, selected_equipment_choice, backstory, image_file_id, alignment
+                selected_weapon, selected_armor, selected_equipment_choice, backstory, image_file_id, alignment
             ))
 
             char_id = cur.fetchone()[0]
@@ -717,7 +752,70 @@ def get_class_from_db(class_name: str) -> Optional[Dict[str, Any]]:
 
 
 # =========================================================
-# 9. РАБОТА С ОРУЖИЕМ
+# 9. РАБОТА С БРОНЁЙ
+# =========================================================
+
+def get_armor_by_name(armor_name: str) -> Optional[Dict[str, Any]]:
+    """Получает броню по названию"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id, name, ac_base, ac_modifier, has_shield FROM armor WHERE name = %s",
+                            (armor_name,))
+                return cur.fetchone()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить броню {armor_name}: {e}")
+        return None
+
+
+def get_all_armor() -> List[Dict[str, Any]]:
+    """Получает все виды брони"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id, name, ac_base, ac_modifier, has_shield FROM armor ORDER BY name")
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить броню: {e}")
+        return []
+
+
+# =========================================================
+# 10. РАБОТА СО СНАРЯЖЕНИЕМ КЛАССОВ
+# =========================================================
+
+def get_class_equipment_from_db(class_name: str, choice: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Получает снаряжение для класса"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
+                class_result = cur.fetchone()
+                if not class_result:
+                    return []
+                class_id = class_result["id"]
+
+                if choice:
+                    cur.execute("""
+                        SELECT class_id, choice, armor, weapon, secondary_weapon, other_items, coins
+                        FROM class_equipment 
+                        WHERE class_id = %s AND choice = %s
+                    """, (class_id, choice))
+                else:
+                    cur.execute("""
+                        SELECT class_id, choice, armor, weapon, secondary_weapon, other_items, coins
+                        FROM class_equipment 
+                        WHERE class_id = %s
+                        ORDER BY choice
+                    """, (class_id,))
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить снаряжение для класса {class_name}: {e}")
+        return []
+
+
+# =========================================================
+# 11. РАБОТА С ОРУЖИЕМ
 # =========================================================
 
 def get_weapons_for_class(class_name: str) -> List[Dict[str, Any]]:
@@ -725,14 +823,12 @@ def get_weapons_for_class(class_name: str) -> List[Dict[str, Any]]:
     try:
         with get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # Сначала получаем ID класса
                 cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
                 class_result = cur.fetchone()
                 if not class_result:
                     return []
                 class_id = class_result["id"]
 
-                # Получаем оружие для класса
                 cur.execute("""
                     SELECT w.id, w.name, w.category, w.damage_dice, w.damage_type, w.properties, w.suitable_masteries
                     FROM weapons w
@@ -766,8 +862,28 @@ def get_masteries_for_weapon(weapon_name: str) -> List[str]:
         return []
 
 
+def get_detailed_masteries_for_weapon(weapon_name: str) -> List[Dict[str, Any]]:
+    """Возвращает детальные оружейные приёмы для указанного оружия из поля detailed_masteries"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT detailed_masteries FROM weapons WHERE name = %s", (weapon_name,))
+                result = cur.fetchone()
+                if result and result[0]:
+                    if isinstance(result[0], list):
+                        return result[0]
+                    try:
+                        return json.loads(result[0])
+                    except:
+                        return []
+                return []
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить детальные приёмы для оружия {weapon_name}: {e}")
+        return []
+
+
 def get_all_weapon_masteries_from_db() -> List[Dict[str, Any]]:
-    """Получает все оружейные приёмы из БД"""
+    """Получает все базовые оружейные приёмы из БД"""
     try:
         with get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -779,7 +895,7 @@ def get_all_weapon_masteries_from_db() -> List[Dict[str, Any]]:
 
 
 # =========================================================
-# 10. РАБОТА С БОЕВЫМИ СТИЛЯМИ
+# 12. РАБОТА С БОЕВЫМИ СТИЛЯМИ
 # =========================================================
 
 def get_fighting_styles_for_class(class_name: str) -> List[Dict[str, Any]]:
@@ -787,14 +903,12 @@ def get_fighting_styles_for_class(class_name: str) -> List[Dict[str, Any]]:
     try:
         with get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # Получаем ID класса
                 cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
                 class_result = cur.fetchone()
                 if not class_result:
                     return []
                 class_id = class_result["id"]
 
-                # Получаем стили для класса
                 cur.execute("""
                     SELECT fs.id, fs.name, fs.description
                     FROM fighting_styles fs
@@ -821,7 +935,7 @@ def get_all_fighting_styles_from_db() -> List[Dict[str, Any]]:
 
 
 # =========================================================
-# 11. РАБОТА С ВОЗВАНИЯМИ
+# 13. РАБОТА С ВОЗВАНИЯМИ
 # =========================================================
 
 def get_all_invocations_from_db(level: int = 1) -> List[Dict[str, Any]]:
@@ -842,7 +956,7 @@ def get_all_invocations_from_db(level: int = 1) -> List[Dict[str, Any]]:
 
 
 # =========================================================
-# 12. РАБОТА С ЗАКЛИНАНИЯМИ
+# 14. РАБОТА С ЗАКЛИНАНИЯМИ
 # =========================================================
 
 def get_spells_for_class_from_db(class_name: str, level: int = 1, is_cantrip: bool = None) -> List[Dict[str, Any]]:
@@ -916,7 +1030,7 @@ def get_recommended_spells_from_db(class_name: str) -> Dict[str, List[Dict[str, 
 
 
 # =========================================================
-# 13. РАБОТА С ПОДКЛАССАМИ
+# 15. РАБОТА С ПОДКЛАССАМИ
 # =========================================================
 
 def get_subclasses_for_class_from_db(class_name: str, level: int = 1) -> List[Dict[str, Any]]:
@@ -943,7 +1057,7 @@ def get_subclasses_for_class_from_db(class_name: str, level: int = 1) -> List[Di
 
 
 # =========================================================
-# 14. БЭКАП И ВОССТАНОВЛЕНИЕ
+# 16. БЭКАП И ВОССТАНОВЛЕНИЕ
 # =========================================================
 
 def backup_all_characters():
@@ -995,7 +1109,7 @@ def restore_from_backup():
 
 
 # =========================================================
-# 15. МИГРАЦИЯ
+# 17. МИГРАЦИЯ
 # =========================================================
 
 def migrate_database():
@@ -1004,7 +1118,7 @@ def migrate_database():
         with get_connection() as conn:
             with conn.cursor() as cur:
                 new_columns = [
-                    ("selected_weapon", "VARCHAR(50)"),
+                    ("selected_armor", "VARCHAR(50)"),
                 ]
 
                 for col_name, col_type in new_columns:
@@ -1040,14 +1154,17 @@ if __name__ == "__main__":
             with conn.cursor() as cur:
                 tables = ["races", "subraces", "classes", "subclasses", "backgrounds",
                           "spells", "class_spells", "recommended_spells", "weapons",
-                          "class_weapons", "weapon_masteries", "fighting_styles",
-                          "class_fighting_styles", "invocations", "characters"]
+                          "class_weapons", "weapon_masteries", "armor", "class_equipment",
+                          "fighting_styles", "class_fighting_styles", "invocations", "characters"]
 
                 print("\n📋 СУЩЕСТВУЮЩИЕ ТАБЛИЦЫ:")
                 for table in tables:
-                    cur.execute(f"SELECT COUNT(*) FROM {table}")
-                    count = cur.fetchone()[0]
-                    print(f"   • {table}: {count} записей")
+                    try:
+                        cur.execute(f"SELECT COUNT(*) FROM {table}")
+                        count = cur.fetchone()[0]
+                        print(f"   • {table}: {count} записей")
+                    except Exception:
+                        print(f"   • {table}: таблица не создана")
 
         print("\n✅ Модуль db.py готов к использованию!")
 

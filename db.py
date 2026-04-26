@@ -2,7 +2,7 @@
 """
 D&D 5.5e (2024) Database Module
 Модуль для работы с PostgreSQL базой данных
-Поддерживает все таблицы для D&D 5.5e
+Поддерживает все таблицы для D&D 5.5e, включая оружие, заклинания и подклассы
 """
 
 import psycopg2
@@ -184,7 +184,47 @@ def init_database():
                 """)
                 logger.info("✅ Таблица class_spells готова")
 
-                # ===== 8. ТАБЛИЦА ОРУЖЕЙНЫХ ПРИЁМОВ (Weapon Mastery) =====
+                # ===== 8. ТАБЛИЦА РЕКОМЕНДОВАННЫХ ЗАКЛИНАНИЙ (для новичков) =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS recommended_spells (
+                        id SERIAL PRIMARY KEY,
+                        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+                        spell_id INTEGER NOT NULL REFERENCES spells(id) ON DELETE CASCADE,
+                        is_cantrip BOOLEAN DEFAULT FALSE,
+                        priority INTEGER DEFAULT 1,
+                        UNIQUE(class_id, spell_id)
+                    )
+                """)
+                logger.info("✅ Таблица recommended_spells готова")
+
+                # ===== 9. ТАБЛИЦА ОРУЖИЯ =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS weapons (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(50) NOT NULL UNIQUE,
+                        category VARCHAR(20) NOT NULL, -- simple, martial
+                        damage_dice VARCHAR(10), -- 1d6, 1d8
+                        damage_type VARCHAR(20), -- slashing, piercing, bludgeoning
+                        properties JSONB DEFAULT '[]', -- ["light", "finesse"]
+                        suitable_masteries JSONB DEFAULT '[]', -- ["Выпад", "Подавление"]
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                logger.info("✅ Таблица weapons готова")
+
+                # ===== 10. ДОСТУПНОЕ ОРУЖИЕ ПО КЛАССАМ =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS class_weapons (
+                        id SERIAL PRIMARY KEY,
+                        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+                        weapon_category VARCHAR(20), -- simple, martial, all
+                        weapon_id INTEGER REFERENCES weapons(id) ON DELETE CASCADE,
+                        UNIQUE(class_id, weapon_id)
+                    )
+                """)
+                logger.info("✅ Таблица class_weapons готова")
+
+                # ===== 11. ТАБЛИЦА ОРУЖЕЙНЫХ ПРИЁМОВ (Weapon Mastery) =====
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS weapon_masteries (
                         id SERIAL PRIMARY KEY,
@@ -197,7 +237,7 @@ def init_database():
                 """)
                 logger.info("✅ Таблица weapon_masteries готова")
 
-                # ===== 9. ТАБЛИЦА БОЕВЫХ СТИЛЕЙ =====
+                # ===== 12. ТАБЛИЦА БОЕВЫХ СТИЛЕЙ =====
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS fighting_styles (
                         id SERIAL PRIMARY KEY,
@@ -208,7 +248,18 @@ def init_database():
                 """)
                 logger.info("✅ Таблица fighting_styles готова")
 
-                # ===== 10. ТАБЛИЦА ТАИНСТВЕННЫХ ВОЗВАНИЙ =====
+                # ===== 13. ДОСТУПНЫЕ БОЕВЫЕ СТИЛИ ПО КЛАССАМ =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS class_fighting_styles (
+                        id SERIAL PRIMARY KEY,
+                        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+                        style_id INTEGER NOT NULL REFERENCES fighting_styles(id) ON DELETE CASCADE,
+                        UNIQUE(class_id, style_id)
+                    )
+                """)
+                logger.info("✅ Таблица class_fighting_styles готова")
+
+                # ===== 14. ТАБЛИЦА ТАИНСТВЕННЫХ ВОЗВАНИЙ =====
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS invocations (
                         id SERIAL PRIMARY KEY,
@@ -222,7 +273,7 @@ def init_database():
                 """)
                 logger.info("✅ Таблица invocations готова")
 
-                # ===== 11. ТАБЛИЦА ПЕРСОНАЖЕЙ (обновлённая структура для 5.5e) =====
+                # ===== 15. ТАБЛИЦА ПЕРСОНАЖЕЙ (обновлённая структура для 5.5e) =====
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS characters (
                         id SERIAL PRIMARY KEY,
@@ -249,6 +300,7 @@ def init_database():
                         selected_fighting_style VARCHAR(50),
                         selected_invocations JSONB DEFAULT '[]',
                         selected_spells JSONB DEFAULT '[]',
+                        selected_weapon VARCHAR(50),
                         selected_equipment_choice VARCHAR(1),
                         backstory TEXT,
                         image_file_id VARCHAR(255),
@@ -268,6 +320,12 @@ def init_database():
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_class_spells_spell_id ON class_spells(spell_id)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_subraces_race_id ON subraces(race_id)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_subclasses_class_id ON subclasses(class_id)")
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_recommended_spells_class_id ON recommended_spells(class_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_weapons_name ON weapons(name)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_class_weapons_class_id ON class_weapons(class_id)")
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_class_fighting_styles_class_id ON class_fighting_styles(class_id)")
                 logger.info("✅ Все индексы созданы")
 
                 conn.commit()
@@ -277,7 +335,10 @@ def init_database():
         raise
 
 
-# ---------------- СОХРАНЕНИЕ ПЕРСОНАЖА (ОБНОВЛЁННАЯ ВЕРСИЯ) ----------------
+# =========================================================
+# 1. СОХРАНЕНИЕ ПЕРСОНАЖА (ОБНОВЛЁННАЯ ВЕРСИЯ)
+# =========================================================
+
 def save_character(
         user_id: int,
         name: str,
@@ -297,6 +358,7 @@ def save_character(
         selected_fighting_style: Optional[str] = None,
         selected_invocations: Optional[List[str]] = None,
         selected_spells: Optional[List[str]] = None,
+        selected_weapon: Optional[str] = None,
         selected_equipment_choice: str = "A",
         backstory: str = "",
         image_file_id: Optional[str] = None,
@@ -304,33 +366,6 @@ def save_character(
 ) -> int:
     """
     Сохраняет персонажа в базу данных (обновлённая версия для 5.5e)
-
-    Args:
-        user_id: ID пользователя Telegram
-        name: имя персонажа
-        race_id: ID расы
-        subrace_id: ID подрасы
-        class_id: ID класса
-        subclass_id: ID подкласса
-        background_id: ID предыстории
-        level: уровень
-        experience: опыт
-        stats: характеристики
-        hp: хиты
-        ac: класс брони
-        speed: скорость
-        selected_skills: выбранные навыки
-        selected_masteries: выбранные оружейные приёмы
-        selected_fighting_style: выбранный боевой стиль
-        selected_invocations: выбранные возвания
-        selected_spells: выбранные заклинания
-        selected_equipment_choice: выбор снаряжения (A или B)
-        backstory: история персонажа
-        image_file_id: ID картинки в Telegram
-        alignment: мировоззрение
-
-    Returns:
-        int: ID созданного персонажа
     """
     if stats is None:
         stats = {"STR": 10, "DEX": 10, "CON": 10, "INT": 10, "WIS": 10, "CHA": 10}
@@ -351,9 +386,9 @@ def save_character(
                     background_id, level, experience, str, dex, con, int, wis, cha,
                     hp, ac, speed, selected_skills, selected_masteries,
                     selected_fighting_style, selected_invocations, selected_spells,
-                    selected_equipment_choice, backstory, image_file_id, alignment
+                    selected_weapon, selected_equipment_choice, backstory, image_file_id, alignment
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """, (
                 user_id, name, race_id, subrace_id, class_id, subclass_id,
@@ -363,7 +398,7 @@ def save_character(
                 hp, ac, speed,
                 Json(selected_skills), Json(selected_masteries),
                 selected_fighting_style, Json(selected_invocations), Json(selected_spells),
-                selected_equipment_choice, backstory, image_file_id, alignment
+                selected_weapon, selected_equipment_choice, backstory, image_file_id, alignment
             ))
 
             char_id = cur.fetchone()[0]
@@ -371,7 +406,10 @@ def save_character(
             return char_id
 
 
-# ---------------- ПОЛУЧЕНИЕ ПЕРСОНАЖЕЙ ----------------
+# =========================================================
+# 2. ПОЛУЧЕНИЕ ПЕРСОНАЖЕЙ
+# =========================================================
+
 def get_user_characters(user_id: int) -> List[Dict[str, Any]]:
     """Возвращает всех персонажей пользователя"""
     with get_connection() as conn:
@@ -425,7 +463,10 @@ def get_character_by_id_and_user(char_id: int, user_id: int) -> Optional[Dict[st
             return cur.fetchone()
 
 
-# ---------------- ОБНОВЛЕНИЕ ПЕРСОНАЖА ----------------
+# =========================================================
+# 3. ОБНОВЛЕНИЕ ПЕРСОНАЖА
+# =========================================================
+
 def update_character_level(char_id: int, new_level: int) -> bool:
     """Обновляет уровень персонажа"""
     with get_connection() as conn:
@@ -495,14 +536,12 @@ def update_character_experience(char_id: int, experience: int) -> bool:
     """Обновляет опыт персонажа и автоматически повышает уровень при необходимости"""
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Получаем текущий уровень
             cur.execute("SELECT level FROM characters WHERE id = %s", (char_id,))
             result = cur.fetchone()
             if not result:
                 return False
             current_level = result[0]
 
-            # Рассчитываем новый уровень по опыту
             exp_thresholds = {1: 0, 2: 300, 3: 900, 4: 2700, 5: 6500}
             new_level = current_level
             for lvl, exp_needed in exp_thresholds.items():
@@ -517,7 +556,10 @@ def update_character_experience(char_id: int, experience: int) -> bool:
             return cur.rowcount > 0
 
 
-# ---------------- УДАЛЕНИЕ ПЕРСОНАЖА ----------------
+# =========================================================
+# 4. УДАЛЕНИЕ ПЕРСОНАЖА
+# =========================================================
+
 def delete_character(char_id: int, user_id: int) -> bool:
     """Удаляет персонажа (только если он принадлежит пользователю)"""
     with get_connection() as conn:
@@ -533,7 +575,10 @@ def delete_character(char_id: int, user_id: int) -> bool:
             return deleted
 
 
-# ---------------- СТАТИСТИКА ----------------
+# =========================================================
+# 5. СТАТИСТИКА
+# =========================================================
+
 def get_user_characters_count(user_id: int) -> int:
     """Возвращает количество персонажей пользователя"""
     with get_connection() as conn:
@@ -550,7 +595,10 @@ def get_total_characters_count() -> int:
             return cur.fetchone()[0]
 
 
-# ---------------- РАБОТА С ПРЕДЫСТОРИЯМИ (ИЗ БД) ----------------
+# =========================================================
+# 6. РАБОТА С ПРЕДЫСТОРИЯМИ (ИЗ БД)
+# =========================================================
+
 def get_all_backgrounds_from_db() -> List[Dict[str, Any]]:
     """Получает все предыстории из БД"""
     try:
@@ -585,7 +633,10 @@ def get_background_names() -> List[str]:
     return [bg["name"] for bg in backgrounds]
 
 
-# ---------------- РАБОТА С РАСАМИ (ИЗ БД) ----------------
+# =========================================================
+# 7. РАБОТА С РАСАМИ (ИЗ БД)
+# =========================================================
+
 def get_all_races_from_db() -> List[Dict[str, Any]]:
     """Получает все расы из БД"""
     try:
@@ -629,7 +680,10 @@ def get_subraces_from_db(race_name: str) -> List[Dict[str, Any]]:
         return []
 
 
-# ---------------- РАБОТА С КЛАССАМИ (ИЗ БД) ----------------
+# =========================================================
+# 8. РАБОТА С КЛАССАМИ (ИЗ БД)
+# =========================================================
+
 def get_all_classes_from_db() -> List[Dict[str, Any]]:
     """Получает все классы из БД"""
     try:
@@ -662,7 +716,56 @@ def get_class_from_db(class_name: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-# ---------------- РАБОТА С ОРУЖЕЙНЫМИ ПРИЁМАМИ ----------------
+# =========================================================
+# 9. РАБОТА С ОРУЖИЕМ
+# =========================================================
+
+def get_weapons_for_class(class_name: str) -> List[Dict[str, Any]]:
+    """Возвращает список оружия, доступного для класса"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Сначала получаем ID класса
+                cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
+                class_result = cur.fetchone()
+                if not class_result:
+                    return []
+                class_id = class_result["id"]
+
+                # Получаем оружие для класса
+                cur.execute("""
+                    SELECT w.id, w.name, w.category, w.damage_dice, w.damage_type, w.properties, w.suitable_masteries
+                    FROM weapons w
+                    JOIN class_weapons cw ON w.id = cw.weapon_id
+                    WHERE cw.class_id = %s
+                    ORDER BY w.category, w.name
+                """, (class_id,))
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить оружие для класса {class_name}: {e}")
+        return []
+
+
+def get_masteries_for_weapon(weapon_name: str) -> List[str]:
+    """Возвращает список подходящих оружейных приёмов для указанного оружия"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT suitable_masteries FROM weapons WHERE name = %s", (weapon_name,))
+                result = cur.fetchone()
+                if result and result[0]:
+                    if isinstance(result[0], list):
+                        return result[0]
+                    try:
+                        return json.loads(result[0])
+                    except:
+                        return []
+                return []
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить приёмы для оружия {weapon_name}: {e}")
+        return []
+
+
 def get_all_weapon_masteries_from_db() -> List[Dict[str, Any]]:
     """Получает все оружейные приёмы из БД"""
     try:
@@ -675,7 +778,36 @@ def get_all_weapon_masteries_from_db() -> List[Dict[str, Any]]:
         return []
 
 
-# ---------------- РАБОТА С БОЕВЫМИ СТИЛЯМИ ----------------
+# =========================================================
+# 10. РАБОТА С БОЕВЫМИ СТИЛЯМИ
+# =========================================================
+
+def get_fighting_styles_for_class(class_name: str) -> List[Dict[str, Any]]:
+    """Возвращает боевые стили, доступные для класса (с фильтрацией)"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Получаем ID класса
+                cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
+                class_result = cur.fetchone()
+                if not class_result:
+                    return []
+                class_id = class_result["id"]
+
+                # Получаем стили для класса
+                cur.execute("""
+                    SELECT fs.id, fs.name, fs.description
+                    FROM fighting_styles fs
+                    JOIN class_fighting_styles cfs ON fs.id = cfs.style_id
+                    WHERE cfs.class_id = %s
+                    ORDER BY fs.name
+                """, (class_id,))
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить боевые стили для класса {class_name}: {e}")
+        return []
+
+
 def get_all_fighting_styles_from_db() -> List[Dict[str, Any]]:
     """Получает все боевые стили из БД"""
     try:
@@ -688,7 +820,10 @@ def get_all_fighting_styles_from_db() -> List[Dict[str, Any]]:
         return []
 
 
-# ---------------- РАБОТА С ВОЗВАНИЯМИ ----------------
+# =========================================================
+# 11. РАБОТА С ВОЗВАНИЯМИ
+# =========================================================
+
 def get_all_invocations_from_db(level: int = 1) -> List[Dict[str, Any]]:
     """Получает доступные возвания для колдуна из БД"""
     try:
@@ -706,20 +841,21 @@ def get_all_invocations_from_db(level: int = 1) -> List[Dict[str, Any]]:
         return []
 
 
-# ---------------- РАБОТА С ЗАКЛИНАНИЯМИ ----------------
+# =========================================================
+# 12. РАБОТА С ЗАКЛИНАНИЯМИ
+# =========================================================
+
 def get_spells_for_class_from_db(class_name: str, level: int = 1, is_cantrip: bool = None) -> List[Dict[str, Any]]:
     """Получает заклинания для указанного класса из БД"""
     try:
         with get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # Сначала получаем ID класса
                 cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
                 class_result = cur.fetchone()
                 if not class_result:
                     return []
                 class_id = class_result["id"]
 
-                # Формируем запрос
                 query = """
                     SELECT s.id, s.name, s.level, s.is_cantrip, s.description, s.school
                     FROM spells s
@@ -745,21 +881,82 @@ def get_spells_for_class_from_db(class_name: str, level: int = 1, is_cantrip: bo
         return []
 
 
-# ---------------- БЭКАП И ВОССТАНОВЛЕНИЕ ----------------
+def get_recommended_spells_from_db(class_name: str) -> Dict[str, List[Dict[str, Any]]]:
+    """Получает рекомендованные заклинания для класса (кантрипы и 1 уровень)"""
+    result = {"cantrips": [], "level1": []}
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
+                class_result = cur.fetchone()
+                if not class_result:
+                    return result
+                class_id = class_result["id"]
+
+                cur.execute("""
+                    SELECT s.id, s.name, s.level, s.is_cantrip, s.description
+                    FROM spells s
+                    JOIN recommended_spells rs ON s.id = rs.spell_id
+                    WHERE rs.class_id = %s
+                    ORDER BY rs.priority, s.name
+                """, (class_id,))
+
+                spells = cur.fetchall()
+                for spell in spells:
+                    if spell.get("is_cantrip"):
+                        result["cantrips"].append(spell)
+                    else:
+                        result["level1"].append(spell)
+
+                return result
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить рекомендованные заклинания для {class_name}: {e}")
+        return result
+
+
+# =========================================================
+# 13. РАБОТА С ПОДКЛАССАМИ
+# =========================================================
+
+def get_subclasses_for_class_from_db(class_name: str, level: int = 1) -> List[Dict[str, Any]]:
+    """Возвращает подклассы для указанного класса, доступные на определённом уровне"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
+                class_result = cur.fetchone()
+                if not class_result:
+                    return []
+                class_id = class_result["id"]
+
+                cur.execute("""
+                    SELECT id, name, level_acquired, description, features
+                    FROM subclasses 
+                    WHERE class_id = %s AND level_acquired <= %s
+                    ORDER BY level_acquired, name
+                """, (class_id, level))
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить подклассы для класса {class_name}: {e}")
+        return []
+
+
+# =========================================================
+# 14. БЭКАП И ВОССТАНОВЛЕНИЕ
+# =========================================================
+
 def backup_all_characters():
     """Копирует всех персонажей из characters в characters_backup"""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Создаём таблицу backup если не существует
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS characters_backup (LIKE characters INCLUDING ALL)
                 """)
 
-                # Очищаем таблицу backup
                 cur.execute("TRUNCATE TABLE characters_backup")
 
-                # Копируем все данные
                 cur.execute("""
                     INSERT INTO characters_backup 
                     SELECT * FROM characters
@@ -775,7 +972,6 @@ def restore_from_backup():
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Проверяем существование таблицы backup
                 cur.execute("""
                     SELECT EXISTS (
                         SELECT FROM information_schema.tables 
@@ -786,10 +982,8 @@ def restore_from_backup():
                     logger.warning("⚠️ Таблица characters_backup не существует")
                     return
 
-                # Очищаем основную таблицу
                 cur.execute("TRUNCATE TABLE characters")
 
-                # Восстанавливаем из backup
                 cur.execute("""
                     INSERT INTO characters 
                     SELECT * FROM characters_backup
@@ -800,26 +994,17 @@ def restore_from_backup():
         logger.error(f"❌ Ошибка при восстановлении из резервной копии: {e}")
 
 
-# ---------------- МИГРАЦИЯ СТАРЫХ ДАННЫХ ----------------
+# =========================================================
+# 15. МИГРАЦИЯ
+# =========================================================
+
 def migrate_database():
     """Миграция существующей базы данных (добавление новых полей для 5.5e)"""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Добавляем новые колонки в characters, если их нет
                 new_columns = [
-                    ("race_id", "INTEGER"),
-                    ("subrace_id", "INTEGER"),
-                    ("class_id", "INTEGER"),
-                    ("subclass_id", "INTEGER"),
-                    ("background_id", "INTEGER"),
-                    ("experience", "INTEGER DEFAULT 0"),
-                    ("speed", "INTEGER DEFAULT 30"),
-                    ("selected_masteries", "JSONB DEFAULT '[]'"),
-                    ("selected_fighting_style", "VARCHAR(50)"),
-                    ("selected_invocations", "JSONB DEFAULT '[]'"),
-                    ("selected_spells", "JSONB DEFAULT '[]'"),
-                    ("alignment", "VARCHAR(20) DEFAULT 'Нейтральное'"),
+                    ("selected_weapon", "VARCHAR(50)"),
                 ]
 
                 for col_name, col_type in new_columns:
@@ -838,23 +1023,25 @@ def migrate_database():
         logger.warning(f"⚠️ Ошибка миграции: {e}")
 
 
-# ---------------- ТЕСТИРОВАНИЕ ----------------
+# =========================================================
+# ТЕСТИРОВАНИЕ
+# =========================================================
+
 if __name__ == "__main__":
     print("=" * 60)
     print("🐉 ТЕСТ МОДУЛЯ DB.PY (D&D 5.5e)")
     print("=" * 60)
 
     try:
-        # Инициализация базы данных
         init_database()
         migrate_database()
 
-        # Проверка таблиц
         with get_connection() as conn:
             with conn.cursor() as cur:
                 tables = ["races", "subraces", "classes", "subclasses", "backgrounds",
-                          "spells", "class_spells", "weapon_masteries", "fighting_styles",
-                          "invocations", "characters"]
+                          "spells", "class_spells", "recommended_spells", "weapons",
+                          "class_weapons", "weapon_masteries", "fighting_styles",
+                          "class_fighting_styles", "invocations", "characters"]
 
                 print("\n📋 СУЩЕСТВУЮЩИЕ ТАБЛИЦЫ:")
                 for table in tables:

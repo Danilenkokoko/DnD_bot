@@ -1,7 +1,14 @@
 # db.py
+"""
+D&D 5.5e (2024) Database Module
+Модуль для работы с PostgreSQL базой данных
+Поддерживает все таблицы для D&D 5.5e
+"""
+
 import psycopg2
 import os
 import logging
+import json
 from dotenv import load_dotenv
 from psycopg2.extras import Json, RealDictCursor
 from contextlib import contextmanager
@@ -14,11 +21,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 DB_CONFIG = {
-    "dbname": os.getenv("DB_NAME"),
-    "user": os.getenv("DB_USER"),
+    "dbname": os.getenv("DB_NAME", "DND_DB"),
+    "user": os.getenv("DB_USER", "postgres"),
     "password": (os.getenv("DB_PASSWORD") or "").strip(),
-    "host": os.getenv("DB_HOST"),
-    "port": 5432,
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": int(os.getenv("DB_PORT", 5432)),
     "connect_timeout": 5
 }
 
@@ -35,6 +42,7 @@ logger.info(f"📊 Настройки БД: host={DB_CONFIG['host']}, dbname={DB
 # ---------------- CONNECTION ----------------
 @contextmanager
 def get_connection():
+    """Создаёт подключение к базе данных"""
     conn = None
     try:
         logger.debug("🔄 Попытка подключения к БД...")
@@ -59,114 +67,81 @@ def get_connection():
             logger.debug("🔌 Соединение с БД закрыто")
 
 
-# ---------------- INIT ----------------
+# ---------------- INIT DATABASE ----------------
 def init_database():
-    """Создаёт таблицы если они не существуют"""
+    """Создаёт все таблицы если они не существуют (D&D 5.5e)"""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # ===== ТАБЛИЦА 1: characters (персонажи) =====
+                # ===== 1. ТАБЛИЦА РАС (без бонусов к характеристикам в 5.5e!) =====
                 cur.execute("""
-                    CREATE TABLE IF NOT EXISTS characters (
+                    CREATE TABLE IF NOT EXISTS races (
                         id SERIAL PRIMARY KEY,
-                        user_id BIGINT NOT NULL,
-                        name VARCHAR(100) NOT NULL,
-                        race VARCHAR(50) NOT NULL,
-                        class_name VARCHAR(50) NOT NULL,
-                        level INTEGER DEFAULT 1,
-                        background VARCHAR(100),
-                        backstory TEXT,
-                        image_file_id VARCHAR(255),
-                        str INTEGER DEFAULT 10,
-                        dex INTEGER DEFAULT 10,
-                        con INTEGER DEFAULT 10,
-                        int INTEGER DEFAULT 10,
-                        wis INTEGER DEFAULT 10,
-                        cha INTEGER DEFAULT 10,
-                        hp INTEGER DEFAULT 0,
-                        ac INTEGER DEFAULT 10,
-                        race_traits JSONB DEFAULT '[]',
-                        class_features JSONB DEFAULT '[]',
-                        skills JSONB DEFAULT '[]',
-                        tools JSONB DEFAULT '[]',
-                        equipment JSONB DEFAULT '[]',
-                        spells JSONB DEFAULT '[]',
-                        background_trait VARCHAR(255),
-                        background_skills JSONB DEFAULT '[]',
-                        background_tools VARCHAR(255),
-                        background_equipment_choice VARCHAR(1),
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        name VARCHAR(50) UNIQUE NOT NULL,
+                        speed INTEGER DEFAULT 30,
+                        size VARCHAR(20) DEFAULT 'Средний',
+                        description TEXT,
+                        image_path VARCHAR(255),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
+                logger.info("✅ Таблица races готова")
 
-                # Индексы для таблицы characters
+                # ===== 2. ТАБЛИЦА ПОДРАС =====
                 cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_characters_user_id 
-                    ON characters(user_id)
-                """)
-
-                cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_characters_name 
-                    ON characters(name)
-                """)
-
-                logger.info("✅ Таблица characters готова")
-
-                # ===== ТАБЛИЦА 2: characters_backup (копия characters) =====
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS characters_backup (
+                    CREATE TABLE IF NOT EXISTS subraces (
                         id SERIAL PRIMARY KEY,
-                        user_id BIGINT NOT NULL,
-                        name VARCHAR(100) NOT NULL,
-                        race VARCHAR(50) NOT NULL,
-                        class_name VARCHAR(50) NOT NULL,
-                        level INTEGER DEFAULT 1,
-                        background VARCHAR(100),
-                        backstory TEXT,
-                        image_file_id VARCHAR(255),
-                        str INTEGER DEFAULT 10,
-                        dex INTEGER DEFAULT 10,
-                        con INTEGER DEFAULT 10,
-                        int INTEGER DEFAULT 10,
-                        wis INTEGER DEFAULT 10,
-                        cha INTEGER DEFAULT 10,
-                        hp INTEGER DEFAULT 0,
-                        ac INTEGER DEFAULT 10,
-                        race_traits JSONB DEFAULT '[]',
-                        class_features JSONB DEFAULT '[]',
-                        skills JSONB DEFAULT '[]',
-                        tools JSONB DEFAULT '[]',
-                        equipment JSONB DEFAULT '[]',
-                        spells JSONB DEFAULT '[]',
-                        background_trait VARCHAR(255),
-                        background_skills JSONB DEFAULT '[]',
-                        background_tools VARCHAR(255),
-                        background_equipment_choice VARCHAR(1),
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        race_id INTEGER NOT NULL REFERENCES races(id) ON DELETE CASCADE,
+                        name VARCHAR(50) NOT NULL,
+                        trait VARCHAR(255),
+                        description TEXT,
+                        extra_speed INTEGER DEFAULT 0,
+                        extra_traits JSONB DEFAULT '[]',
+                        UNIQUE(race_id, name)
                     )
                 """)
+                logger.info("✅ Таблица subraces готова")
 
-                # Индексы для таблицы characters_backup
+                # ===== 3. ТАБЛИЦА КЛАССОВ =====
                 cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_characters_backup_user_id 
-                    ON characters_backup(user_id)
+                    CREATE TABLE IF NOT EXISTS classes (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(50) UNIQUE NOT NULL,
+                        hit_die INTEGER NOT NULL CHECK (hit_die IN (6, 8, 10, 12)),
+                        primary_stats JSONB NOT NULL,
+                        saving_throws JSONB NOT NULL,
+                        skill_choices INTEGER DEFAULT 2,
+                        description TEXT,
+                        image_path VARCHAR(255),
+                        is_spellcaster BOOLEAN DEFAULT FALSE,
+                        spellcasting_ability VARCHAR(3),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
                 """)
+                logger.info("✅ Таблица classes готова")
 
+                # ===== 4. ТАБЛИЦА ПОДКЛАССОВ =====
                 cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_characters_backup_name 
-                    ON characters_backup(name)
+                    CREATE TABLE IF NOT EXISTS subclasses (
+                        id SERIAL PRIMARY KEY,
+                        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+                        name VARCHAR(50) NOT NULL,
+                        level_acquired INTEGER DEFAULT 1,
+                        description TEXT,
+                        features JSONB DEFAULT '[]',
+                        UNIQUE(class_id, name)
+                    )
                 """)
+                logger.info("✅ Таблица subclasses готова")
 
-                logger.info("✅ Таблица characters_backup готова")
-
-                # ===== ТАБЛИЦА 3: backgrounds (предыстории) =====
+                # ===== 5. ТАБЛИЦА ПРЕДЫСТОРИЙ (В 5.5e ОНИ ДАЮТ БОНУСЫ К ХАРАКТЕРИСТИКАМ!) =====
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS backgrounds (
                         id SERIAL PRIMARY KEY,
                         name VARCHAR(100) UNIQUE NOT NULL,
-                        characteristics JSONB NOT NULL,
+                        characteristic1 VARCHAR(3) NOT NULL,
+                        characteristic2 VARCHAR(3) NOT NULL,
+                        characteristic3 VARCHAR(3) NOT NULL,
                         trait VARCHAR(255) NOT NULL,
                         skills JSONB NOT NULL,
                         tools VARCHAR(255),
@@ -176,283 +151,219 @@ def init_database():
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
-
-                # Индексы для таблицы backgrounds
-                cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_backgrounds_name 
-                    ON backgrounds(name)
-                """)
-
                 logger.info("✅ Таблица backgrounds готова")
 
-                # Заполняем таблицу предысторий начальными данными
-                seed_backgrounds()
+                # ===== 6. ТАБЛИЦА ЗАКЛИНАНИЙ =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS spells (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(100) NOT NULL,
+                        level INTEGER DEFAULT 0,
+                        school VARCHAR(50),
+                        casting_time VARCHAR(50),
+                        range VARCHAR(50),
+                        components VARCHAR(50),
+                        duration VARCHAR(100),
+                        description TEXT,
+                        is_cantrip BOOLEAN DEFAULT FALSE,
+                        is_ritual BOOLEAN DEFAULT FALSE,
+                        requires_concentration BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                logger.info("✅ Таблица spells готова")
+
+                # ===== 7. СВЯЗЬ КЛАССОВ С ЗАКЛИНАНИЯМИ =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS class_spells (
+                        class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+                        spell_id INTEGER NOT NULL REFERENCES spells(id) ON DELETE CASCADE,
+                        is_available BOOLEAN DEFAULT TRUE,
+                        PRIMARY KEY (class_id, spell_id)
+                    )
+                """)
+                logger.info("✅ Таблица class_spells готова")
+
+                # ===== 8. ТАБЛИЦА ОРУЖЕЙНЫХ ПРИЁМОВ (Weapon Mastery) =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS weapon_masteries (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(50) NOT NULL UNIQUE,
+                        trigger_condition TEXT NOT NULL,
+                        effect TEXT NOT NULL,
+                        weapons TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                logger.info("✅ Таблица weapon_masteries готова")
+
+                # ===== 9. ТАБЛИЦА БОЕВЫХ СТИЛЕЙ =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS fighting_styles (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(50) NOT NULL UNIQUE,
+                        description TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                logger.info("✅ Таблица fighting_styles готова")
+
+                # ===== 10. ТАБЛИЦА ТАИНСТВЕННЫХ ВОЗВАНИЙ =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS invocations (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(100) NOT NULL UNIQUE,
+                        level_required INTEGER DEFAULT 1,
+                        effect TEXT NOT NULL,
+                        requires_pact_boon BOOLEAN DEFAULT FALSE,
+                        pact_boon_type VARCHAR(50),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                logger.info("✅ Таблица invocations готова")
+
+                # ===== 11. ТАБЛИЦА ПЕРСОНАЖЕЙ (обновлённая структура для 5.5e) =====
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS characters (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        name VARCHAR(100) NOT NULL,
+                        race_id INTEGER REFERENCES races(id),
+                        subrace_id INTEGER REFERENCES subraces(id),
+                        class_id INTEGER REFERENCES classes(id),
+                        subclass_id INTEGER REFERENCES subclasses(id),
+                        background_id INTEGER REFERENCES backgrounds(id),
+                        level INTEGER DEFAULT 1,
+                        experience INTEGER DEFAULT 0,
+                        str INTEGER DEFAULT 10,
+                        dex INTEGER DEFAULT 10,
+                        con INTEGER DEFAULT 10,
+                        int INTEGER DEFAULT 10,
+                        wis INTEGER DEFAULT 10,
+                        cha INTEGER DEFAULT 10,
+                        hp INTEGER DEFAULT 0,
+                        ac INTEGER DEFAULT 10,
+                        speed INTEGER DEFAULT 30,
+                        selected_skills JSONB DEFAULT '[]',
+                        selected_masteries JSONB DEFAULT '[]',
+                        selected_fighting_style VARCHAR(50),
+                        selected_invocations JSONB DEFAULT '[]',
+                        selected_spells JSONB DEFAULT '[]',
+                        selected_equipment_choice VARCHAR(1),
+                        backstory TEXT,
+                        image_file_id VARCHAR(255),
+                        alignment VARCHAR(20) DEFAULT 'Нейтральное',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                logger.info("✅ Таблица characters готова")
+
+                # ===== ИНДЕКСЫ =====
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_characters_user_id ON characters(user_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_characters_class_id ON characters(class_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_characters_race_id ON characters(race_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_characters_background_id ON characters(background_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_class_spells_class_id ON class_spells(class_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_class_spells_spell_id ON class_spells(spell_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_subraces_race_id ON subraces(race_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_subclasses_class_id ON subclasses(class_id)")
+                logger.info("✅ Все индексы созданы")
+
+                conn.commit()
 
     except Exception as e:
         logger.error(f"❌ Ошибка при инициализации таблиц: {e}")
         raise
 
 
-def seed_backgrounds():
-    """Заполняет таблицу backgrounds начальными данными"""
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                # Проверяем, существует ли таблица
-                cur.execute("""
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables 
-                        WHERE table_name = 'backgrounds'
-                    )
-                """)
-                table_exists = cur.fetchone()[0]
-
-                if not table_exists:
-                    logger.warning("⚠️ Таблица backgrounds не существует, пропускаем заполнение")
-                    return
-
-                # Проверяем, пуста ли таблица
-                cur.execute("SELECT COUNT(*) FROM backgrounds")
-                count = cur.fetchone()[0]
-
-                if count == 0:
-                    backgrounds_data = get_default_backgrounds_for_db()
-
-                    for bg in backgrounds_data:
-                        cur.execute("""
-                            INSERT INTO backgrounds (name, characteristics, trait, skills, tools, equipment_a, equipment_b, description)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (name) DO NOTHING
-                        """, (
-                            bg["name"],
-                            Json(bg["characteristics"]),
-                            bg["trait"],
-                            Json(bg["skills"]),
-                            bg["tools"],
-                            bg["equipment_a"],
-                            bg["equipment_b"],
-                            bg["description"]
-                        ))
-
-                    logger.info(f"✅ Добавлено {len(backgrounds_data)} предысторий в базу данных")
-    except Exception as e:
-        logger.warning(f"⚠️ Ошибка при заполнении предысторий: {e}")
-
-
-def get_default_backgrounds_for_db() -> List[Dict[str, Any]]:
-    """Возвращает список предысторий для заполнения БД"""
-    return [
-        {
-            "name": "Артист",
-            "characteristics": ["Сила", "Ловкость", "Харизма"],
-            "trait": "Музыкант",
-            "skills": ["Акробатика", "Выступление"],
-            "tools": "Музыкальный инструмент",
-            "equipment_a": "Музыкальный инструмент, 2 Костюма, Зеркало, Духи, Дорожная одежда, 11 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы провели большую часть своей юности следуя за бродячими ярмарками..."
-        },
-        {
-            "name": "Мудрец",
-            "characteristics": ["Телосложение", "Интеллект", "Мудрость"],
-            "trait": "Посвящённый в магию",
-            "skills": ["История", "Тайная магия"],
-            "tools": "Инструменты каллиграфа",
-            "equipment_a": "Боевой посох, Инструменты каллиграфа, Книга, Пергамент, Мантия, 8 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы провели свои юные годы, путешествуя между поместьями и монастырями..."
-        },
-        {
-            "name": "Преступник",
-            "characteristics": ["Ловкость", "Телосложение", "Интеллект"],
-            "trait": "Бдительный",
-            "skills": ["Ловкость рук", "Скрытность"],
-            "tools": "Воровские инструменты",
-            "equipment_a": "2 Кинжала, Воровские инструменты, Ломик, 2 Кошеля, Дорожная одежда, 16 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы зарабатывали на жизнь в тёмных переулках, срезая кошельки..."
-        },
-        {
-            "name": "Стражник",
-            "characteristics": ["Сила", "Интеллект", "Мудрость"],
-            "trait": "Бдительный",
-            "skills": ["Атлетика", "Восприятие"],
-            "tools": "Игровой набор",
-            "equipment_a": "Копьё, Лёгкий арбалет, 20 Болтов, Игровой набор, Фонарь, Кандалы, Дорожная одежда, 12 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы провели бесчисленные часы на посту в башне..."
-        },
-        {
-            "name": "Бродяга",
-            "characteristics": ["Ловкость", "Мудрость", "Харизма"],
-            "trait": "Везучий",
-            "skills": ["Проницательность", "Скрытность"],
-            "tools": "Воровские инструменты",
-            "equipment_a": "2 Кинжала, Воровские инструменты, Игровой набор, Спальник, 2 Кошеля, Дорожная одежда, 16 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы выросли на улицах в окружении таких же злосчастных отбросов..."
-        },
-        {
-            "name": "Отшельник",
-            "characteristics": ["Телосложение", "Мудрость", "Харизма"],
-            "trait": "Лекарь",
-            "skills": ["Медицина", "Религия"],
-            "tools": "Набор травника",
-            "equipment_a": "Боевой посох, Набор травника, Спальник, Книга, Лампа, Масло, Дорожная одежда, 16 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы провели ранние годы в одиночестве, в хижине или монастыре..."
-        },
-        {
-            "name": "Проводник",
-            "characteristics": ["Ловкость", "Телосложение", "Мудрость"],
-            "trait": "Посвящённый в магию",
-            "skills": ["Выживание", "Скрытность"],
-            "tools": "Инструменты картографа",
-            "equipment_a": "Короткий лук, 20 Стрел, Инструменты картографа, Спальник, Колчан, Палатка, Дорожная одежда, 3 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы вошли в возраст под открытым небом, вдали от обжитых земель..."
-        },
-        {
-            "name": "Торговец",
-            "characteristics": ["Телосложение", "Интеллект", "Харизма"],
-            "trait": "Везучий",
-            "skills": ["Убеждение", "Обращение с животными"],
-            "tools": "Инструменты навигатора",
-            "equipment_a": "Инструменты навигатора, 2 Кошеля, Дорожная одежда, 22 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы были учеником торговца, хозяина каравана или лавочника..."
-        },
-        {
-            "name": "Дворянин",
-            "characteristics": ["Сила", "Интеллект", "Харизма"],
-            "trait": "Одарённый",
-            "skills": ["История", "Убеждение"],
-            "tools": "Игровой набор",
-            "equipment_a": "Игровой набор, Отличная одежда, Духи, 29 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы выросли в замке, окруженные богатством, властью и привилегиями..."
-        },
-        {
-            "name": "Писарь",
-            "characteristics": ["Ловкость", "Интеллект", "Мудрость"],
-            "trait": "Одарённый",
-            "skills": ["Восприятие", "Расследование"],
-            "tools": "Инструменты каллиграфа",
-            "equipment_a": "Инструменты каллиграфа, Отличная одежда, Лампа, Масло, Пергамент, 23 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Годы вашего становления прошли в скриптории..."
-        },
-        {
-            "name": "Ремесленник",
-            "characteristics": ["Сила", "Ловкость", "Интеллект"],
-            "trait": "Мастеровой",
-            "skills": ["Расследование", "Убеждение"],
-            "tools": "Инструменты кузнеца",
-            "equipment_a": "Ремесленные инструменты, 2 Кошеля, Дорожная одежда, 32 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы начали подмастерьем в мастерской ремесленника..."
-        },
-        {
-            "name": "Фермер",
-            "characteristics": ["Сила", "Телосложение", "Мудрость"],
-            "trait": "Крепкий",
-            "skills": ["Природа", "Обращение с животными"],
-            "tools": "Инструменты плотника",
-            "equipment_a": "Серп, Инструменты плотника, Комплект целителя, Котел, Лопата, Дорожная одежда, 30 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы выросли в близости с землёй, работая в поле и ухаживая за животными..."
-        },
-        {
-            "name": "Моряк",
-            "characteristics": ["Сила", "Ловкость", "Мудрость"],
-            "trait": "Дебошир",
-            "skills": ["Акробатика", "Восприятие"],
-            "tools": "Инструменты навигатора",
-            "equipment_a": "Кинжал, Инструменты навигатора, Верёвка, Дорожная одежда, 20 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы жили на морских просторах, палуба покачивалась под ногами..."
-        },
-        {
-            "name": "Послушник",
-            "characteristics": ["Интеллект", "Мудрость", "Харизма"],
-            "trait": "Посвящённый в магию",
-            "skills": ["Проницательность", "Религия"],
-            "tools": "Инструменты каллиграфа",
-            "equipment_a": "Инструменты каллиграфа, Молитвенник, Священный символ, Пергамент, Мантия, 8 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы посвятили себя служению в храме или священной роще..."
-        },
-        {
-            "name": "Солдат",
-            "characteristics": ["Сила", "Ловкость", "Телосложение"],
-            "trait": "Неистово атакующий",
-            "skills": ["Атлетика", "Запугивание"],
-            "tools": "Игровой набор",
-            "equipment_a": "Копьё, Короткий лук, 20 Стрел, Игровой набор, Комплект целителя, Колчан, Дорожная одежда, 14 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы начали готовиться к войне, как только достигли зрелости..."
-        },
-        {
-            "name": "Шарлатан",
-            "characteristics": ["Ловкость", "Телосложение", "Харизма"],
-            "trait": "Одарённый",
-            "skills": ["Ловкость рук", "Обман"],
-            "tools": "Набор для фальсификации",
-            "equipment_a": "Набор для фальсификации, Костюм, Отличная одежда, 15 ЗМ",
-            "equipment_b": "50 ЗМ",
-            "description": "Вы научились наживаться на несчастных, ищущих утешившую их ложь..."
-        }
-    ]
-
-
-# ---------------- CREATE ----------------
+# ---------------- СОХРАНЕНИЕ ПЕРСОНАЖА (ОБНОВЛЁННАЯ ВЕРСИЯ) ----------------
 def save_character(
         user_id: int,
         name: str,
-        race: str,
-        class_name: str,
-        background: str,
-        backstory: str,
-        stats: Dict[str, int],
-        hp: int,
-        ac: int,
-        race_traits: List[str],
-        class_features: List[str],
-        skills: List[str],
-        tools: List[str],
-        equipment: List[str],
-        spells: List[str],
-        background_trait: str = "",
-        background_skills: List[str] = None,
-        background_tools: str = "",
-        background_equipment_choice: str = "A",
-        image_file_id: str = None,
-        level: int = 1
+        race_id: Optional[int] = None,
+        subrace_id: Optional[int] = None,
+        class_id: Optional[int] = None,
+        subclass_id: Optional[int] = None,
+        background_id: Optional[int] = None,
+        level: int = 1,
+        experience: int = 0,
+        stats: Optional[Dict[str, int]] = None,
+        hp: int = 0,
+        ac: int = 10,
+        speed: int = 30,
+        selected_skills: Optional[List[str]] = None,
+        selected_masteries: Optional[List[str]] = None,
+        selected_fighting_style: Optional[str] = None,
+        selected_invocations: Optional[List[str]] = None,
+        selected_spells: Optional[List[str]] = None,
+        selected_equipment_choice: str = "A",
+        backstory: str = "",
+        image_file_id: Optional[str] = None,
+        alignment: str = "Нейтральное"
 ) -> int:
-    """Сохраняет персонажа в базу данных"""
+    """
+    Сохраняет персонажа в базу данных (обновлённая версия для 5.5e)
+
+    Args:
+        user_id: ID пользователя Telegram
+        name: имя персонажа
+        race_id: ID расы
+        subrace_id: ID подрасы
+        class_id: ID класса
+        subclass_id: ID подкласса
+        background_id: ID предыстории
+        level: уровень
+        experience: опыт
+        stats: характеристики
+        hp: хиты
+        ac: класс брони
+        speed: скорость
+        selected_skills: выбранные навыки
+        selected_masteries: выбранные оружейные приёмы
+        selected_fighting_style: выбранный боевой стиль
+        selected_invocations: выбранные возвания
+        selected_spells: выбранные заклинания
+        selected_equipment_choice: выбор снаряжения (A или B)
+        backstory: история персонажа
+        image_file_id: ID картинки в Telegram
+        alignment: мировоззрение
+
+    Returns:
+        int: ID созданного персонажа
+    """
+    if stats is None:
+        stats = {"STR": 10, "DEX": 10, "CON": 10, "INT": 10, "WIS": 10, "CHA": 10}
+    if selected_skills is None:
+        selected_skills = []
+    if selected_masteries is None:
+        selected_masteries = []
+    if selected_invocations is None:
+        selected_invocations = []
+    if selected_spells is None:
+        selected_spells = []
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO characters (
-                    user_id, name, race, class_name, level,
-                    background, backstory, image_file_id,
-                    str, dex, con, int, wis, cha,
-                    hp, ac,
-                    race_traits, class_features,
-                    skills, tools, equipment, spells,
-                    background_trait, background_skills, background_tools, background_equipment_choice
+                    user_id, name, race_id, subrace_id, class_id, subclass_id,
+                    background_id, level, experience, str, dex, con, int, wis, cha,
+                    hp, ac, speed, selected_skills, selected_masteries,
+                    selected_fighting_style, selected_invocations, selected_spells,
+                    selected_equipment_choice, backstory, image_file_id, alignment
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
             """, (
-                user_id, name, race, class_name, level,
-                background, backstory, image_file_id,
+                user_id, name, race_id, subrace_id, class_id, subclass_id,
+                background_id, level, experience,
                 stats.get("STR", 10), stats.get("DEX", 10), stats.get("CON", 10),
                 stats.get("INT", 10), stats.get("WIS", 10), stats.get("CHA", 10),
-                hp, ac,
-                Json(race_traits), Json(class_features),
-                Json(skills), Json(tools), Json(equipment), Json(spells),
-                background_trait, Json(background_skills or []), background_tools, background_equipment_choice
+                hp, ac, speed,
+                Json(selected_skills), Json(selected_masteries),
+                selected_fighting_style, Json(selected_invocations), Json(selected_spells),
+                selected_equipment_choice, backstory, image_file_id, alignment
             ))
 
             char_id = cur.fetchone()[0]
@@ -460,74 +371,61 @@ def save_character(
             return char_id
 
 
-# ---------------- READ ----------------
+# ---------------- ПОЛУЧЕНИЕ ПЕРСОНАЖЕЙ ----------------
 def get_user_characters(user_id: int) -> List[Dict[str, Any]]:
     """Возвращает всех персонажей пользователя"""
     with get_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, name, race, class_name, level, background, hp, ac, created_at
-                FROM characters
-                WHERE user_id = %s
-                ORDER BY id DESC
+                SELECT c.id, c.name, c.level, c.hp, c.ac, c.created_at,
+                       cls.name as class_name, r.name as race_name, bg.name as background_name
+                FROM characters c
+                LEFT JOIN classes cls ON c.class_id = cls.id
+                LEFT JOIN races r ON c.race_id = r.id
+                LEFT JOIN backgrounds bg ON c.background_id = bg.id
+                WHERE c.user_id = %s
+                ORDER BY c.id DESC
             """, (user_id,))
             return cur.fetchall()
 
 
 def get_character_by_id(char_id: int) -> Optional[Dict[str, Any]]:
-    """Возвращает персонажа по ID"""
+    """Возвращает полную информацию о персонаже по ID"""
     with get_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                "SELECT * FROM characters WHERE id = %s",
-                (char_id,)
-            )
+            cur.execute("""
+                SELECT c.*, 
+                       cls.name as class_name, cls.hit_die, cls.primary_stats, cls.saving_throws,
+                       r.name as race_name, r.speed as race_speed, r.size as race_size,
+                       bg.name as background_name, bg.trait as background_trait
+                FROM characters c
+                LEFT JOIN classes cls ON c.class_id = cls.id
+                LEFT JOIN races r ON c.race_id = r.id
+                LEFT JOIN backgrounds bg ON c.background_id = bg.id
+                WHERE c.id = %s
+            """, (char_id,))
             return cur.fetchone()
 
 
 def get_character_by_id_and_user(char_id: int, user_id: int) -> Optional[Dict[str, Any]]:
-    """Возвращает персонажа по ID и ID пользователя"""
+    """Возвращает персонажа по ID и ID пользователя (для проверки прав)"""
     with get_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                "SELECT * FROM characters WHERE id = %s AND user_id = %s",
-                (char_id, user_id)
-            )
+            cur.execute("""
+                SELECT c.*, 
+                       cls.name as class_name,
+                       r.name as race_name,
+                       bg.name as background_name
+                FROM characters c
+                LEFT JOIN classes cls ON c.class_id = cls.id
+                LEFT JOIN races r ON c.race_id = r.id
+                LEFT JOIN backgrounds bg ON c.background_id = bg.id
+                WHERE c.id = %s AND c.user_id = %s
+            """, (char_id, user_id))
             return cur.fetchone()
 
 
-# ---------------- BACKGROUNDS FROM DB ----------------
-def get_all_backgrounds_from_db() -> List[Dict[str, Any]]:
-    """Получает все предыстории из БД"""
-    try:
-        with get_connection() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT name, description FROM backgrounds ORDER BY name")
-                return cur.fetchall()
-    except Exception as e:
-        logger.warning(f"Не удалось загрузить предыстории: {e}")
-        return []
-
-
-def get_background_from_db(background_name: str) -> Optional[Dict[str, Any]]:
-    """Получает предысторию по имени из БД"""
-    try:
-        with get_connection() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT * FROM backgrounds WHERE name = %s", (background_name,))
-                return cur.fetchone()
-    except Exception as e:
-        logger.warning(f"Не удалось загрузить предысторию {background_name}: {e}")
-        return None
-
-
-def get_background_names() -> List[str]:
-    """Возвращает список названий предысторий"""
-    backgrounds = get_all_backgrounds_from_db()
-    return [bg["name"] for bg in backgrounds]
-
-
-# ---------------- UPDATE ----------------
+# ---------------- ОБНОВЛЕНИЕ ПЕРСОНАЖА ----------------
 def update_character_level(char_id: int, new_level: int) -> bool:
     """Обновляет уровень персонажа"""
     with get_connection() as conn:
@@ -593,7 +491,33 @@ def update_character_image(char_id: int, image_file_id: str) -> bool:
             return cur.rowcount > 0
 
 
-# ---------------- DELETE ----------------
+def update_character_experience(char_id: int, experience: int) -> bool:
+    """Обновляет опыт персонажа и автоматически повышает уровень при необходимости"""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Получаем текущий уровень
+            cur.execute("SELECT level FROM characters WHERE id = %s", (char_id,))
+            result = cur.fetchone()
+            if not result:
+                return False
+            current_level = result[0]
+
+            # Рассчитываем новый уровень по опыту
+            exp_thresholds = {1: 0, 2: 300, 3: 900, 4: 2700, 5: 6500}
+            new_level = current_level
+            for lvl, exp_needed in exp_thresholds.items():
+                if experience >= exp_needed and lvl > new_level:
+                    new_level = lvl
+
+            cur.execute("""
+                UPDATE characters 
+                SET experience = %s, level = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (experience, new_level, char_id))
+            return cur.rowcount > 0
+
+
+# ---------------- УДАЛЕНИЕ ПЕРСОНАЖА ----------------
 def delete_character(char_id: int, user_id: int) -> bool:
     """Удаляет персонажа (только если он принадлежит пользователю)"""
     with get_connection() as conn:
@@ -609,24 +533,229 @@ def delete_character(char_id: int, user_id: int) -> bool:
             return deleted
 
 
-# ---------------- STATS ----------------
+# ---------------- СТАТИСТИКА ----------------
 def get_user_characters_count(user_id: int) -> int:
     """Возвращает количество персонажей пользователя"""
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT COUNT(*) FROM characters WHERE user_id = %s",
-                (user_id,)
-            )
+            cur.execute("SELECT COUNT(*) FROM characters WHERE user_id = %s", (user_id,))
             return cur.fetchone()[0]
 
 
-# ---------------- BACKUP FUNCTIONS ----------------
+def get_total_characters_count() -> int:
+    """Возвращает общее количество персонажей в базе"""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM characters")
+            return cur.fetchone()[0]
+
+
+# ---------------- РАБОТА С ПРЕДЫСТОРИЯМИ (ИЗ БД) ----------------
+def get_all_backgrounds_from_db() -> List[Dict[str, Any]]:
+    """Получает все предыстории из БД"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id, name, description FROM backgrounds ORDER BY name")
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить предыстории: {e}")
+        return []
+
+
+def get_background_from_db(background_name: str) -> Optional[Dict[str, Any]]:
+    """Получает предысторию по имени из БД"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT id, name, characteristic1, characteristic2, characteristic3,
+                           trait, skills, tools, equipment_a, equipment_b, description
+                    FROM backgrounds WHERE name = %s
+                """, (background_name,))
+                return cur.fetchone()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить предысторию {background_name}: {e}")
+        return None
+
+
+def get_background_names() -> List[str]:
+    """Возвращает список названий предысторий"""
+    backgrounds = get_all_backgrounds_from_db()
+    return [bg["name"] for bg in backgrounds]
+
+
+# ---------------- РАБОТА С РАСАМИ (ИЗ БД) ----------------
+def get_all_races_from_db() -> List[Dict[str, Any]]:
+    """Получает все расы из БД"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id, name, speed, size, description, image_path FROM races ORDER BY name")
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить расы: {e}")
+        return []
+
+
+def get_race_from_db(race_name: str) -> Optional[Dict[str, Any]]:
+    """Получает расу по имени из БД"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id, name, speed, size, description, image_path FROM races WHERE name = %s",
+                            (race_name,))
+                return cur.fetchone()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить расу {race_name}: {e}")
+        return None
+
+
+def get_subraces_from_db(race_name: str) -> List[Dict[str, Any]]:
+    """Получает подрасы для указанной расы"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT s.id, s.name, s.trait, s.description, s.extra_speed
+                    FROM subraces s
+                    JOIN races r ON s.race_id = r.id
+                    WHERE r.name = %s
+                    ORDER BY s.name
+                """, (race_name,))
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить подрасы для {race_name}: {e}")
+        return []
+
+
+# ---------------- РАБОТА С КЛАССАМИ (ИЗ БД) ----------------
+def get_all_classes_from_db() -> List[Dict[str, Any]]:
+    """Получает все классы из БД"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT id, name, hit_die, primary_stats, saving_throws, 
+                           skill_choices, description, image_path, is_spellcaster, spellcasting_ability
+                    FROM classes ORDER BY name
+                """)
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить классы: {e}")
+        return []
+
+
+def get_class_from_db(class_name: str) -> Optional[Dict[str, Any]]:
+    """Получает класс по имени из БД"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT id, name, hit_die, primary_stats, saving_throws, 
+                           skill_choices, description, image_path, is_spellcaster, spellcasting_ability
+                    FROM classes WHERE name = %s
+                """, (class_name,))
+                return cur.fetchone()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить класс {class_name}: {e}")
+        return None
+
+
+# ---------------- РАБОТА С ОРУЖЕЙНЫМИ ПРИЁМАМИ ----------------
+def get_all_weapon_masteries_from_db() -> List[Dict[str, Any]]:
+    """Получает все оружейные приёмы из БД"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id, name, trigger_condition, effect, weapons FROM weapon_masteries ORDER BY name")
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить оружейные приёмы: {e}")
+        return []
+
+
+# ---------------- РАБОТА С БОЕВЫМИ СТИЛЯМИ ----------------
+def get_all_fighting_styles_from_db() -> List[Dict[str, Any]]:
+    """Получает все боевые стили из БД"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT id, name, description FROM fighting_styles ORDER BY name")
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить боевые стили: {e}")
+        return []
+
+
+# ---------------- РАБОТА С ВОЗВАНИЯМИ ----------------
+def get_all_invocations_from_db(level: int = 1) -> List[Dict[str, Any]]:
+    """Получает доступные возвания для колдуна из БД"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT id, name, level_required, effect, requires_pact_boon, pact_boon_type
+                    FROM invocations 
+                    WHERE level_required <= %s
+                    ORDER BY level_required, name
+                """, (level,))
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить возвания: {e}")
+        return []
+
+
+# ---------------- РАБОТА С ЗАКЛИНАНИЯМИ ----------------
+def get_spells_for_class_from_db(class_name: str, level: int = 1, is_cantrip: bool = None) -> List[Dict[str, Any]]:
+    """Получает заклинания для указанного класса из БД"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Сначала получаем ID класса
+                cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
+                class_result = cur.fetchone()
+                if not class_result:
+                    return []
+                class_id = class_result["id"]
+
+                # Формируем запрос
+                query = """
+                    SELECT s.id, s.name, s.level, s.is_cantrip, s.description, s.school
+                    FROM spells s
+                    JOIN class_spells cs ON s.id = cs.spell_id
+                    WHERE cs.class_id = %s AND cs.is_available = TRUE
+                """
+                params = [class_id]
+
+                if is_cantrip is not None:
+                    query += " AND s.is_cantrip = %s"
+                    params.append(is_cantrip)
+
+                if not is_cantrip:
+                    query += " AND s.level <= %s"
+                    params.append(level)
+
+                query += " ORDER BY s.level, s.name"
+
+                cur.execute(query, params)
+                return cur.fetchall()
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить заклинания для {class_name}: {e}")
+        return []
+
+
+# ---------------- БЭКАП И ВОССТАНОВЛЕНИЕ ----------------
 def backup_all_characters():
     """Копирует всех персонажей из characters в characters_backup"""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
+                # Создаём таблицу backup если не существует
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS characters_backup (LIKE characters INCLUDING ALL)
+                """)
+
                 # Очищаем таблицу backup
                 cur.execute("TRUNCATE TABLE characters_backup")
 
@@ -646,6 +775,17 @@ def restore_from_backup():
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
+                # Проверяем существование таблицы backup
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'characters_backup'
+                    )
+                """)
+                if not cur.fetchone()[0]:
+                    logger.warning("⚠️ Таблица characters_backup не существует")
+                    return
+
                 # Очищаем основную таблицу
                 cur.execute("TRUNCATE TABLE characters")
 
@@ -660,24 +800,26 @@ def restore_from_backup():
         logger.error(f"❌ Ошибка при восстановлении из резервной копии: {e}")
 
 
-# ---------------- MIGRATION ----------------
+# ---------------- МИГРАЦИЯ СТАРЫХ ДАННЫХ ----------------
 def migrate_database():
-    """Миграция существующей базы данных (добавление новых полей)"""
+    """Миграция существующей базы данных (добавление новых полей для 5.5e)"""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
+                # Добавляем новые колонки в characters, если их нет
                 new_columns = [
-                    ("background", "VARCHAR(100)"),
-                    ("backstory", "TEXT"),
-                    ("image_file_id", "VARCHAR(255)"),
-                    ("race_traits", "JSONB DEFAULT '[]'"),
-                    ("class_features", "JSONB DEFAULT '[]'"),
-                    ("tools", "JSONB DEFAULT '[]'"),
-                    ("background_trait", "VARCHAR(255)"),
-                    ("background_skills", "JSONB DEFAULT '[]'"),
-                    ("background_tools", "VARCHAR(255)"),
-                    ("background_equipment_choice", "VARCHAR(1)"),
-                    ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+                    ("race_id", "INTEGER"),
+                    ("subrace_id", "INTEGER"),
+                    ("class_id", "INTEGER"),
+                    ("subclass_id", "INTEGER"),
+                    ("background_id", "INTEGER"),
+                    ("experience", "INTEGER DEFAULT 0"),
+                    ("speed", "INTEGER DEFAULT 30"),
+                    ("selected_masteries", "JSONB DEFAULT '[]'"),
+                    ("selected_fighting_style", "VARCHAR(50)"),
+                    ("selected_invocations", "JSONB DEFAULT '[]'"),
+                    ("selected_spells", "JSONB DEFAULT '[]'"),
+                    ("alignment", "VARCHAR(20) DEFAULT 'Нейтральное'"),
                 ]
 
                 for col_name, col_type in new_columns:
@@ -696,19 +838,31 @@ def migrate_database():
         logger.warning(f"⚠️ Ошибка миграции: {e}")
 
 
-# ---------------- TEST ----------------
+# ---------------- ТЕСТИРОВАНИЕ ----------------
 if __name__ == "__main__":
-    print("=== Тест базы данных ===\n")
+    print("=" * 60)
+    print("🐉 ТЕСТ МОДУЛЯ DB.PY (D&D 5.5e)")
+    print("=" * 60)
 
     try:
+        # Инициализация базы данных
         init_database()
         migrate_database()
 
-        backgrounds = get_all_backgrounds_from_db()
-        print(f"📚 Загружено предысторий: {len(backgrounds)}")
-        for bg in backgrounds[:5]:
-            print(f"   - {bg['name']}")
+        # Проверка таблиц
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                tables = ["races", "subraces", "classes", "subclasses", "backgrounds",
+                          "spells", "class_spells", "weapon_masteries", "fighting_styles",
+                          "invocations", "characters"]
+
+                print("\n📋 СУЩЕСТВУЮЩИЕ ТАБЛИЦЫ:")
+                for table in tables:
+                    cur.execute(f"SELECT COUNT(*) FROM {table}")
+                    count = cur.fetchone()[0]
+                    print(f"   • {table}: {count} записей")
 
         print("\n✅ Модуль db.py готов к использованию!")
+
     except Exception as e:
         print(f"❌ Ошибка: {e}")

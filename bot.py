@@ -169,16 +169,10 @@ async def info_command(m: Message):
         "• Генерация PDF-листа персонажа\n"
         "• Сохранение истории персонажа\n"
         "• Загрузка портрета персонажа\n\n"
-        "**Технологии:**\n"
-        "• Python + aiogram\n"
-        "• PostgreSQL\n"
-        "• WeasyPrint для генерации PDF\n\n"
         "Приятной игры! 🎮"
     )
     await m.answer(info_text, parse_mode=ParseMode.MARKDOWN)
 
-
-# ↓↓↓ ВОТ ЭТОТ ОБРАБОТЧИК ОТСУТСТВУЕТ! ↓↓↓
 
 @dp.message(F.text == "❓ Помощь")
 async def help_button(m: Message):

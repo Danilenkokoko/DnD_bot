@@ -364,18 +364,18 @@ async def help_button(m: Message):
 @dp.message(F.text == "ℹ️ О боте")
 async def info_button(m: Message):
     info_text = (
-        "ℹ️ **D&D Character Creator**\n\n"
-        "**Особенности:**\n"
+        "ℹ️ D&D Character Creator\n\n"
+        "Особенности:\n"
         "• 16 рас с подрасами и картинками\n"
         "• 13 классов с подклассами и картинками\n"
         "• 16 предысторий с бонусами к характеристикам\n"
         "• Заклинания, оружейные приёмы, боевые стили\n"
         "• Таинственные возвания для колдуна\n"
         "• Генерация PDF листа персонажа\n\n"
-        "**Разработчик:** @danilenkokoko007_official\n\n"
+        "Разработчик: @danilenkokoko007_official\n\n"
         "Приятной игры! 🎲"
     )
-    await m.answer(info_text, parse_mode=ParseMode.MARKDOWN)
+    await m.answer(info_text, parse_mode=None)
 
 
 # ---------------- CREATE CHARACTER (НОВЫЙ ПОРЯДОК!) ----------------

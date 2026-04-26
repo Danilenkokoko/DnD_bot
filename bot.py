@@ -85,6 +85,43 @@ from dnd_logic import (
 )
 from pdf_generator import generate_pdf
 
+
+# Прямой доступ к предысториям (обход проблемной функции)
+def get_background_data_direct(background_name: str) -> Dict[str, Any]:
+    """Прямое получение данных предыстории из БД (обход проблемной функции)"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT characteristic1, characteristic2, characteristic3,
+                           trait, skills, tools, equipment_a, equipment_b, description
+                    FROM backgrounds WHERE name = %s
+                """, (background_name,))
+                row = cur.fetchone()
+                if row:
+                    skills = row[4]
+                    if isinstance(skills, str):
+                        try:
+                            import json
+                            skills = json.loads(skills)
+                        except:
+                            skills = []
+                    elif skills is None:
+                        skills = []
+
+                    return {
+                        'characteristics': [row[0], row[1], row[2]],
+                        'trait': row[3] if row[3] else "Нет",
+                        'skills': skills,
+                        'tools': row[5] if row[5] else "Нет",
+                        'equipment_a': row[6] if row[6] else "Нет описания",
+                        'equipment_b': row[7] if row[7] else "Нет описания",
+                        'description': row[8] if row[8] else f"Предыстория {background_name}"
+                    }
+    except Exception as e:
+        logger.error(f"Ошибка получения предыстории {background_name}: {e}")
+    return None
+
 # ---------------- CONFIG ----------------
 load_dotenv()
 
@@ -370,9 +407,8 @@ def create_invocations_keyboard(level: int = 1) -> InlineKeyboardMarkup:
 
 
 def create_background_equipment_keyboard(background: str) -> InlineKeyboardMarkup:
-    bg_info = get_background_data(background)
+    bg_info = get_background_data_direct(background)  # ← заменили
 
-    # Добавляем проверку
     if not bg_info:
         equipment_a = "Нет описания"
         equipment_b = "Нет описания"
@@ -611,21 +647,26 @@ async def select_background(call: CallbackQuery, state: FSMContext):
     await state.update_data(background=background)
     await state.set_state(CreateCharacter.race_select)
 
-    bg_info = get_background_data(background)
-    characteristics = get_background_characteristics(background)
-    bg_skills = get_background_skills(background)
-    bg_trait = get_background_trait(background)
-    bg_tools = get_background_tools(background)
+    bg_info = get_background_data_direct(background)  # ← заменили
+
+    # Также замените эти вызовы, если они есть:
+    characteristics = bg_info.get('characteristics', ["Ловкость", "Ловкость", "Ловкость"]) if bg_info else ["Ловкость",
+                                                                                                            "Ловкость",
+                                                                                                            "Ловкость"]
+    bg_info = get_background_data_direct(background)
+    bg_skills = bg_info.get('skills', []) if bg_info else []
+    bg_trait = bg_info.get('trait', "Нет") if bg_info else "Нет"
+    bg_tools = bg_info.get('tools', "Нет") if bg_info else "Нет"
 
     text = (
         f"📜 Предыстория: {background}\n\n"
-        f"📖 {bg_info.get('description', 'Нет описания')[:400]}...\n\n"
+        f"📖 {bg_info.get('description', 'Нет описания')[:400] if bg_info else 'Нет описания'}...\n\n"
         f"✨ Бонусы к характеристикам:\n"
         f"   • +2 к {characteristics[0]}\n"
         f"   • +1 к {characteristics[1]}\n\n"
-        f"Черта: {bg_trait if bg_trait else 'Нет'}\n"
+        f"Черта: {bg_trait}\n"
         f"Навыки: {', '.join(bg_skills) if bg_skills else 'Нет'}\n"
-        f"Инструменты: {bg_tools if bg_tools else 'Нет'}\n\n"
+        f"Инструменты: {bg_tools}\n\n"
         f"Шаг 3/12: Выберите РАСУ\n"
         f"🧝 Раса даёт врождённые способности (без бонусов к характеристикам!)"
     )
@@ -1317,9 +1358,8 @@ async def go_to_background_equipment(m: Message, state: FSMContext):
         await state.clear()
         return
 
-    bg_info = get_background_data(background)
+    bg_info = get_background_data_direct(background)  # ← заменили
 
-    # Добавляем проверку
     if not bg_info:
         logger.error(f"❌ Данные предыстории '{background}' не найдены!")
         await m.answer(f"Ошибка: данные предыстории '{background}' не найдены. Попробуйте создать персонажа заново.",
@@ -1346,14 +1386,13 @@ async def select_background_equipment(call: CallbackQuery, state: FSMContext):
     equipment_choice = call.data.replace("bg_equip_", "")
     await state.update_data(background_equipment_choice=equipment_choice)
 
-    # Меняем состояние на ввод истории
     await state.set_state(CreateCharacter.backstory_input)
 
     data = await state.get_data()
     background = data.get("background")
-    bg_info = get_background_data(background)
+    bg_info = get_background_data_direct(background)  # ← заменили
 
-    chosen_equipment = bg_info.get(f"equipment_{equipment_choice.lower()}", "Нет описания")
+    chosen_equipment = bg_info.get(f"equipment_{equipment_choice.lower()}", "Нет описания") if bg_info else "Нет описания"
 
     await call.message.delete()
     await call.message.answer(

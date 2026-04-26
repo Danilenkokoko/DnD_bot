@@ -78,7 +78,7 @@ from dnd_logic import (
     validate_character, validate_name,
 
     # Вспомогательные
-    get_class_features, get_class_by_name,  # get_class_by_name оставляем
+    get_class_features, get_class_by_name,
 )
 from pdf_generator import generate_pdf
 
@@ -144,8 +144,6 @@ class CreateCharacter(StatesGroup):
 
 
 # ---------------- MENU ----------------
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-
 def main_menu() -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(text="🎲 Создать персонажа")],
@@ -265,7 +263,7 @@ def create_weapon_keyboard(class_name: str) -> InlineKeyboardMarkup:
     weapons = get_weapons_for_class(class_name)
     buttons = []
 
-    for w in weapons[:12]:  # Ограничиваем количество для удобства
+    for w in weapons[:12]:
         buttons.append([InlineKeyboardButton(
             text=f"⚔️ {w['name']} ({w['damage_dice']} {w['damage_type']})",
             callback_data=f"weapon_{w['id']}"
@@ -302,12 +300,8 @@ def create_fighting_style_keyboard(class_name: str) -> InlineKeyboardMarkup:
 
     for s in styles:
         buttons.append([InlineKeyboardButton(
-            text=f"🛡️ {s['name']}",
+            text=f"🛡️ {s['name']}: {s['description'][:50]}",
             callback_data=f"style_{s['id']}"
-        )])
-        buttons.append([InlineKeyboardButton(
-            text=f"   {s['description'][:50]}...",
-            callback_data="style_info"
         )])
 
     buttons.append([InlineKeyboardButton(text="✅ Готово", callback_data="style_confirm")])
@@ -318,17 +312,12 @@ def create_fighting_style_keyboard(class_name: str) -> InlineKeyboardMarkup:
 def create_invocations_keyboard(level: int = 1) -> InlineKeyboardMarkup:
     invocations = get_all_invocations(level)
     buttons = []
-    selected = []  # Будет храниться в state
 
-    for inv in invocations[:8]:  # Ограничиваем для удобства
+    for inv in invocations[:8]:
         emoji = "🔮" if inv['level_required'] == 1 else "🔷"
         buttons.append([InlineKeyboardButton(
-            text=f"{emoji} {inv['name']} (ур. {inv['level_required']})",
+            text=f"{emoji} {inv['name']} (ур. {inv['level_required']}): {inv['effect'][:50]}",
             callback_data=f"inv_{inv['id']}"
-        )])
-        buttons.append([InlineKeyboardButton(
-            text=f"   {inv['effect'][:50]}...",
-            callback_data="inv_info"
         )])
 
     buttons.append([InlineKeyboardButton(text="✅ Готово", callback_data="inv_confirm")])
@@ -709,6 +698,7 @@ async def back_to_races(call: CallbackQuery, state: FSMContext):
 # ---------------- ШАГ 4: ГЕНЕРАЦИЯ ХАРАКТЕРИСТИК ----------------
 @dp.callback_query(lambda c: c.data.startswith("stats_"))
 async def select_stats_method(call: CallbackQuery, state: FSMContext):
+    logger.info(f"🔍 select_stats_method вызвана с data={call.data}")
     method = call.data.replace("stats_", "")
     await state.update_data(stats_method=method)
 
@@ -751,7 +741,7 @@ async def select_stats_method(call: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "stats_confirm")
 async def confirm_stats(call: CallbackQuery, state: FSMContext):
-    # ✅ Важно: меняем состояние на name_input!
+    logger.info(f"🔍 confirm_stats вызвана с data={call.data}")
     await state.set_state(CreateCharacter.name_input)
 
     data = await state.get_data()
@@ -998,6 +988,18 @@ async def back_to_weapon(call: CallbackQuery, state: FSMContext):
         f"**Шаг 7/12: Выберите ОРУЖИЕ**\n\n⚔️ Класс {class_name}\n\nВыберите основное оружие:",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=create_weapon_keyboard(class_name)
+    )
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "back_to_spells")
+async def back_to_spells(call: CallbackQuery, state: FSMContext):
+    await state.set_state(CreateCharacter.spells_method_select)
+    await call.message.delete()
+    await call.message.answer(
+        "**Шаг 6/12: Выбор ЗАКЛИНАНИЙ**\n\nВыберите метод получения заклинаний:",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=create_spells_method_keyboard()
     )
     await call.answer()
 
@@ -1447,6 +1449,7 @@ async def cancel_creation_callback(call: CallbackQuery, state: FSMContext):
     await call.message.edit_text("❌ Создание персонажа отменено")
     await call.answer()
 
+
 @dp.callback_query(lambda c: c.data == "mastery_info")
 async def mastery_info(call: CallbackQuery):
     await call.answer("Этот приём оптимально подходит для выбранного оружия!", show_alert=False)
@@ -1455,6 +1458,7 @@ async def mastery_info(call: CallbackQuery):
 @dp.callback_query(lambda c: c.data == "masteries_header")
 async def masteries_header(call: CallbackQuery):
     await call.answer("Звёздочкой отмечены оптимальные приёмы для вашего оружия", show_alert=False)
+
 
 @dp.message(Command("skip"))
 async def skip_command(m: Message, state: FSMContext):

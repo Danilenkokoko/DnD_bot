@@ -38,6 +38,46 @@ def get_connection():
 
 
 # =========================================================
+# СЛОВАРИ ДЛЯ КАРТИНОК (FALLBACK)
+# =========================================================
+
+RACE_IMAGES_FALLBACK = {
+    "Аасимар": "images/races/aasimar.jpg",
+    "Гном": "images/races/gnom.jpg",
+    "Голиаф": "images/races/goliaf.jpg",
+    "Дампир": "images/races/dampir.jpg",
+    "Дварф": "images/races/dwarf.jpg",
+    "Драконорожденный": "images/races/dragonborn.jpg",
+    "Калаштар": "images/races/kalashtar.jpg",
+    "Кованный": "images/races/kowanniy.jpg",
+    "Кхоравар": "images/races/khorawar.jpg",
+    "Орк": "images/races/ork.jpg",
+    "Полурослик": "images/races/halfman.jpg",
+    "Тифлинг": "images/races/tifling.jpg",
+    "Человек": "images/races/man.jpg",
+    "Ченжлинг": "images/races/changaling.jpg",
+    "Шифтер": "images/races/shifter.jpg",
+    "Эльф": "images/races/elf.jpg"
+}
+
+CLASS_IMAGES_FALLBACK = {
+    "Артефактор": "images/classes/artifactor.jpg",
+    "Бард": "images/classes/bard.jpg",
+    "Варвар": "images/classes/barbarian.jpg",
+    "Воин": "images/classes/fighter.jpg",
+    "Волшебник": "images/classes/wizard.jpg",
+    "Друид": "images/classes/druid.jpg",
+    "Жрец": "images/classes/cleric.jpg",
+    "Колдун": "images/classes/warlock.jpg",
+    "Монах": "images/classes/monk.jpg",
+    "Паладин": "images/classes/paladin.jpg",
+    "Плут": "images/classes/rogue.jpg",
+    "Следопыт": "images/classes/ranger.jpg",
+    "Чародей": "images/classes/sorcerer.jpg"
+}
+
+
+# =========================================================
 # 1. БАЗОВЫЕ РАСЧЁТЫ
 # =========================================================
 
@@ -381,21 +421,38 @@ def get_race_size(race_name: str) -> str:
 
 def get_race_image_path(race_name: str) -> Optional[str]:
     """Возвращает путь к картинке расы"""
+    # Сначала пробуем получить из БД
     race = get_race_by_name(race_name)
-    if race and race.get('image_path'):
+    if race and race.get('image_path') and os.path.exists(race.get('image_path')):
         return race['image_path']
 
-    images = {
-        "Аасимар": "images/races/aasimar.jpg", "Гном": "images/races/gnom.jpg",
-        "Голиаф": "images/races/goliaf.jpg", "Дварф": "images/races/dwarf.jpg",
-        "Драконорожденный": "images/races/dragonborn.jpg", "Полурослик": "images/races/halfman.jpg",
-        "Тифлинг": "images/races/tifling.jpg", "Человек": "images/races/man.jpg",
-        "Эльф": "images/races/elf.jpg", "Орк": "images/races/ork.jpg",
-        "Калаштар": "images/races/kalashtar.jpg", "Кованный": "images/races/kowanniy.jpg",
-        "Кхоравар": "images/races/khorawar.jpg", "Ченжлинг": "images/races/changaling.jpg",
-        "Шифтер": "images/races/shifter.jpg", "Дампир": "images/races/dampir.jpg",
+    # Если нет в БД или файл не существует - используем fallback
+    fallback_path = RACE_IMAGES_FALLBACK.get(race_name)
+    if fallback_path and os.path.exists(fallback_path):
+        return fallback_path
+
+    # Если и fallback не подошел - проверяем альтернативные имена файлов
+    alt_names = {
+        "Драконорожденный": "dragonborn.jpg",
+        "Полурослик": "halfling.jpg",
+        "Человек": "human.jpg",
+        "Эльф": "elf.jpg",
+        "Дварф": "dwarf.jpg",
+        "Тифлинг": "tiefling.jpg"
     }
-    return images.get(race_name)
+    if race_name in alt_names:
+        alt_path = f"images/races/{alt_names[race_name]}"
+        if os.path.exists(alt_path):
+            return alt_path
+
+    logger.warning(f"Картинка для расы '{race_name}' не найдена")
+    return None
+
+
+def get_race_image_exists(race_name: str) -> bool:
+    """Проверяет, существует ли файл картинки расы"""
+    image_path = get_race_image_path(race_name)
+    return image_path is not None and os.path.exists(image_path)
 
 
 def has_subraces(race_name: str) -> bool:
@@ -561,10 +618,18 @@ def get_class_by_name(class_name: str) -> Optional[Dict[str, Any]]:
             """, (class_name,))
             row = cur.fetchone()
             if row:
+                # Обработка JSON полей
+                primary_stats = row[3]
+                if isinstance(primary_stats, str):
+                    primary_stats = json.loads(primary_stats)
+                saving_throws = row[4]
+                if isinstance(saving_throws, str):
+                    saving_throws = json.loads(saving_throws)
+
                 return {
                     'id': row[0], 'name': row[1], 'hit_die': row[2],
-                    'primary_stats': row[3] if isinstance(row[3], list) else json.loads(row[3]),
-                    'saving_throws': row[4] if isinstance(row[4], list) else json.loads(row[4]),
+                    'primary_stats': primary_stats,
+                    'saving_throws': saving_throws,
                     'skill_choices': row[5],
                     'description': row[6] if row[6] else _get_fallback_class_description(class_name),
                     'image_path': row[7], 'is_spellcaster': row[8], 'spellcasting_ability': row[9]
@@ -602,20 +667,36 @@ def get_class_description(class_name: str) -> str:
 
 def get_class_image_path(class_name: str) -> Optional[str]:
     """Возвращает путь к картинке класса"""
+    # Сначала пробуем получить из БД
     class_data = get_class_by_name(class_name)
-    if class_data and class_data.get('image_path'):
+    if class_data and class_data.get('image_path') and os.path.exists(class_data.get('image_path')):
         return class_data['image_path']
 
-    images = {
-        "Артефактор": "images/classes/artifactor.jpg", "Бард": "images/classes/bard.jpg",
-        "Варвар": "images/classes/barbarian.jpg", "Воин": "images/classes/fighter.jpg",
-        "Волшебник": "images/classes/wizard.jpg", "Друид": "images/classes/druid.jpg",
-        "Жрец": "images/classes/cleric.jpg", "Колдун": "images/classes/warlock.jpg",
-        "Монах": "images/classes/monk.jpg", "Паладин": "images/classes/paladin.jpg",
-        "Плут": "images/classes/rogue.jpg", "Следопыт": "images/classes/ranger.jpg",
-        "Чародей": "images/classes/sorcerer.jpg",
+    # Если нет в БД или файл не существует - используем fallback
+    fallback_path = CLASS_IMAGES_FALLBACK.get(class_name)
+    if fallback_path and os.path.exists(fallback_path):
+        return fallback_path
+
+    # Альтернативные имена файлов
+    alt_names = {
+        "Артефактор": "artificer.jpg",
+        "Волшебник": "wizard.jpg",
+        "Чародей": "sorcerer.jpg",
+        "Следопыт": "ranger.jpg"
     }
-    return images.get(class_name)
+    if class_name in alt_names:
+        alt_path = f"images/classes/{alt_names[class_name]}"
+        if os.path.exists(alt_path):
+            return alt_path
+
+    logger.warning(f"Картинка для класса '{class_name}' не найдена")
+    return None
+
+
+def get_class_image_exists(class_name: str) -> bool:
+    """Проверяет, существует ли файл картинки класса"""
+    image_path = get_class_image_path(class_name)
+    return image_path is not None and os.path.exists(image_path)
 
 
 def get_class_info(class_name: str) -> Dict[str, Any]:
@@ -646,7 +727,7 @@ def get_class_features(class_name: str, level: int = 1) -> List[str]:
         features.append("Заклинания")
 
     class_specific = {
-        "Бард": ["Вдохновение барда"], "Варвар": ["Ярость", "Бездоспешная защита"],
+        "Бард": ["Вдохновление барда"], "Варвар": ["Ярость", "Бездоспешная защита"],
         "Воин": ["Второе дыхание", "Боевой стиль"], "Волшебник": ["Книга заклинаний", "Восстановление магии"],
         "Друид": ["Друидийский язык"], "Жрец": ["Божественное вдохновение"],
         "Колдун": ["Потусторонний покровитель", "Магия договора"],
@@ -685,7 +766,7 @@ def get_subclasses_for_class(class_name: str, level: int = 1) -> List[Dict[str, 
 
 
 # =========================================================
-# 6. РАБОТА С ПРЕДЫСТОРИЯМИ (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+# 6. РАБОТА С ПРЕДЫСТОРИЯМИ
 # =========================================================
 
 def get_all_backgrounds() -> List[Dict[str, Any]]:
@@ -711,7 +792,7 @@ def get_background_list() -> List[str]:
 
 
 def get_background_by_name(background_name: str) -> Optional[Dict[str, Any]]:
-    """Получает информацию о предыстории по названию (ИСПРАВЛЕНА)"""
+    """Получает информацию о предыстории по названию"""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -721,7 +802,6 @@ def get_background_by_name(background_name: str) -> Optional[Dict[str, Any]]:
             """, (background_name,))
             row = cur.fetchone()
             if row:
-                # Декодируем skills из JSON
                 skills = row[6]
                 if isinstance(skills, str):
                     try:
@@ -731,7 +811,6 @@ def get_background_by_name(background_name: str) -> Optional[Dict[str, Any]]:
                 elif skills is None:
                     skills = []
 
-                # Проверяем, что характеристики не None
                 char1 = row[2] if row[2] else "Ловкость"
                 char2 = row[3] if row[3] else "Ловкость"
                 char3 = row[4] if row[4] else "Ловкость"
@@ -751,10 +830,9 @@ def get_background_by_name(background_name: str) -> Optional[Dict[str, Any]]:
 
 
 def get_background_data(background_name: str) -> Dict[str, Any]:
-    """Возвращает данные предыстории (для совместимости) - ИСПРАВЛЕНА"""
+    """Возвращает данные предыстории (для совместимости)"""
     bg = get_background_by_name(background_name)
     if not bg:
-        # Возвращаем словарь с значениями по умолчанию вместо пустого
         return {
             'characteristics': ["Ловкость", "Ловкость", "Ловкость"],
             'trait': "Нет",
@@ -781,7 +859,6 @@ def get_background_characteristics(background_name: str) -> List[str]:
     bg = get_background_by_name(background_name)
     if bg:
         return bg['characteristics']
-    # Возвращаем значения по умолчанию
     return ["Ловкость", "Ловкость", "Ловкость"]
 
 
@@ -870,7 +947,7 @@ def get_armor_by_name(armor_name: str) -> Optional[Dict[str, Any]]:
 
 
 # =========================================================
-# 8. РАБОТА С ОРУЖИЕМ И ПРИЁМАМИ (АВТОМАТИЧЕСКИЕ)
+# 8. РАБОТА С ОРУЖИЕМ И ПРИЁМАМИ
 # =========================================================
 
 def get_weapon_by_name(weapon_name: str) -> Optional[Dict[str, Any]]:
@@ -897,12 +974,7 @@ def get_weapon_by_name(weapon_name: str) -> Optional[Dict[str, Any]]:
 
 
 def get_detailed_masteries_for_weapon(weapon_name: str) -> List[Dict[str, Any]]:
-    """
-    Возвращает детальные оружейные приёмы для указанного оружия
-
-    Returns:
-        List[Dict]: список приёмов с полями name, description, optimal
-    """
+    """Возвращает детальные оружейные приёмы для указанного оружия"""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -924,25 +996,12 @@ def get_detailed_masteries_for_weapon(weapon_name: str) -> List[Dict[str, Any]]:
 def auto_assign_masteries(weapon_name: str, class_name: str) -> List[str]:
     """
     Автоматически выбирает оружейные приёмы для оружия (без участия игрока)
-
-    Принцип:
-    - Воин получает 2 приёма, остальные воинские классы — 1
-    - Если приёмов достаточно — берём отмеченные как optimal
-    - Если optimal нет или их меньше — берём случайные или все доступные
-
-    Args:
-        weapon_name: название оружия
-        class_name: название класса
-
-    Returns:
-        List[str]: список выбранных приёмов
     """
     masteries = get_detailed_masteries_for_weapon(weapon_name)
 
     if not masteries:
         return []
 
-    # Определяем количество приёмов
     martial_classes = ["Воин", "Паладин", "Следопыт", "Варвар", "Плут"]
     if class_name not in martial_classes:
         return []
@@ -952,7 +1011,6 @@ def auto_assign_masteries(weapon_name: str, class_name: str) -> List[str]:
     if len(masteries) <= masteries_count:
         return [m['name'] for m in masteries]
 
-    # Сначала выбираем оптимальные
     optimal = [m for m in masteries if m.get('optimal', False)]
     selected = []
 
@@ -992,7 +1050,7 @@ def get_all_fighting_styles() -> List[Dict[str, Any]]:
 
 
 def get_fighting_styles_for_class(class_name: str) -> List[Dict[str, Any]]:
-    """Возвращает боевые стили, доступные для класса (с фильтрацией)"""
+    """Возвращает боевые стили, доступные для класса"""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -1112,7 +1170,7 @@ def get_recommended_spells(class_name: str) -> Dict[str, List[Dict[str, Any]]]:
 
                 spells = cur.fetchall()
                 for spell in spells:
-                    if spell[3]:  # is_cantrip
+                    if spell[3]:
                         result["cantrips"].append({'id': spell[0], 'name': spell[1], 'level': spell[2],
                                                    'is_cantrip': spell[3], 'description': spell[4]})
                     else:
@@ -1211,53 +1269,16 @@ if __name__ == "__main__":
     print("ТЕСТ D&D LOGIC MODULE (PostgreSQL версия)")
     print("=" * 60)
 
-    # 1. Тест умного распределения характеристик
-    print("\n1. ТЕСТ УМНОГО РАСПРЕДЕЛЕНИЯ ХАРАКТЕРИСТИК:")
-    test_cases = [
-        ("Воин", "Солдат"),
-        ("Волшебник", "Мудрец"),
-        ("Следопыт", "Отшельник"),
-        ("Паладин", "Дворянин"),
-    ]
-
-    for class_name, bg_name in test_cases:
-        stats = get_initial_stats_intelligent(bg_name, class_name)
-        class_primary = get_class_primary_stats(class_name)
-        bg_chars = get_background_characteristics(bg_name)
-        print(f"   {class_name} + {bg_name}:")
-        print(f"     Основные класса: {class_primary}")
-        print(f"     Бонусы предыстории: +2 и +1 к {bg_chars[0]}, {bg_chars[1]}")
-        print(f"     Результат: STR={stats['STR']}, DEX={stats['DEX']}, CON={stats['CON']}, "
-              f"INT={stats['INT']}, WIS={stats['WIS']}, CHA={stats['CHA']}")
-
-    # 2. Тест снаряжения классов
-    print("\n2. ТЕСТ СНАРЯЖЕНИЯ КЛАССОВ:")
-    for class_name in ["Воин", "Волшебник", "Паладин"]:
-        equipment = get_class_equipment(class_name)
-        print(f"   {class_name}:")
-        for eq in equipment:
-            print(
-                f"     Вариант {eq['choice'] if eq['choice'] else 'стандарт'}: оружие {eq['weapon']}, броня {eq['armor']}")
-
-    # 3. Тест автоматических приёмов
-    print("\n3. ТЕСТ АВТОМАТИЧЕСКИХ ПРИЁМОВ:")
-    test_weapons = [("Двуручный меч", "Воин"), ("Длинный меч", "Паладин"), ("Короткий лук", "Следопыт")]
-    for weapon_name, class_name in test_weapons:
-        masteries = auto_assign_masteries(weapon_name, class_name)
-        print(f"   {class_name} с {weapon_name}: {', '.join(masteries) if masteries else 'нет приёмов'}")
-
-    # 4. Тест рас
-    print("\n4. ТЕСТ РАС:")
+    print("\n1. ТЕСТ КАРТИНОК:")
     for race in get_race_list()[:5]:
-        desc = get_race_description(race)
-        print(f"   • {race}: {desc[:60]}...")
+        path = get_race_image_path(race)
+        exists = get_race_image_exists(race)
+        print(f"   • {race}: {'✅' if exists else '❌'} {path}")
 
-    # 5. Тест классов
-    print("\n5. ТЕСТ КЛАССОВ:")
     for cls in get_class_list()[:5]:
-        desc = get_class_description(cls)
-        print(f"   • {cls}: {desc[:60]}...")
+        path = get_class_image_path(cls)
+        exists = get_class_image_exists(cls)
+        print(f"   • {cls}: {'✅' if exists else '❌'} {path}")
 
-    print("\n" + "=" * 60)
-    print("✅ МОДУЛЬ DND_LOGIC.PY ГОТОВ К РАБОТЕ!")
+    print("\n✅ МОДУЛЬ DND_LOGIC.PY ГОТОВ К РАБОТЕ!")
     print("=" * 60)

@@ -364,8 +364,7 @@ async def help_button(m: Message):
 @dp.message(F.text == "ℹ️ О боте")
 async def info_button(m: Message):
     info_text = (
-        "ℹ️ **D&D Character Creator 5.5e (2024)**\n\n"
-        "**Версия:** 2.0 (обновлено под правила 2024 года)\n\n"
+        "ℹ️ **D&D Character Creator**\n\n"
         "**Особенности:**\n"
         "• 16 рас с подрасами и картинками\n"
         "• 13 классов с подклассами и картинками\n"

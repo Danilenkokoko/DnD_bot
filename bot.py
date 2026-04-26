@@ -36,9 +36,9 @@ from dnd_logic import (
     get_race_list, get_race_info, get_race_description,
     get_race_speed, get_race_size, has_subraces, get_subraces,
     get_subrace_description, get_subrace_trait, get_race_traits_list,
-    get_race_image_path,
+    get_race_image_path, get_race_image_exists,
     get_class_list, get_class_info, get_class_description,
-    get_subclasses_for_class, get_class_image_path,
+    get_subclasses_for_class, get_class_image_path, get_class_image_exists,
     get_background_list, get_background_data, get_background_by_name,
     get_background_characteristics, get_background_trait,
     get_background_skills, get_background_tools,
@@ -632,7 +632,6 @@ async def select_background_equipment(call: CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data.startswith("bg_"))
 async def select_background(call: CallbackQuery, state: FSMContext):
     """Обработчик выбора предыстории"""
-    # Важно: пропускаем callback, которые начинаются с bg_equip_
     if call.data.startswith("bg_equip_"):
         return
 
@@ -1357,6 +1356,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         await m.answer("⏳ Создаю персонажа и генерирую PDF...", reply_markup=ReplyKeyboardRemove())
 
         data = await state.get_data()
+
         class_name = data.get("class_name")
         background = data.get("background")
         race = data.get("race")
@@ -1364,16 +1364,29 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         name = data.get("name")
         backstory = data.get("backstory", "Нет истории")
         background_equipment_choice = data.get("background_equipment_choice", "A")
+
+        # Получаем характеристики - проверяем оба возможных ключа
         stats = data.get("final_stats", {})
+        if not stats:
+            stats = data.get("stats", {})
+
+        # Если stats пустые - создаем стандартные с бонусами предыстории
+        if not stats or len(stats) == 0:
+            logger.warning("Stats не найдены, создаем стандартные")
+            stats = {"STR": 15, "DEX": 14, "CON": 13, "INT": 12, "WIS": 10, "CHA": 8}
+            bg_info = get_background_data_direct(background)
+            if bg_info:
+                chars = bg_info.get('characteristics', ["STR", "DEX", "CON"])
+                if len(chars) >= 2:
+                    stats[chars[0]] = min(20, stats.get(chars[0], 10) + 2)
+                    stats[chars[1]] = min(20, stats.get(chars[1], 10) + 1)
+
         selected_masteries = data.get("selected_masteries", [])
         selected_fighting_style = data.get("selected_fighting_style")
         selected_invocations = data.get("selected_invocations", [])
         selected_spells = data.get("selected_spells", [])
         selected_weapon = data.get("selected_weapon")
         selected_armor = data.get("selected_armor")
-
-        if not stats:
-            stats = data.get("stats", {})
 
         if not name:
             await m.answer("❌ Ошибка: имя не сохранено.", reply_markup=main_menu())
@@ -1411,7 +1424,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         hp = calc_hp(class_id, stats.get("CON", 10), 1) if class_id else 10
 
         race_traits = get_race_traits_list(race, subrace)
-        class_features = get_class_features(class_name, 1)
+        class_features = get_class_features(class_name, 1) if class_name else []
         bg_info = get_background_data_direct(background)
 
         bg_skills = bg_info.get('skills', []) if bg_info else []
@@ -1426,7 +1439,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         if selected_armor:
             equipment_list.append(selected_armor)
 
-        char_id = save_character(
+        save_character(
             user_id=m.from_user.id,
             name=name,
             race_id=race_id,
@@ -1453,14 +1466,35 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
             alignment="Нейтральное"
         )
 
+        # Подготавливаем данные для PDF
         pdf_data = {
-            "name": name, "class_name": class_name, "race": f"{race} ({subrace})" if subrace else race,
-            "level": 1, "stats": stats, "hp": hp, "ac": ac, "skills": bg_skills,
-            "equipment": equipment_list, "spells": selected_spells,
-            "proficiency_bonus": calculate_proficiency_bonus(1), "background": background,
-            "background_trait": bg_trait, "background_description": bg_info.get("description", "") if bg_info else "",
-            "race_traits": race_traits, "class_features": class_features, "backstory": backstory
+            "name": name,
+            "class_name": class_name if class_name else "Без класса",
+            "race": f"{race} ({subrace})" if subrace else (race if race else "Неизвестно"),
+            "level": 1,
+            "stats": stats,
+            "hp": hp,
+            "ac": ac,
+            "speed": 30,
+            "skills": bg_skills,
+            "equipment": equipment_list,
+            "spells": selected_spells,
+            "proficiency_bonus": calculate_proficiency_bonus(1),
+            "background": background if background else "Нет",
+            "background_trait": bg_trait,
+            "background_description": bg_info.get("description", "") if bg_info else "",
+            "race_traits": race_traits,
+            "class_features": class_features,
+            "backstory": backstory,
+            "alignment": "Нейтральное",
+            "player_name": m.from_user.full_name,
+            "experience": 0,
+            "saving_throws": [],
+            "notes": "",
+            "coins": data.get("selected_coins", 0)
         }
+
+        logger.info(f"📄 Данные для PDF: name={name}, class={class_name}, stats={stats}")
 
         safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{safe_name}.pdf")
@@ -1469,7 +1503,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
 
         pdf_file = generate_pdf(pdf_data, temp_pdf_file)
 
-        caption = f"✅ Персонаж создан!\n\n📛 {name}\n⚔️ {class_name}\n📜 {background}\n🧝 {race}{f' ({subrace})' if subrace else ''}\n❤️ HP: {hp} | 🛡️ AC: {ac}"
+        caption = f"✅ Персонаж создан!\n\n📛 {name}\n⚔️ {class_name}\n📜 {background}\n🧝 {race}{f' ({subrace})' if subrace else ''}\n❤️ HP: {hp} | 🛡️ AC: {ac}\n\n🎯 Характеристики:\n💪 STR: {stats.get('STR', 10)}\n🤸 DEX: {stats.get('DEX', 10)}\n🏋️ CON: {stats.get('CON', 10)}\n🧠 INT: {stats.get('INT', 10)}\n🧙 WIS: {stats.get('WIS', 10)}\n✨ CHA: {stats.get('CHA', 10)}"
 
         if image_file_id:
             await m.answer_photo(photo=image_file_id, caption=caption, parse_mode=None)
@@ -1478,14 +1512,18 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
 
         if pdf_file and os.path.exists(pdf_file):
             await m.answer_document(FSInputFile(pdf_file, filename=f"{safe_name}_character_sheet.pdf"),
-                                    caption="📄 Лист персонажа")
+                                    caption="📄 Лист персонажа в формате PDF")
+        else:
+            logger.error(f"PDF не создан: {pdf_file}")
+            await m.answer("⚠️ Не удалось создать PDF файл, но персонаж сохранен!")
 
         await m.answer("🎮 Главное меню", reply_markup=main_menu())
         await state.clear()
 
     except Exception as e:
-        logger.error(f"Ошибка: {e}", exc_info=True)
-        await m.answer("❌ Произошла ошибка. Попробуйте позже.")
+        logger.error(f"Ошибка при создании персонажа: {e}", exc_info=True)
+        await m.answer(f"❌ Произошла ошибка: {str(e)[:200]}\n\nПерсонаж может быть сохранен, но PDF не создан.",
+                       reply_markup=main_menu())
         await state.clear()
 
     finally:

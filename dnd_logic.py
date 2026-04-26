@@ -293,6 +293,7 @@ def get_initial_stats_intelligent(background_name: str, class_name: str) -> Dict
     base_stats = get_standard_stats()
     return apply_intelligent_background_bonuses(base_stats, background_name, class_name)
 
+
 # =========================================================
 # 3. РАБОТА С РАСАМИ (из БД)
 # =========================================================
@@ -684,7 +685,7 @@ def get_subclasses_for_class(class_name: str, level: int = 1) -> List[Dict[str, 
 
 
 # =========================================================
-# 6. РАБОТА С ПРЕДЫСТОРИЯМИ
+# 6. РАБОТА С ПРЕДЫСТОРИЯМИ (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 # =========================================================
 
 def get_all_backgrounds() -> List[Dict[str, Any]]:
@@ -710,7 +711,7 @@ def get_background_list() -> List[str]:
 
 
 def get_background_by_name(background_name: str) -> Optional[Dict[str, Any]]:
-    """Получает информацию о предыстории по названию"""
+    """Получает информацию о предыстории по названию (ИСПРАВЛЕНА)"""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -720,33 +721,57 @@ def get_background_by_name(background_name: str) -> Optional[Dict[str, Any]]:
             """, (background_name,))
             row = cur.fetchone()
             if row:
+                # Декодируем skills из JSON
                 skills = row[6]
                 if isinstance(skills, str):
                     try:
                         skills = json.loads(skills)
                     except:
                         skills = []
+                elif skills is None:
+                    skills = []
+
+                # Проверяем, что характеристики не None
+                char1 = row[2] if row[2] else "Ловкость"
+                char2 = row[3] if row[3] else "Ловкость"
+                char3 = row[4] if row[4] else "Ловкость"
 
                 return {
-                    'id': row[0], 'name': row[1],
-                    'characteristics': [row[2], row[3], row[4]],
-                    'trait': row[5], 'skills': skills, 'tools': row[7],
-                    'equipment_a': row[8], 'equipment_b': row[9],
+                    'id': row[0],
+                    'name': row[1],
+                    'characteristics': [char1, char2, char3],
+                    'trait': row[5] if row[5] else "Нет",
+                    'skills': skills,
+                    'tools': row[7] if row[7] else "Нет",
+                    'equipment_a': row[8] if row[8] else "Нет описания",
+                    'equipment_b': row[9] if row[9] else "Нет описания",
                     'description': row[10] if row[10] else f"Предыстория {background_name}"
                 }
     return None
 
 
 def get_background_data(background_name: str) -> Dict[str, Any]:
-    """Возвращает данные предыстории (для совместимости)"""
+    """Возвращает данные предыстории (для совместимости) - ИСПРАВЛЕНА"""
     bg = get_background_by_name(background_name)
     if not bg:
-        return {}
+        # Возвращаем словарь с значениями по умолчанию вместо пустого
+        return {
+            'characteristics': ["Ловкость", "Ловкость", "Ловкость"],
+            'trait': "Нет",
+            'skills': [],
+            'tools': "Нет",
+            'equipment_a': "Нет описания",
+            'equipment_b': "Нет описания",
+            'description': f"Предыстория {background_name} не найдена"
+        }
 
     return {
-        'characteristics': bg['characteristics'], 'trait': bg['trait'],
-        'skills': bg['skills'], 'tools': bg['tools'],
-        'equipment_a': bg['equipment_a'], 'equipment_b': bg['equipment_b'],
+        'characteristics': bg['characteristics'],
+        'trait': bg['trait'],
+        'skills': bg['skills'],
+        'tools': bg['tools'],
+        'equipment_a': bg['equipment_a'],
+        'equipment_b': bg['equipment_b'],
         'description': bg['description']
     }
 
@@ -754,13 +779,16 @@ def get_background_data(background_name: str) -> Dict[str, Any]:
 def get_background_characteristics(background_name: str) -> List[str]:
     """Возвращает бонусы к характеристикам от предыстории"""
     bg = get_background_by_name(background_name)
-    return bg['characteristics'] if bg else ["Ловкость", "Ловкость", "Ловкость"]
+    if bg:
+        return bg['characteristics']
+    # Возвращаем значения по умолчанию
+    return ["Ловкость", "Ловкость", "Ловкость"]
 
 
 def get_background_trait(background_name: str) -> str:
     """Возвращает черту предыстории"""
     bg = get_background_by_name(background_name)
-    return bg['trait'] if bg else ""
+    return bg['trait'] if bg else "Нет"
 
 
 def get_background_skills(background_name: str) -> List[str]:
@@ -772,7 +800,7 @@ def get_background_skills(background_name: str) -> List[str]:
 def get_background_tools(background_name: str) -> str:
     """Возвращает инструменты от предыстории"""
     bg = get_background_by_name(background_name)
-    return bg['tools'] if bg else ""
+    return bg['tools'] if bg else "Нет"
 
 
 def get_background_description(background_name: str) -> str:

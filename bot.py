@@ -88,65 +88,6 @@ def cancel_kb() -> ReplyKeyboardMarkup:
     )
 
 
-# ---------------- HELP & INFO ----------------
-@dp.message(Command("help"))
-async def help_command(m: Message):
-    """Обработчик команды /help"""
-    help_text = (
-        "❓ **Помощь по использованию бота**\n\n"
-        "**Доступные команды:**\n"
-        "• `/start` - Запустить бота и показать главное меню\n"
-        "• `/help` - Показать это сообщение\n"
-        "• `/info` - Информация о боте\n"
-        "• `/skip` - Пропустить загрузку картинки персонажа\n\n"
-        "**Как создать персонажа:**\n"
-        "1️⃣ Нажмите кнопку «🎲 Создать персонажа»\n"
-        "2️⃣ Выберите расу из предложенных\n"
-        "3️⃣ Выберите класс\n"
-        "4️⃣ Введите имя персонажа\n"
-        "5️⃣ Выберите предысторию\n"
-        "6️⃣ Выберите стартовое снаряжение\n"
-        "7️⃣ Напишите историю персонажа\n"
-        "8️⃣ Загрузите портрет (или пропустите)\n\n"
-        "**Другие возможности:**\n"
-        "• 📋 Мои персонажи - посмотреть список всех персонажей\n"
-        "• 🗑 Удалить персонажа - удалить ненужного персонажа\n\n"
-        "Есть идеи или нашли ошибку? Пишите @danilenkokoko007_official"
-    )
-    await m.answer(help_text, parse_mode=ParseMode.MARKDOWN)
-
-
-@dp.message(Command("info"))
-async def info_command(m: Message):
-    """Обработчик команды /info"""
-    info_text = (
-        "ℹ️ **О боте D&D Character Creator**\n\n"
-        "**Описание:**\n"
-        "Этот бот помогает создавать персонажей для игры в Dungeons & Dragons 5-й редакции.\n\n"
-        "**Возможности:**\n"
-        "• 16 рас с подробным описанием и изображениями\n"
-        "• 13 классов с характеристиками и умениями\n"
-        "• 17 предысторий с выбором снаряжения\n"
-        "• Генерация PDF-листа персонажа\n"
-        "• Сохранение истории персонажа\n"
-        "• Загрузка портрета персонажа\n\n"
-        "Приятной игры! 🎮"
-    )
-    await m.answer(info_text, parse_mode=ParseMode.MARKDOWN)
-
-
-@dp.message(F.text == "❓ Помощь")
-async def help_button(m: Message):
-    """Кнопка помощи"""
-    await help_command(m)
-
-
-@dp.message(F.text == "ℹ️ О боте")
-async def info_button(m: Message):
-    """Кнопка информации о боте"""
-    await info_command(m)
-
-
 # ---------------- INLINE KEYBOARDS ----------------
 def create_race_keyboard() -> InlineKeyboardMarkup:
     """Создаёт клавиатуру выбора расы (2 колонки)"""
@@ -308,23 +249,63 @@ async def cancel_creation(m: Message, state: FSMContext):
     )
 
 
-@dp.message()
-async def unknown_command(m: Message, state: FSMContext):
-    """Обработчик неизвестных команд"""
-    current_state = await state.get_state()
+# ---------------- HELP & INFO ----------------
+@dp.message(Command("help"))
+async def help_command(m: Message):
+    """Обработчик команды /help"""
+    help_text = (
+        "❓ **Помощь по использованию бота**\n\n"
+        "**Доступные команды:**\n"
+        "• `/start` - Запустить бота и показать главное меню\n"
+        "• `/help` - Показать это сообщение\n"
+        "• `/info` - Информация о боте\n"
+        "• `/skip` - Пропустить загрузку картинки персонажа\n\n"
+        "**Как создать персонажа:**\n"
+        "1️⃣ Нажмите кнопку «🎲 Создать персонажа»\n"
+        "2️⃣ Выберите расу из предложенных\n"
+        "3️⃣ Выберите класс\n"
+        "4️⃣ Введите имя персонажа\n"
+        "5️⃣ Выберите предысторию\n"
+        "6️⃣ Выберите стартовое снаряжение\n"
+        "7️⃣ Напишите историю персонажа\n"
+        "8️⃣ Загрузите портрет (или пропустите)\n\n"
+        "**Другие возможности:**\n"
+        "• 📋 Мои персонажи - посмотреть список всех персонажей\n"
+        "• 🗑 Удалить персонажа - удалить ненужного персонажа\n\n"
+        "Есть идеи или нашли ошибку? Пишите @danilenkokoko007_official"
+    )
+    await m.answer(help_text, parse_mode=ParseMode.MARKDOWN)
 
-    if current_state:
-        await m.answer(
-            "⏳ Вы находитесь в процессе создания персонажа.\n\n"
-            "Пожалуйста, следуйте инструкциям или нажмите «❌ Отмена» чтобы начать заново.",
-            reply_markup=cancel_kb()
-        )
-    else:
-        await m.answer(
-            "❓ Я не понимаю эту команду.\n\n"
-            "Используйте кнопки меню или команду /help для получения справки.",
-            reply_markup=main_menu()
-        )
+
+@dp.message(Command("info"))
+async def info_command(m: Message):
+    """Обработчик команды /info"""
+    info_text = (
+        "ℹ️ **О боте D&D Character Creator**\n\n"
+        "**Описание:**\n"
+        "Этот бот помогает создавать персонажей для игры в Dungeons & Dragons 5-й редакции.\n\n"
+        "**Возможности:**\n"
+        "• 16 рас с подробным описанием и изображениями\n"
+        "• 13 классов с характеристиками и умениями\n"
+        "• 17 предысторий с выбором снаряжения\n"
+        "• Генерация PDF-листа персонажа\n"
+        "• Сохранение истории персонажа\n"
+        "• Загрузка портрета персонажа\n\n"
+        "Приятной игры! 🎮"
+    )
+    await m.answer(info_text, parse_mode=ParseMode.MARKDOWN)
+
+
+@dp.message(F.text == "❓ Помощь")
+async def help_button(m: Message):
+    """Кнопка помощи"""
+    await help_command(m)
+
+
+@dp.message(F.text == "ℹ️ О боте")
+async def info_button(m: Message):
+    """Кнопка информации о боте"""
+    await info_command(m)
 
 
 # ---------------- CREATE CHARACTER ----------------
@@ -832,6 +813,7 @@ async def view_character(call: CallbackQuery):
 
     await call.answer()
 
+
 # ---------------- DELETE CHARACTER ----------------
 @dp.message(F.text == "🗑 Удалить персонажа")
 async def delete_character_menu(m: Message):
@@ -888,6 +870,26 @@ async def skip_command(m: Message, state: FSMContext):
         await finalize_character(m, state, image_file_id=None)
     else:
         await m.answer("❌ Команда /skip доступна только на шаге загрузки изображения")
+
+
+# ==================== ВАЖНО! ОБРАБОТЧИК НЕИЗВЕСТНЫХ КОМАНД ДОЛЖЕН БЫТЬ ПОСЛЕДНИМ! ====================
+@dp.message()
+async def unknown_command(m: Message, state: FSMContext):
+    """Обработчик неизвестных команд (должен быть последним!)"""
+    current_state = await state.get_state()
+
+    if current_state:
+        await m.answer(
+            "⏳ Вы находитесь в процессе создания персонажа.\n\n"
+            "Пожалуйста, следуйте инструкциям или нажмите «❌ Отмена» чтобы начать заново.",
+            reply_markup=cancel_kb()
+        )
+    else:
+        await m.answer(
+            "❓ Я не понимаю эту команду.\n\n"
+            "Используйте кнопки меню или команду /help для получения справки.",
+            reply_markup=main_menu()
+        )
 
 
 # ---------------- RUN ----------------

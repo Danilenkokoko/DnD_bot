@@ -645,67 +645,220 @@ def migrate_invocations(conn):
 
 
 # =========================================================
-# 7. ДАННЫЕ ОРУЖИЯ И СВЯЗЕЙ
+# 7. ДАННЫЕ ОРУЖИЯ И СВЯЗЕЙ (С ДЕТАЛЬНЫМИ ПРИЁМАМИ)
 # =========================================================
 
 WEAPONS_DATA = [
-    # Простое оружие
-    {"name": "Кинжал", "category": "simple", "damage_dice": "1d4", "damage_type": "piercing",
-     "properties": ["легкое", "метательное"], "suitable_masteries": ["Выпад", "Подавление"]},
-    {"name": "Серп", "category": "simple", "damage_dice": "1d4", "damage_type": "slashing",
-     "properties": ["легкое"], "suitable_masteries": ["Выпад"]},
-    {"name": "Дубина", "category": "simple", "damage_dice": "1d4", "damage_type": "bludgeoning",
-     "properties": ["легкое"], "suitable_masteries": ["Замедление"]},
-    {"name": "Копьё", "category": "simple", "damage_dice": "1d6", "damage_type": "piercing",
-     "properties": ["метательное", "универсальное"], "suitable_masteries": ["Изнурение", "Толкание"]},
-    {"name": "Булава", "category": "simple", "damage_dice": "1d6", "damage_type": "bludgeoning",
-     "properties": [], "suitable_masteries": ["Изнурение"]},
+    # ===== ПРОСТОЕ ОРУЖИЕ =====
+    {
+        "name": "Кинжал", "category": "simple", "damage_dice": "1d4", "damage_type": "piercing",
+        "properties": ["легкое", "метательное"], "suitable_masteries": ["Выпад", "Подавление"],
+        "detailed_masteries": [
+            {"name": "Пригвоздить",
+             "description": "При попадании кинжалом можете пригвоздить существо к стене, скорость цели падает до 0",
+             "optimal": True},
+            {"name": "Скрытый клинок", "description": "Можете спрятать кинжал и совершить атаку с преимуществом",
+             "optimal": False}
+        ]
+    },
+    {
+        "name": "Серп", "category": "simple", "damage_dice": "1d4", "damage_type": "slashing",
+        "properties": ["легкое"], "suitable_masteries": ["Выпад"],
+        "detailed_masteries": []
+    },
+    {
+        "name": "Дубина", "category": "simple", "damage_dice": "1d4", "damage_type": "bludgeoning",
+        "properties": ["легкое"], "suitable_masteries": ["Замедление"],
+        "detailed_masteries": [
+            {"name": "Оглушение", "description": "Действием можете оглушить гуманоида до начала его следующего хода",
+             "optimal": True},
+            {"name": "Импровизированный удар", "description": "Можете сломать оружие для критического попадания",
+             "optimal": False}
+        ]
+    },
+    {
+        "name": "Копьё", "category": "simple", "damage_dice": "1d6", "damage_type": "piercing",
+        "properties": ["метательное", "универсальное"], "suitable_masteries": ["Изнурение", "Толкание"],
+        "detailed_masteries": []
+    },
+    {
+        "name": "Булава", "category": "simple", "damage_dice": "1d6", "damage_type": "bludgeoning",
+        "properties": [], "suitable_masteries": ["Изнурение"],
+        "detailed_masteries": [
+            {"name": "Сильный удар", "description": "Цель не может добавлять Ловкость к КД", "optimal": True},
+            {"name": "Ребролом", "description": "Ошеломляет гуманоида", "optimal": False}
+        ]
+    },
+    {
+        "name": "Боевой посох", "category": "simple", "damage_dice": "1d6", "damage_type": "bludgeoning",
+        "properties": ["универсальное"], "suitable_masteries": ["Толкание"],
+        "detailed_masteries": [
+            {"name": "Прыжок", "description": "Можете использовать посох, чтобы прыгать дальше", "optimal": True}
+        ]
+    },
+    {
+        "name": "Лёгкий молот", "category": "simple", "damage_dice": "1d4", "damage_type": "bludgeoning",
+        "properties": ["легкое", "метательное"], "suitable_masteries": ["Выпад"],
+        "detailed_masteries": [
+            {"name": "Оглушающий удар", "description": "Цель становится недееспособной", "optimal": True},
+            {"name": "Повреждение доспеха", "description": "Скорость цели уменьшается на 10 футов", "optimal": False}
+        ]
+    },
+    {
+        "name": "Метательный топор", "category": "simple", "damage_dice": "1d6", "damage_type": "slashing",
+        "properties": ["легкое", "метательное"], "suitable_masteries": ["Подавление"],
+        "detailed_masteries": [
+            {"name": "Пригвоздить", "description": "При попадании можете пригвоздить существо к стене", "optimal": True}
+        ]
+    },
 
-    # Воинское оружие
-    {"name": "Длинный меч", "category": "martial", "damage_dice": "1d8", "damage_type": "slashing",
-     "properties": ["универсальное"], "suitable_masteries": ["Изнурение"]},
-    {"name": "Рапира", "category": "martial", "damage_dice": "1d8", "damage_type": "piercing",
-     "properties": ["изящное"], "suitable_masteries": ["Подавление"]},
-    {"name": "Боевой топор", "category": "martial", "damage_dice": "1d8", "damage_type": "slashing",
-     "properties": ["универсальное"], "suitable_masteries": ["Опрокидывание", "Изнурение"]},
-    {"name": "Двуручный меч", "category": "martial", "damage_dice": "2d6", "damage_type": "slashing",
-     "properties": ["двуручное", "тяжёлое"], "suitable_masteries": ["Задевание", "Прорубание"]},
-    {"name": "Двуручный топор", "category": "martial", "damage_dice": "1d12", "damage_type": "slashing",
-     "properties": ["двуручное", "тяжёлое"], "suitable_masteries": ["Прорубание", "Задевание"]},
-    {"name": "Алебарда", "category": "martial", "damage_dice": "1d10", "damage_type": "slashing",
-     "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Прорубание"]},
-    {"name": "Глефа", "category": "martial", "damage_dice": "1d10", "damage_type": "slashing",
-     "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Задевание"]},
-    {"name": "Пика", "category": "martial", "damage_dice": "1d10", "damage_type": "piercing",
-     "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Толкание"]},
-    {"name": "Большая дубина", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
-     "properties": ["двуручное"], "suitable_masteries": ["Толкание"]},
-    {"name": "Военный молот", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
-     "properties": ["универсальное"], "suitable_masteries": ["Толкание"]},
-    {"name": "Ланс", "category": "martial", "damage_dice": "1d10", "damage_type": "piercing",
-     "properties": ["досягаемость", "особое"], "suitable_masteries": ["Опрокидывание"]},
-    {"name": "Трезубец", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
-     "properties": ["метательное", "универсальное"], "suitable_masteries": ["Опрокидывание", "Толкание"]},
-    {"name": "Кнут", "category": "martial", "damage_dice": "1d4", "damage_type": "slashing",
-     "properties": ["изящное", "досягаемость"], "suitable_masteries": ["Замедление"]},
-    {"name": "Короткий лук", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
-     "properties": ["двуручное", "дальнобойное"], "suitable_masteries": ["Замедление", "Подавление"]},
-    {"name": "Длинный лук", "category": "martial", "damage_dice": "1d8", "damage_type": "piercing",
-     "properties": ["двуручное", "тяжёлое", "дальнобойное"], "suitable_masteries": ["Замедление"]},
-    {"name": "Лёгкий молот", "category": "simple", "damage_dice": "1d4", "damage_type": "bludgeoning",
-     "properties": ["легкое", "метательное"], "suitable_masteries": ["Выпад"]},
-    {"name": "Метательный топор", "category": "simple", "damage_dice": "1d6", "damage_type": "slashing",
-     "properties": ["легкое", "метательное"], "suitable_masteries": ["Подавление"]},
-    {"name": "Скимитар", "category": "martial", "damage_dice": "1d6", "damage_type": "slashing",
-     "properties": ["изящное"], "suitable_masteries": ["Выпад"]},
-    {"name": "Короткий меч", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
-     "properties": ["изящное", "легкое"], "suitable_masteries": ["Подавление"]},
-    {"name": "Цеп", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
-     "properties": [], "suitable_masteries": ["Изнурение"]},
-    {"name": "Боевой посох", "category": "simple", "damage_dice": "1d6", "damage_type": "bludgeoning",
-     "properties": ["универсальное"], "suitable_masteries": ["Толкание"]},
-    {"name": "Секира", "category": "martial", "damage_dice": "1d8", "damage_type": "slashing",
-     "properties": ["универсальное"], "suitable_masteries": ["Опрокидывание"]},
+    # ===== ВОИНСКОЕ ОРУЖИЕ =====
+    {
+        "name": "Длинный меч", "category": "martial", "damage_dice": "1d8", "damage_type": "slashing",
+        "properties": ["универсальное"], "suitable_masteries": ["Изнурение"],
+        "detailed_masteries": [
+            {"name": "Скрестить клинки", "description": "Реакцией можете парировать атаку", "optimal": True},
+            {"name": "Внезапный удар", "description": "Можете ударить рукоятью, давая преимущество следующей атаке",
+             "optimal": False}
+        ]
+    },
+    {
+        "name": "Рапира", "category": "martial", "damage_dice": "1d8", "damage_type": "piercing",
+        "properties": ["изящное"], "suitable_masteries": ["Подавление"],
+        "detailed_masteries": [
+            {"name": "Удар левой рукой", "description": "С кинжалом даёт +1к4 к КД", "optimal": True},
+            {"name": "Скрестить клинки", "description": "Реакцией можете парировать атаку", "optimal": True}
+        ]
+    },
+    {
+        "name": "Боевой топор", "category": "martial", "damage_dice": "1d8", "damage_type": "slashing",
+        "properties": ["универсальное"], "suitable_masteries": ["Опрокидывание", "Изнурение"],
+        "detailed_masteries": [
+            {"name": "Сокрушительный удар", "description": "КД цели снижается на 1", "optimal": True}
+        ]
+    },
+    {
+        "name": "Двуручный меч", "category": "martial", "damage_dice": "2d6", "damage_type": "slashing",
+        "properties": ["двуручное", "тяжёлое"], "suitable_masteries": ["Задевание", "Прорубание"],
+        "detailed_masteries": [
+            {"name": "Атака по дуге", "description": "Можете атаковать двух существ одновременно", "optimal": True},
+            {"name": "Упор в землю", "description": "Бонус к спасброску от вынужденного перемещения", "optimal": True}
+        ]
+    },
+    {
+        "name": "Двуручный топор", "category": "martial", "damage_dice": "1d12", "damage_type": "slashing",
+        "properties": ["двуручное", "тяжёлое"], "suitable_masteries": ["Прорубание", "Задевание"],
+        "detailed_masteries": []
+    },
+    {
+        "name": "Алебарда", "category": "martial", "damage_dice": "1d10", "damage_type": "slashing",
+        "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Прорубание"],
+        "detailed_masteries": [
+            {"name": "Натиск", "description": "Можете оттолкнуть до двух существ", "optimal": True},
+            {"name": "Подсечка", "description": "Можете сбить противника с ног", "optimal": True}
+        ]
+    },
+    {
+        "name": "Глефа", "category": "martial", "damage_dice": "1d10", "damage_type": "slashing",
+        "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Задевание"],
+        "detailed_masteries": [
+            {"name": "Обезоруживающее парирование", "description": "Можете обезоружить противника", "optimal": True},
+            {"name": "Подсечка", "description": "Можете сбить противника с ног", "optimal": True}
+        ]
+    },
+    {
+        "name": "Пика", "category": "martial", "damage_dice": "1d10", "damage_type": "piercing",
+        "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Толкание"],
+        "detailed_masteries": [
+            {"name": "Фаланга", "description": "Атаки с преимуществом рядом с другими обладателями пик",
+             "optimal": True},
+            {"name": "Упреждение", "description": "Можете атаковать движущегося к вам врага", "optimal": True}
+        ]
+    },
+    {
+        "name": "Большая дубина", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
+        "properties": ["двуручное"], "suitable_masteries": ["Толкание"],
+        "detailed_masteries": []
+    },
+    {
+        "name": "Военный молот", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
+        "properties": ["универсальное"], "suitable_masteries": ["Толкание"],
+        "detailed_masteries": [
+            {"name": "Сильный удар", "description": "Цель не может добавлять Ловкость к КД", "optimal": True},
+            {"name": "Раскалывающий удар", "description": "Можете повредить или уничтожить оружие цели",
+             "optimal": False}
+        ]
+    },
+    {
+        "name": "Ланс", "category": "martial", "damage_dice": "1d10", "damage_type": "piercing",
+        "properties": ["досягаемость", "особое"], "suitable_masteries": ["Опрокидывание"],
+        "detailed_masteries": []
+    },
+    {
+        "name": "Трезубец", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
+        "properties": ["метательное", "универсальное"], "suitable_masteries": ["Опрокидывание", "Толкание"],
+        "detailed_masteries": [
+            {"name": "Укол", "description": "Можете опутать захваченное существо", "optimal": True},
+            {"name": "Обезоруживающее парирование", "description": "Можете обезоружить противника", "optimal": True}
+        ]
+    },
+    {
+        "name": "Кнут", "category": "martial", "damage_dice": "1d4", "damage_type": "slashing",
+        "properties": ["изящное", "досягаемость"], "suitable_masteries": ["Замедление"],
+        "detailed_masteries": [
+            {"name": "Щелчок", "description": "Можете испугать зверя", "optimal": True},
+            {"name": "Петля", "description": "Можете опутать существо или выбить оружие", "optimal": True}
+        ]
+    },
+    {
+        "name": "Короткий лук", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
+        "properties": ["двуручное", "дальнобойное"], "suitable_masteries": ["Замедление", "Подавление"],
+        "detailed_masteries": [
+            {"name": "Пригвоздить", "description": "Можете пригвоздить существо к стене", "optimal": True},
+            {"name": "Отвлекающий выстрел", "description": "Даёте союзнику преимущество", "optimal": False},
+            {"name": "Меткий выстрел", "description": "Совершаете выстрел с помехой, но при попадании крит",
+             "optimal": False}
+        ]
+    },
+    {
+        "name": "Длинный лук", "category": "martial", "damage_dice": "1d8", "damage_type": "piercing",
+        "properties": ["двуручное", "тяжёлое", "дальнобойное"], "suitable_masteries": ["Замедление"],
+        "detailed_masteries": [
+            {"name": "Пригвоздить", "description": "Можете пригвоздить существо к стене", "optimal": True},
+            {"name": "Отвлекающий выстрел", "description": "Даёте союзнику преимущество", "optimal": False}
+        ]
+    },
+    {
+        "name": "Скимитар", "category": "martial", "damage_dice": "1d6", "damage_type": "slashing",
+        "properties": ["изящное"], "suitable_masteries": ["Выпад"],
+        "detailed_masteries": [
+            {"name": "Кровавая рана", "description": "Цель получает 1к6 рубящего урона в начале каждого хода",
+             "optimal": True},
+            {"name": "Внезапный удар", "description": "Можете ударить рукоятью, давая преимущество", "optimal": False}
+        ]
+    },
+    {
+        "name": "Короткий меч", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
+        "properties": ["изящное", "легкое"], "suitable_masteries": ["Подавление"],
+        "detailed_masteries": [
+            {"name": "Ближний бой", "description": "Можете атаковать после захвата", "optimal": True},
+            {"name": "Внезапный удар", "description": "Можете ударить рукоятью, давая преимущество", "optimal": False}
+        ]
+    },
+    {
+        "name": "Цеп", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
+        "properties": [], "suitable_masteries": ["Изнурение"],
+        "detailed_masteries": [
+            {"name": "Цепная удавка", "description": "Можете схватить существо, оно не может говорить и дышать",
+             "optimal": True},
+            {"name": "Обвить щит", "description": "Игнорирует бонус КД от щита", "optimal": True}
+        ]
+    },
+    {
+        "name": "Секира", "category": "martial", "damage_dice": "1d8", "damage_type": "slashing",
+        "properties": ["универсальное"], "suitable_masteries": ["Опрокидывание"],
+        "detailed_masteries": []
+    },
 ]
 
 
@@ -720,14 +873,15 @@ def migrate_weapons(conn, class_id_map):
     with conn.cursor() as cur:
         for weapon in WEAPONS_DATA:
             cur.execute("""
-                INSERT INTO weapons (name, category, damage_dice, damage_type, properties, suitable_masteries)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO weapons (name, category, damage_dice, damage_type, properties, suitable_masteries, detailed_masteries)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (name) DO NOTHING
                 RETURNING id
             """, (
                 weapon["name"], weapon["category"], weapon["damage_dice"],
                 weapon["damage_type"], json.dumps(weapon["properties"]),
-                json.dumps(weapon["suitable_masteries"])
+                json.dumps(weapon["suitable_masteries"]),
+                json.dumps(weapon["detailed_masteries"])
             ))
             result = cur.fetchone()
             if result:
@@ -735,6 +889,7 @@ def migrate_weapons(conn, class_id_map):
                 logger.info(f"  ✅ Оружие '{weapon['name']}'")
 
         # Связываем оружие с классами
+        # Воин — всё оружие
         if "Воин" in class_id_map:
             for weapon_name, weapon_id in weapon_id_map.items():
                 cur.execute("""
@@ -744,41 +899,65 @@ def migrate_weapons(conn, class_id_map):
                 """, (class_id_map["Воин"], weapon_id))
             logger.info(f"    • Воин → всё оружие ({len(weapon_id_map)} шт.)")
 
-        martial_weapons = [w["name"] for w in WEAPONS_DATA if w["category"] == "martial"]
-        simple_weapons = [w["name"] for w in WEAPONS_DATA if w["category"] == "simple"]
-
+        # Паладин — всё оружие
         if "Паладин" in class_id_map:
-            for w_name in martial_weapons + simple_weapons:
-                if w_name in weapon_id_map:
-                    cur.execute("""
-                        INSERT INTO class_weapons (class_id, weapon_id)
-                        VALUES (%s, %s)
-                        ON CONFLICT (class_id, weapon_id) DO NOTHING
-                    """, (class_id_map["Паладин"], weapon_id_map[w_name]))
+            for weapon_name, weapon_id in weapon_id_map.items():
+                cur.execute("""
+                    INSERT INTO class_weapons (class_id, weapon_id)
+                    VALUES (%s, %s)
+                    ON CONFLICT (class_id, weapon_id) DO NOTHING
+                """, (class_id_map["Паладин"], weapon_id))
             logger.info(f"    • Паладин → всё оружие")
 
+        # Следопыт — простое + лёгкое воинское
+        ranger_weapons = ["Короткий меч", "Кинжал", "Лёгкий молот", "Метательный топор",
+                          "Короткий лук", "Длинный лук", "Скимитар"]
         if "Следопыт" in class_id_map:
-            light_weapons = ["Короткий меч", "Кинжал", "Лёгкий молот", "Метательный топор", "Короткий лук",
-                             "Длинный лук"]
-            for w_name in light_weapons + simple_weapons:
-                if w_name in weapon_id_map:
+            for weapon_name in ranger_weapons:
+                if weapon_name in weapon_id_map:
                     cur.execute("""
                         INSERT INTO class_weapons (class_id, weapon_id)
                         VALUES (%s, %s)
                         ON CONFLICT (class_id, weapon_id) DO NOTHING
-                    """, (class_id_map["Следопыт"], weapon_id_map[w_name]))
-            logger.info(f"    • Следопыт → лёгкое и простое оружие")
+                    """, (class_id_map["Следопыт"], weapon_id_map[weapon_name]))
+            # Также простое оружие
+            for weapon in WEAPONS_DATA:
+                if weapon["category"] == "simple" and weapon["name"] in weapon_id_map:
+                    cur.execute("""
+                        INSERT INTO class_weapons (class_id, weapon_id)
+                        VALUES (%s, %s)
+                        ON CONFLICT (class_id, weapon_id) DO NOTHING
+                    """, (class_id_map["Следопыт"], weapon_id_map[weapon["name"]]))
+            logger.info(f"    • Следопыт → простое и лёгкое воинское оружие")
 
-        for class_name in ["Варвар", "Плут"]:
-            if class_name in class_id_map:
-                for w_name in simple_weapons + ["Рапира", "Короткий лук", "Длинный меч", "Короткий меч"]:
-                    if w_name in weapon_id_map:
-                        cur.execute("""
-                            INSERT INTO class_weapons (class_id, weapon_id)
-                            VALUES (%s, %s)
-                            ON CONFLICT (class_id, weapon_id) DO NOTHING
-                        """, (class_id_map[class_name], weapon_id_map[w_name]))
-                logger.info(f"    • {class_name} → простое + избранное воинское")
+        # Варвар — простое + воинское
+        if "Варвар" in class_id_map:
+            for weapon_name, weapon_id in weapon_id_map.items():
+                cur.execute("""
+                    INSERT INTO class_weapons (class_id, weapon_id)
+                    VALUES (%s, %s)
+                    ON CONFLICT (class_id, weapon_id) DO NOTHING
+                """, (class_id_map["Варвар"], weapon_id))
+            logger.info(f"    • Варвар → всё оружие")
+
+        # Плут — простое + избранное воинское
+        rogue_weapons = ["Рапира", "Короткий лук", "Длинный меч", "Короткий меч", "Кинжал"]
+        if "Плут" in class_id_map:
+            for weapon in WEAPONS_DATA:
+                if weapon["category"] == "simple" and weapon["name"] in weapon_id_map:
+                    cur.execute("""
+                        INSERT INTO class_weapons (class_id, weapon_id)
+                        VALUES (%s, %s)
+                        ON CONFLICT (class_id, weapon_id) DO NOTHING
+                    """, (class_id_map["Плут"], weapon_id_map[weapon["name"]]))
+            for weapon_name in rogue_weapons:
+                if weapon_name in weapon_id_map:
+                    cur.execute("""
+                        INSERT INTO class_weapons (class_id, weapon_id)
+                        VALUES (%s, %s)
+                        ON CONFLICT (class_id, weapon_id) DO NOTHING
+                    """, (class_id_map["Плут"], weapon_id_map[weapon_name]))
+            logger.info(f"    • Плут → простое и избранное воинское оружие")
 
         conn.commit()
     logger.info(f"✅ Перенесено оружия: {len(WEAPONS_DATA)}")

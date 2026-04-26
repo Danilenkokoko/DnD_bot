@@ -202,12 +202,12 @@ def init_database():
                     CREATE TABLE IF NOT EXISTS weapons (
                         id SERIAL PRIMARY KEY,
                         name VARCHAR(50) NOT NULL UNIQUE,
-                        category VARCHAR(20) NOT NULL, -- simple, martial
-                        damage_dice VARCHAR(10), -- 1d6, 1d8
-                        damage_type VARCHAR(20), -- slashing, piercing, bludgeoning
-                        properties JSONB DEFAULT '[]', -- ["light", "finesse"]
-                        suitable_masteries JSONB DEFAULT '[]', -- ["Выпад", "Подавление"]
-                        detailed_masteries JSONB DEFAULT '[]', -- детальные приёмы из файла
+                        category VARCHAR(20) NOT NULL,
+                        damage_dice VARCHAR(10),
+                        damage_type VARCHAR(20),
+                        properties JSONB DEFAULT '[]',
+                        suitable_masteries JSONB DEFAULT '[]',
+                        detailed_masteries JSONB DEFAULT '[]',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)

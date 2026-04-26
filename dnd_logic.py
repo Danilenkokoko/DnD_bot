@@ -9,6 +9,7 @@ dnd_logic.py - D&D 5.5e (2024) Character Logic Module
 import psycopg2
 import json
 import os
+import random
 import logging
 from typing import Dict, List, Any, Tuple, Optional
 from dotenv import load_dotenv
@@ -136,7 +137,122 @@ def calc_ac(dexterity: int, armor_type: str = "none", has_shield: bool = False) 
 
 
 # =========================================================
-# 2. РАБОТА С РАСАМИ (из БД)
+# 2. ГЕНЕРАЦИЯ ХАРАКТЕРИСТИК (НОВАЯ ЛОГИКА ДЛЯ 5.5e!)
+# =========================================================
+
+def roll_4d6_drop_lowest() -> int:
+    """
+    Бросает 4 кубика d6, отбрасывает минимальный, возвращает сумму
+
+    Returns:
+        int: сумма трёх наибольших кубиков
+    """
+    rolls = [random.randint(1, 6) for _ in range(4)]
+    rolls.remove(min(rolls))
+    return sum(rolls)
+
+
+def generate_random_stats() -> Dict[str, int]:
+    """
+    Генерирует случайные характеристики методом 4d6 (отбросить минимальный)
+    Выполняется 6 бросков, результаты сортируются по убыванию
+
+    Returns:
+        Dict[str, int]: словарь со значениями STR, DEX, CON, INT, WIS, CHA
+    """
+    stats_list = [roll_4d6_drop_lowest() for _ in range(6)]
+    stats_list.sort(reverse=True)  # Сортируем по убыванию
+
+    return {
+        "STR": stats_list[0],
+        "DEX": stats_list[1],
+        "CON": stats_list[2],
+        "INT": stats_list[3],
+        "WIS": stats_list[4],
+        "CHA": stats_list[5]
+    }
+
+
+def get_standard_stats() -> Dict[str, int]:
+    """
+    Возвращает стандартный набор характеристик (15, 14, 13, 12, 10, 8)
+
+    Returns:
+        Dict[str, int]: стандартные характеристики
+    """
+    return {
+        "STR": 15,
+        "DEX": 14,
+        "CON": 13,
+        "INT": 12,
+        "WIS": 10,
+        "CHA": 8
+    }
+
+
+def apply_background_bonuses(stats: Dict[str, int], background_name: str) -> Dict[str, int]:
+    """
+    Применяет бонусы к характеристикам от предыстории (D&D 5.5e!)
+
+    В 5.5e бонусы даёт ПРЕДЫСТОРИЯ, а не раса!
+
+    Args:
+        stats: базовые характеристики
+        background_name: название предыстории
+
+    Returns:
+        Dict[str, int]: изменённые характеристики
+    """
+    result = stats.copy()
+
+    bg = get_background_by_name(background_name)
+    if not bg:
+        return result
+
+    # Карта перевода русских названий в коды статов
+    stat_map = {
+        "Сила": "STR", "Ловкость": "DEX", "Телосложение": "CON",
+        "Интеллект": "INT", "Мудрость": "WIS", "Харизма": "CHA"
+    }
+
+    characteristics = bg['characteristics']
+
+    # +2 к первой характеристике
+    stat1 = stat_map.get(characteristics[0], "DEX")
+    result[stat1] += 2
+
+    # +1 ко второй характеристике
+    stat2 = stat_map.get(characteristics[1], "DEX")
+    result[stat2] += 1
+
+    # Ограничиваем максимальное значение 20
+    for stat in result:
+        result[stat] = min(20, result[stat])
+
+    return result
+
+
+def get_initial_stats_by_method(method: str, background_name: str) -> Dict[str, int]:
+    """
+    Получает начальные характеристики выбранным методом с учётом предыстории
+
+    Args:
+        method: "random" или "standard"
+        background_name: название предыстории
+
+    Returns:
+        Dict[str, int]: финальные характеристики
+    """
+    if method == "random":
+        base_stats = generate_random_stats()
+    else:
+        base_stats = get_standard_stats()
+
+    return apply_background_bonuses(base_stats, background_name)
+
+
+# =========================================================
+# 3. РАБОТА С РАСАМИ (из БД)
 # =========================================================
 
 def get_all_races() -> List[Dict[str, Any]]:
@@ -247,8 +363,6 @@ def get_race_image_path(race_name: str) -> Optional[str]:
         "Ченжлинг": "images/races/changaling.jpg",
         "Шифтер": "images/races/shifter.jpg",
         "Дампир": "images/races/dampir.jpg",
-        "Гном": "images/races/gnom.jpg",
-        "Голиаф": "images/races/goliaf.jpg",
     }
     return images.get(race_name)
 
@@ -398,7 +512,7 @@ def get_race_traits_list(race: str, subrace: Optional[str] = None) -> List[str]:
 
 
 # =========================================================
-# 3. РАБОТА С КЛАССАМИ (из БД)
+# 4. РАБОТА С КЛАССАМИ (из БД)
 # =========================================================
 
 def get_all_classes() -> List[Dict[str, Any]]:
@@ -550,7 +664,7 @@ def get_class_skill_choices(class_name: str) -> List[str]:
 
 
 # =========================================================
-# 4. РАБОТА С ПОДКЛАССАМИ
+# 5. РАБОТА С ПОДКЛАССАМИ
 # =========================================================
 
 def get_subclasses_for_class(class_name: str) -> List[Dict[str, Any]]:
@@ -572,7 +686,7 @@ def get_subclasses_for_class(class_name: str) -> List[Dict[str, Any]]:
 
 
 # =========================================================
-# 5. РАБОТА С ПРЕДЫСТОРИЯМИ (из БД) - КЛЮЧЕВОЕ ДЛЯ 5.5e!
+# 6. РАБОТА С ПРЕДЫСТОРИЯМИ (из БД) - КЛЮЧЕВОЕ ДЛЯ 5.5e!
 # =========================================================
 
 def get_all_backgrounds() -> List[Dict[str, Any]]:
@@ -703,69 +817,6 @@ def format_background_for_display(background: str) -> str:
 
 
 # =========================================================
-# 6. РАСЧЁТ ХАРАКТЕРИСТИК (с бонусами от предыстории!)
-# =========================================================
-
-def get_standard_stats() -> Dict[str, int]:
-    """
-    Возвращает стандартный набор характеристик (15, 14, 13, 12, 10, 8)
-    """
-    return {
-        "STR": 15,
-        "DEX": 14,
-        "CON": 13,
-        "INT": 12,
-        "WIS": 10,
-        "CHA": 8
-    }
-
-
-def apply_background_bonuses(stats: Dict[str, int], background_name: str) -> Dict[str, int]:
-    """
-    Применяет бонусы к характеристикам от предыстории (D&D 5.5e!)
-
-    В 5.5e бонусы даёт ПРЕДЫСТОРИЯ, а не раса!
-    """
-    result = stats.copy()
-
-    bg = get_background_by_name(background_name)
-    if not bg:
-        return result
-
-    # Карта перевода русских названий в коды статов
-    stat_map = {
-        "Сила": "STR", "Ловкость": "DEX", "Телосложение": "CON",
-        "Интеллект": "INT", "Мудрость": "WIS", "Харизма": "CHA"
-    }
-
-    characteristics = bg['characteristics']
-
-    # +2 к первой характеристике
-    stat1 = stat_map.get(characteristics[0], "DEX")
-    result[stat1] += 2
-
-    # +1 ко второй характеристике
-    stat2 = stat_map.get(characteristics[1], "DEX")
-    result[stat2] += 1
-
-    # Ограничиваем значения
-    for stat in result:
-        result[stat] = min(20, result[stat])
-
-    return result
-
-
-def get_initial_stats(background_name: str) -> Dict[str, int]:
-    """
-    Получает начальные характеристики с учётом предыстории (D&D 5.5e!)
-
-    ВАЖНО: В 5.5e бонусы даёт ПРЕДЫСТОРИЯ, а не раса!
-    """
-    base_stats = get_standard_stats()
-    return apply_background_bonuses(base_stats, background_name)
-
-
-# =========================================================
 # 7. РАБОТА С ОРУЖЕЙНЫМИ ПРИЁМАМИ
 # =========================================================
 
@@ -864,7 +915,7 @@ def get_spells_for_class(class_name: str, level: int = 1, is_cantrip: bool = Non
     with get_connection() as conn:
         with conn.cursor() as cur:
             query = """
-                SELECT s.id, s.name, s.level, s.is_cantrip, s.description
+                SELECT s.id, s.name, s.level, s.is_cantrip, s.description, s.school
                 FROM spells s
                 JOIN class_spells cs ON s.id = cs.spell_id
                 WHERE cs.class_id = %s AND cs.is_available = TRUE
@@ -882,7 +933,7 @@ def get_spells_for_class(class_name: str, level: int = 1, is_cantrip: bool = Non
             query += " ORDER BY s.level, s.name"
 
             cur.execute(query, params)
-            columns = ['id', 'name', 'level', 'is_cantrip', 'description']
+            columns = ['id', 'name', 'level', 'is_cantrip', 'description', 'school']
             return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
@@ -1017,61 +1068,51 @@ if __name__ == "__main__":
     print("ТЕСТ D&D LOGIC MODULE (PostgreSQL версия)")
     print("=" * 60)
 
-    # 1. Тест рас
-    print("\n1. Список рас:")
-    for race in get_race_list()[:5]:
-        print(f"   • {race}")
-        desc = get_race_description(race)
-        print(f"     Описание: {desc[:80]}...")
+    # 1. Тест генерации характеристик
+    print("\n1. ТЕСТ ГЕНЕРАЦИИ ХАРАКТЕРИСТИК:")
+    print("\n   Случайный метод (4d6):")
+    for i in range(3):
+        stats = generate_random_stats()
+        print(f"     Попытка {i + 1}: STR={stats['STR']}, DEX={stats['DEX']}, CON={stats['CON']}, "
+              f"INT={stats['INT']}, WIS={stats['WIS']}, CHA={stats['CHA']} "
+              f"(сумма: {sum(stats.values())})")
 
-    # 2. Тест классов
-    print("\n2. Список классов:")
-    for cls in get_class_list():
-        print(f"   • {cls}")
-        desc = get_class_description(cls)
-        print(f"     Описание: {desc[:80]}...")
+    print("\n   Стандартный набор:")
+    stats = get_standard_stats()
+    print(f"     STR=15, DEX=14, CON=13, INT=12, WIS=10, CHA=8 (сумма: {sum(stats.values())})")
 
-    # 3. Тест предысторий
-    print("\n3. Список предысторий:")
-    for bg in get_background_list()[:5]:
-        print(f"   • {bg}")
+    # 2. Тест бонусов от предыстории
+    print("\n2. ТЕСТ БОНУСОВ ОТ ПРЕДЫСТОРИИ (5.5e):")
+    backgrounds = get_background_list()
+    for bg in backgrounds[:3]:
+        stats = get_initial_stats_by_method("standard", bg)
         chars = get_background_characteristics(bg)
-        print(f"     Бонусы: +2 {chars[0]}, +1 {chars[1]}")
+        print(f"   {bg}: +2 {chars[0]}, +1 {chars[1]} → STR={stats['STR']}, DEX={stats['DEX']}, "
+              f"CON={stats['CON']}, INT={stats['INT']}, WIS={stats['WIS']}, CHA={stats['CHA']}")
 
-    # 4. Тест подрас
-    print("\n4. Тест подрас:")
-    for race in ["Эльф", "Гном", "Дварф"]:
-        if has_subraces(race):
-            subraces = get_subraces(race)
-            print(f"   {race}: {', '.join(subraces)}")
-            if subraces:
-                desc = get_subrace_description(race, subraces[0])
-                print(f"     Описание {subraces[0]}: {desc[:80]}...")
+    # 3. Тест рас
+    print("\n3. ТЕСТ РАС:")
+    races = get_race_list()
+    print(f"   Всего рас: {len(races)}")
+    for race in races[:5]:
+        desc = get_race_description(race)
+        print(f"   • {race}: {desc[:60]}...")
 
-    # 5. Тест характеристик с бонусами от предыстории
-    print("\n5. Тест характеристик (5.5e):")
-    for bg in ["Солдат", "Мудрец", "Преступник"]:
-        stats = get_initial_stats(bg)
-        print(
-            f"   {bg}: STR={stats['STR']}, DEX={stats['DEX']}, CON={stats['CON']}, INT={stats['INT']}, WIS={stats['WIS']}, CHA={stats['CHA']}")
+    # 4. Тест классов
+    print("\n4. ТЕСТ КЛАССОВ:")
+    classes = get_class_list()
+    print(f"   Всего классов: {len(classes)}")
+    for cls in classes[:5]:
+        desc = get_class_description(cls)
+        print(f"   • {cls}: {desc[:60]}...")
 
-    # 6. Тест заклинаний
-    print("\n6. Тест заклинаний:")
-    spells = get_level1_spells_for_class("Волшебник")
-    for spell in spells[:5]:
-        print(f"   • {spell['name']}")
-
-    # 7. Тест оружейных приёмов
-    print("\n7. Тест оружейных приёмов:")
-    masteries = get_all_weapon_masteries()
-    for m in masteries[:5]:
-        print(f"   • {m['name']}: {m['effect'][:50]}...")
-
-    # 8. Тест картинок
-    print("\n8. Тест картинок:")
-    for race in ["Эльф", "Дварф", "Человек"]:
-        img = get_race_image_path(race)
-        print(f"   {race}: {img if img else 'нет картинки'}")
+    # 5. Тест предысторий
+    print("\n5. ТЕСТ ПРЕДЫСТОРИЙ:")
+    backgrounds = get_background_list()
+    print(f"   Всего предысторий: {len(backgrounds)}")
+    for bg in backgrounds[:5]:
+        chars = get_background_characteristics(bg)
+        print(f"   • {bg}: бонусы +2 {chars[0]}, +1 {chars[1]}")
 
     print("\n" + "=" * 60)
     print("✅ МОДУЛЬ DND_LOGIC.PY ГОТОВ К РАБОТЕ!")

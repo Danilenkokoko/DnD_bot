@@ -6,6 +6,7 @@ bot.py - D&D Character Creator Bot for D&D 5.5e (2024)
 - распределением характеристик (умные бонусы от предыстории)
 - выдачей снаряжения от класса (с выбором А/Б для Воина)
 - выдачей оружейных приёмов (автоматически, без участия игрока)
+- правильным порядком шагов (снаряжение → характеристики → имя)
 """
 
 import asyncio
@@ -13,7 +14,6 @@ import logging
 import os
 import re
 import tempfile
-import random
 from typing import Dict, Any, Optional, List
 
 from aiogram import Bot, Dispatcher, F
@@ -101,7 +101,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 
-# ---------------- FSM STATES (УПРОЩЁННЫЕ) ----------------
+# ---------------- FSM STATES (ПРАВИЛЬНЫЙ ПОРЯДОК) ----------------
 class CreateCharacter(StatesGroup):
     # Шаг 1: КЛАСС
     class_select = State()
@@ -114,19 +114,19 @@ class CreateCharacter(StatesGroup):
     race_select = State()
     subrace_select = State()
 
-    # Шаг 4: АВТО-ХАРАКТЕРИСТИКИ (просто показываем результат)
+    # Шаг 4: СНАРЯЖЕНИЕ ОТ КЛАССА
+    equipment_choice_select = State()
+
+    # Шаг 5: ХАРАКТЕРИСТИКИ (АВТО)
     stats_auto = State()
 
-    # Шаг 5: ИМЯ
+    # Шаг 6: ИМЯ
     name_input = State()
 
-    # Шаг 6: ЗАКЛИНАНИЯ
+    # Шаг 7: ЗАКЛИНАНИЯ
     spells_method_select = State()
     spells_cantrips_select = State()
     spells_level1_select = State()
-
-    # Шаг 7: СНАРЯЖЕНИЕ (выбор варианта А/Б для Воина)
-    equipment_choice_select = State()
 
     # Шаг 8: БОЕВОЙ СТИЛЬ
     fighting_style_select = State()
@@ -435,10 +435,10 @@ async def help_command(m: Message):
         "1️⃣ Выберите **КЛАСС**\n"
         "2️⃣ Выберите **ПРЕДЫСТОРИЮ**\n"
         "3️⃣ Выберите **РАСУ**\n"
-        "4️⃣ **Характеристики** рассчитаются автоматически\n"
-        "5️⃣ Введите **ИМЯ**\n"
-        "6️⃣ Выберите **ЗАКЛИНАНИЯ**\n"
-        "7️⃣ Выберите **СНАРЯЖЕНИЕ** (если есть выбор)\n"
+        "4️⃣ Выберите **СНАРЯЖЕНИЕ** (для Воина есть выбор)\n"
+        "5️⃣ **ХАРАКТЕРИСТИКИ** рассчитаются автоматически\n"
+        "6️⃣ Введите **ИМЯ**\n"
+        "7️⃣ Выберите **ЗАКЛИНАНИЯ**\n"
         "8️⃣ Выберите **БОЕВОЙ СТИЛЬ** (если есть)\n"
         "9️⃣ Выберите **ВОЗВАНИЯ** (только для колдуна)\n"
         "🔟 Выберите **СНАРЯЖЕНИЕ ОТ ПРЕДЫСТОРИИ**\n"
@@ -653,10 +653,10 @@ async def select_race(call: CallbackQuery, state: FSMContext):
         reply_markup = create_subrace_keyboard(race)
         next_state = CreateCharacter.subrace_select
     else:
-        # Переходим к автоматическому расчёту характеристик
-        text += f"\n\n**Шаг 4/12: Характеристики рассчитываются автоматически...**"
-        reply_markup = None
-        next_state = CreateCharacter.stats_auto
+        # Переходим к выбору снаряжения
+        text += f"\n\n**Шаг 4/12: Выберите снаряжение для класса**"
+        reply_markup = create_equipment_choice_keyboard()
+        next_state = CreateCharacter.equipment_choice_select
 
     await state.set_state(next_state)
 
@@ -673,10 +673,6 @@ async def select_race(call: CallbackQuery, state: FSMContext):
         logger.error(f"Ошибка отправки картинки расы: {e}")
         await call.message.answer(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
-    # Если нет подрасы, сразу рассчитываем характеристики
-    if not (has_sub and subraces_list):
-        await auto_calculate_stats(call, state)
-
     await call.answer()
 
 
@@ -692,33 +688,33 @@ async def select_subrace(call: CallbackQuery, state: FSMContext):
 
     text = (
         f"🧝 **{race} — {subrace}**\n\n📖 {sub_desc}\n\n✨ **Особенность:** {sub_trait}\n\n"
-        f"**Шаг 4/12: Характеристики рассчитываются автоматически...**"
+        f"**Шаг 4/12: Выберите снаряжение для класса**"
     )
 
-    await state.set_state(CreateCharacter.stats_auto)
+    await state.set_state(CreateCharacter.equipment_choice_select)
     await call.message.delete()
-    await call.message.answer(text, parse_mode=ParseMode.MARKDOWN)
-
-    # Рассчитываем характеристики
-    await auto_calculate_stats(call, state)
+    await call.message.answer(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=create_equipment_choice_keyboard()
+    )
     await call.answer()
 
 
 @dp.callback_query(lambda c: c.data == "subrace_skip")
 async def skip_subrace(call: CallbackQuery, state: FSMContext):
     await state.update_data(subrace=None)
-    await state.set_state(CreateCharacter.stats_auto)
+    await state.set_state(CreateCharacter.equipment_choice_select)
 
     data = await state.get_data()
     race = data.get("race")
 
     await call.message.delete()
     await call.message.answer(
-        f"🧝 **Раса: {race}**\n\n**Шаг 4/12: Характеристики рассчитываются автоматически...**",
-        parse_mode=ParseMode.MARKDOWN
+        f"🧝 **Раса: {race}**\n\n**Шаг 4/12: Выберите снаряжение для класса**",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=create_equipment_choice_keyboard()
     )
-
-    await auto_calculate_stats(call, state)
     await call.answer()
 
 
@@ -734,9 +730,91 @@ async def back_to_races(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
-# ---------------- ШАГ 4: АВТОМАТИЧЕСКИЕ ХАРАКТЕРИСТИКИ ----------------
-async def auto_calculate_stats(call: CallbackQuery, state: FSMContext):
-    """Автоматический расчёт характеристик с учётом предыстории и класса"""
+# ---------------- ШАГ 4: СНАРЯЖЕНИЕ ОТ КЛАССА ----------------
+@dp.callback_query(lambda c: c.data.startswith("equipment_"))
+async def select_equipment_choice(call: CallbackQuery, state: FSMContext):
+    choice = call.data.replace("equipment_", "")
+    await state.update_data(equipment_choice=choice)
+
+    data = await state.get_data()
+    class_name = data.get("class_name")
+
+    # Получаем выбранный вариант снаряжения
+    equipment_list = get_class_equipment(class_name, choice)
+    if equipment_list:
+        eq = equipment_list[0]
+        await apply_equipment_and_masteries(call.message, state, eq, class_name)
+    else:
+        # Если нет снаряжения, переходим к характеристикам
+        await auto_calculate_stats(call.message, state)
+
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "back_to_race")
+async def back_to_race(call: CallbackQuery, state: FSMContext):
+    await state.set_state(CreateCharacter.race_select)
+    await call.message.delete()
+    await call.message.answer(
+        "**Шаг 3/12: Выберите РАСУ**",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=create_race_keyboard()
+    )
+    await call.answer()
+
+
+async def apply_equipment_and_masteries(m: Message, state: FSMContext, equipment: Dict[str, Any], class_name: str):
+    """Применяет снаряжение и переходит к расчёту характеристик"""
+
+    armor_name = equipment.get('armor')
+    weapon_name = equipment.get('weapon')
+    secondary_weapon = equipment.get('secondary_weapon')
+    other_items = equipment.get('other_items', '')
+    coins = equipment.get('coins', 0)
+
+    await state.update_data(selected_armor=armor_name)
+    await state.update_data(selected_weapon=weapon_name)
+    await state.update_data(selected_secondary_weapon=secondary_weapon)
+    await state.update_data(selected_other_items=other_items)
+    await state.update_data(selected_coins=coins)
+
+    # Автоматически назначаем оружейные приёмы
+    masteries = auto_assign_masteries(weapon_name, class_name)
+    await state.update_data(selected_masteries=masteries)
+
+    # Формируем сообщение о выданном снаряжении
+    text = f"**Шаг 4/12: Снаряжение выдано!**\n\n"
+    text += f"⚔️ **Класс:** {class_name}\n"
+    text += f"🛡️ **Броня:** {armor_name if armor_name else 'нет'}\n"
+    text += f"🗡️ **Оружие:** {weapon_name}\n"
+    if secondary_weapon:
+        text += f"🔪 **Доп. оружие:** {secondary_weapon}\n"
+    if other_items:
+        text += f"🎒 **Прочее:** {other_items}\n"
+    if coins > 0:
+        text += f"💰 **Монеты:** {coins} зм\n"
+
+    if masteries:
+        text += f"\n🎯 **Оружейные приёмы (выданы автоматически):**\n"
+        for mastery in masteries:
+            text += f"   • {mastery}\n"
+
+    text += f"\nНажмите «Продолжить» для расчёта характеристик."
+
+    await state.set_state(CreateCharacter.stats_auto)
+    await m.answer(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="▶️ Продолжить")]],
+            resize_keyboard=True
+        )
+    )
+
+
+# ---------------- ШАГ 5: ХАРАКТЕРИСТИКИ (АВТОМАТИЧЕСКИЕ) ----------------
+async def auto_calculate_stats(m: Message, state: FSMContext):
+    """Автоматический расчёт характеристик"""
     data = await state.get_data()
     class_name = data.get("class_name")
     background = data.get("background")
@@ -749,13 +827,11 @@ async def auto_calculate_stats(call: CallbackQuery, state: FSMContext):
     await state.update_data(final_stats=stats)
 
     race_text = f"{race} ({subrace})" if subrace else race
-
-    # Получаем основные характеристики класса и бонусы предыстории для отображения
     class_primary = get_class_info(class_name).get('primary_stats', [])
     bg_chars = get_background_characteristics(background)
 
     text = (
-        f"**Шаг 4/12: Характеристики рассчитаны!**\n\n"
+        f"**Шаг 5/12: Характеристики рассчитаны!**\n\n"
         f"🧝 **Раса:** {race_text}\n"
         f"📜 **Предыстория:** {background}\n"
         f"⚔️ **Класс:** {class_name}\n\n"
@@ -773,7 +849,7 @@ async def auto_calculate_stats(call: CallbackQuery, state: FSMContext):
     )
 
     await state.set_state(CreateCharacter.name_input)
-    await call.message.answer(
+    await m.answer(
         text,
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=ReplyKeyboardMarkup(
@@ -783,14 +859,37 @@ async def auto_calculate_stats(call: CallbackQuery, state: FSMContext):
     )
 
 
-# ---------------- ШАГ 5: ИМЯ ----------------
+# ---------------- ШАГ 6: ИМЯ ----------------
 @dp.message(F.text == "▶️ Продолжить")
-async def continue_to_name(m: Message, state: FSMContext):
-    await state.set_state(CreateCharacter.name_input)
-    await m.answer(
-        "**Шаг 5/12: Введите ИМЯ персонажа**\n\nОтправьте имя вашего персонажа:",
-        parse_mode=ParseMode.MARKDOWN
-    )
+async def continue_after_stats(m: Message, state: FSMContext):
+    current_state = await state.get_state()
+
+    if current_state == CreateCharacter.stats_auto.state:
+        await auto_calculate_stats(m, state)
+    elif current_state == CreateCharacter.name_input.state:
+        # Переходим к заклинаниям
+        await go_to_spells(m, state)
+    else:
+        await m.answer("⏳ Следуйте инструкциям...")
+
+
+async def go_to_spells(m: Message, state: FSMContext):
+    data = await state.get_data()
+    class_name = data.get("class_name")
+    class_info = get_class_info(class_name)
+    is_spellcaster = class_info.get("spellcasting", False) and class_name not in ["Паладин", "Следопыт"]
+
+    if is_spellcaster:
+        await state.set_state(CreateCharacter.spells_method_select)
+        await m.answer(
+            f"**Шаг 7/12: Выбор ЗАКЛИНАНИЙ**\n\n"
+            f"Класс {class_name} умеет использовать магию.\n\n"
+            f"Выберите, как хотите получить заклинания:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=create_spells_method_keyboard()
+        )
+    else:
+        await go_to_fighting_style(m, state)
 
 
 @dp.message(CreateCharacter.name_input)
@@ -808,31 +907,16 @@ async def set_name(m: Message, state: FSMContext):
     logger.info(f"✅ Имя сохранено: {m.text.strip()}")
     await m.answer(f"✅ Имя: {m.text.strip()}")
 
-    data = await state.get_data()
-    class_name = data.get("class_name")
-    class_info = get_class_info(class_name)
-    is_spellcaster = class_info.get("spellcasting", False) and class_name not in ["Паладин", "Следопыт"]
-
-    if is_spellcaster:
-        await state.set_state(CreateCharacter.spells_method_select)
-        await m.answer(
-            f"**Шаг 6/12: Выбор ЗАКЛИНАНИЙ**\n\n"
-            f"Класс {class_name} умеет использовать магию.\n\n"
-            f"Выберите, как хотите получить заклинания:",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=create_spells_method_keyboard()
-        )
-    else:
-        await auto_equipment(m, state)
+    await go_to_spells(m, state)
 
 
-# ---------------- ШАГ 6: ЗАКЛИНАНИЯ ----------------
+# ---------------- ШАГ 7: ЗАКЛИНАНИЯ ----------------
 @dp.callback_query(lambda c: c.data == "back_to_name")
 async def back_to_name(call: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.name_input)
     await call.message.delete()
     await call.message.answer(
-        "**Шаг 5/12: Введите ИМЯ персонажа**\n\nОтправьте имя вашего персонажа:",
+        "**Шаг 6/12: Введите ИМЯ персонажа**\n\nОтправьте имя вашего персонажа:",
         parse_mode=ParseMode.MARKDOWN
     )
     await call.answer()
@@ -857,11 +941,11 @@ async def use_recommended_spells(call: CallbackQuery, state: FSMContext):
         f"**✅ Рекомендованные заклинания для {class_name} выбраны!**\n\n"
         f"📖 **Заговоры:** {', '.join([s['name'] for s in recommended.get('cantrips', [])])}\n\n"
         f"🔮 **Заклинания 1 уровня:** {', '.join([s['name'] for s in recommended.get('level1', [])])}\n\n"
-        f"Нажмите «Продолжить» для перехода к снаряжению."
+        f"Нажмите «Продолжить» для перехода к боевому стилю."
     )
 
-    await auto_equipment(call.message, state)
     await call.message.answer(text, parse_mode=ParseMode.MARKDOWN)
+    await go_to_fighting_style(call.message, state)
     await call.answer()
 
 
@@ -882,7 +966,7 @@ async def manual_spells(call: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.spells_cantrips_select)
 
     text = (
-        f"**Шаг 6/12: Выбор ЗАГОВОРОВ (кантрипов)**\n\n"
+        f"**Шаг 7/12: Выбор ЗАГОВОРОВ (кантрипов)**\n\n"
         f"📖 Класс **{class_name}** может выбрать **{max_cantrips}** заговора(ов).\n\n"
         f"🔘 Нажмите на заклинание, чтобы выбрать/отменить.\n"
         f"✅ Зелёной галочкой отмечены выбранные.\n\n"
@@ -960,7 +1044,7 @@ async def confirm_cantrips(call: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.spells_level1_select)
 
     text = (
-        f"**Шаг 6/12: Выбор ЗАКЛИНАНИЙ 1 УРОВНЯ**\n\n"
+        f"**Шаг 7/12: Выбор ЗАКЛИНАНИЙ 1 УРОВНЯ**\n\n"
         f"🔮 Класс **{class_name}** может выбрать **{max_level1}** заклинание(й).\n\n"
         f"✅ Вы выбрали заговоры: {', '.join(selected)}\n\n"
         f"**Доступные заклинания 1 уровня:**"
@@ -1028,7 +1112,15 @@ async def confirm_level1_spells(call: CallbackQuery, state: FSMContext):
     all_selected = selected_cantrips + selected
     await state.update_data(selected_spells=all_selected)
 
-    await auto_equipment(call.message, state)
+    text = (
+        f"**✅ Заклинания выбраны!**\n\n"
+        f"📖 **Заговоры ({len(selected_cantrips)}):** {', '.join(selected_cantrips)}\n\n"
+        f"🔮 **Заклинания 1 уровня ({len(selected)}):** {', '.join(selected)}\n\n"
+        f"Нажмите «Продолжить» для перехода к боевому стилю."
+    )
+
+    await call.message.answer(text, parse_mode=ParseMode.MARKDOWN)
+    await go_to_fighting_style(call.message, state)
     await call.answer()
 
 
@@ -1037,7 +1129,7 @@ async def back_to_spells_method(call: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.spells_method_select)
     await call.message.delete()
     await call.message.answer(
-        "**Шаг 6/12: Выбор ЗАКЛИНАНИЙ**\n\nВыберите, как хотите получить заклинания:",
+        "**Шаг 7/12: Выбор ЗАКЛИНАНИЙ**\n\nВыберите, как хотите получить заклинания:",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=create_spells_method_keyboard()
     )
@@ -1054,7 +1146,7 @@ async def back_to_cantrips(call: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.spells_cantrips_select)
     await call.message.delete()
     await call.message.answer(
-        f"**Шаг 6/12: Выбор ЗАГОВОРОВ (кантрипов)**\n\n"
+        f"**Шаг 7/12: Выбор ЗАГОВОРОВ (кантрипов)**\n\n"
         f"📖 Класс **{class_name}** может выбрать **{max_cantrips}** заговора(ов).\n\n"
         f"🔘 Нажмите на заклинание, чтобы выбрать/отменить.\n\n"
         f"**Доступные заговоры:**",
@@ -1067,114 +1159,6 @@ async def back_to_cantrips(call: CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data == "spell_info")
 async def spell_info(call: CallbackQuery):
     await call.answer("Нажмите на название заклинания, чтобы выбрать/отменить", show_alert=False)
-
-
-# ---------------- ШАГ 7: СНАРЯЖЕНИЕ (АВТОМАТИЧЕСКОЕ) ----------------
-async def auto_equipment(m: Message, state: FSMContext):
-    """Автоматическая выдача снаряжения от класса (с выбором А/Б для Воина)"""
-    data = await state.get_data()
-    class_name = data.get("class_name")
-
-    # Получаем снаряжение для класса
-    equipment_list = get_class_equipment(class_name)
-
-    if not equipment_list:
-        await go_to_fighting_style(m, state)
-        return
-
-    # Если есть выбор (несколько вариантов) — предлагаем выбрать
-    if len(equipment_list) > 1:
-        await state.set_state(CreateCharacter.equipment_choice_select)
-        await m.answer(
-            f"**Шаг 7/12: Выберите вариант снаряжения для {class_name}**\n\n"
-            f"У этого класса есть два варианта стартового снаряжения. Выберите подходящий:",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=create_equipment_choice_keyboard()
-        )
-    else:
-        # Единственный вариант — применяем автоматически
-        eq = equipment_list[0]
-        await apply_equipment_and_masteries(m, state, eq, class_name)
-
-
-@dp.callback_query(lambda c: c.data.startswith("equipment_"))
-async def select_equipment_choice(call: CallbackQuery, state: FSMContext):
-    choice = call.data.replace("equipment_", "")
-    await state.update_data(equipment_choice=choice)
-
-    data = await state.get_data()
-    class_name = data.get("class_name")
-
-    # Получаем выбранный вариант снаряжения
-    equipment_list = get_class_equipment(class_name, choice)
-    if equipment_list:
-        eq = equipment_list[0]
-        await apply_equipment_and_masteries(call.message, state, eq, class_name)
-    else:
-        await go_to_fighting_style(call.message, state)
-
-    await call.answer()
-
-
-async def apply_equipment_and_masteries(m: Message, state: FSMContext, equipment: Dict[str, Any], class_name: str):
-    """Применяет снаряжение и автоматически назначает оружейные приёмы"""
-
-    armor_name = equipment.get('armor')
-    weapon_name = equipment.get('weapon')
-    secondary_weapon = equipment.get('secondary_weapon')
-    other_items = equipment.get('other_items', '')
-    coins = equipment.get('coins', 0)
-
-    await state.update_data(selected_armor=armor_name)
-    await state.update_data(selected_weapon=weapon_name)
-    await state.update_data(selected_secondary_weapon=secondary_weapon)
-    await state.update_data(selected_other_items=other_items)
-    await state.update_data(selected_coins=coins)
-
-    # Автоматически назначаем оружейные приёмы
-    masteries = auto_assign_masteries(weapon_name, class_name)
-    await state.update_data(selected_masteries=masteries)
-
-    # Формируем сообщение о выданном снаряжении
-    text = f"**Шаг 7/12: Снаряжение выдано!**\n\n"
-    text += f"⚔️ **Класс:** {class_name}\n"
-    text += f"🛡️ **Броня:** {armor_name if armor_name else 'нет'}\n"
-    text += f"🗡️ **Оружие:** {weapon_name}\n"
-    if secondary_weapon:
-        text += f"🔪 **Доп. оружие:** {secondary_weapon}\n"
-    if other_items:
-        text += f"🎒 **Прочее:** {other_items}\n"
-    if coins > 0:
-        text += f"💰 **Монеты:** {coins} зм\n"
-
-    if masteries:
-        text += f"\n🎯 **Оружейные приёмы (выданы автоматически):**\n"
-        for m in masteries:
-            text += f"   • {m}\n"
-
-    text += f"\nНажмите «Продолжить» для перехода к выбору боевого стиля."
-
-    await state.set_state(CreateCharacter.fighting_style_select)
-    await m.answer(
-        text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="▶️ Продолжить")]],
-            resize_keyboard=True
-        )
-    )
-
-
-@dp.callback_query(lambda c: c.data == "back_to_race")
-async def back_to_race(call: CallbackQuery, state: FSMContext):
-    await state.set_state(CreateCharacter.race_select)
-    await call.message.delete()
-    await call.message.answer(
-        "**Шаг 3/12: Выберите РАСУ**",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=create_race_keyboard()
-    )
-    await call.answer()
 
 
 # ---------------- ШАГ 8: БОЕВОЙ СТИЛЬ ----------------
@@ -1219,7 +1203,13 @@ async def confirm_fighting_style(call: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data == "back_to_equipment")
 async def back_to_equipment(call: CallbackQuery, state: FSMContext):
-    await auto_equipment(call.message, state)
+    await state.set_state(CreateCharacter.equipment_choice_select)
+    await call.message.delete()
+    await call.message.answer(
+        "**Шаг 4/12: Выберите снаряжение для класса**",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=create_equipment_choice_keyboard()
+    )
     await call.answer()
 
 

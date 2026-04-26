@@ -684,7 +684,7 @@ async def back_to_races(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
-# ---------------- ШАГ 4: ВЫБОР МЕТОДА ГЕНЕРАЦИИ ХАРАКТЕРИСТИК (НОВЫЙ!) ----------------
+# ---------------- ШАГ 4: ВЫБОР МЕТОДА ГЕНЕРАЦИИ ХАРАКТЕРИСТИК ----------------
 @dp.callback_query(lambda c: c.data.startswith("stats_"))
 async def select_stats_method(call: CallbackQuery, state: FSMContext):
     method = call.data.replace("stats_", "")
@@ -695,7 +695,7 @@ async def select_stats_method(call: CallbackQuery, state: FSMContext):
     race = data.get("race")
     subrace = data.get("subrace", "")
 
-    # Генерируем характеристики выбранным методом
+    # Генерируем характеристики выбранным методом (один раз, без переброса)
     stats = get_initial_stats_by_method(method, background)
     await state.update_data(stats=stats)
     await state.update_data(final_stats=stats)
@@ -716,58 +716,17 @@ async def select_stats_method(call: CallbackQuery, state: FSMContext):
         f"🧠 **Интеллект (INT):** {stats['INT']} ({modifier(stats['INT']):+d})\n"
         f"🧙 **Мудрость (WIS):** {stats['WIS']} ({modifier(stats['WIS']):+d})\n"
         f"✨ **Харизма (CHA):** {stats['CHA']} ({modifier(stats['CHA']):+d})\n\n"
-    )
-
-    if method == "random":
-        text += f"Если хотите перебросить характеристики, нажмите кнопку «🎲 Перебросить».\n"
-        reply_markup = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🎲 Перебросить характеристики", callback_data="reroll_stats")],
-            [InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm_stats")]
-        ])
-    else:
-        text += f"Если всё устраивает, нажмите «✅ Подтвердить»."
-        reply_markup = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm_stats")]
-        ])
-
-    await call.message.delete()
-    await call.message.answer(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
-    await call.answer()
-
-
-@dp.callback_query(lambda c: c.data == "reroll_stats")
-async def reroll_stats(call: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    background = data.get("background")
-    race = data.get("race")
-    subrace = data.get("subrace", "")
-
-    stats = get_initial_stats_by_method("random", background)
-    await state.update_data(stats=stats)
-    await state.update_data(final_stats=stats)
-
-    race_text = f"{race} ({subrace})" if subrace else race
-
-    text = (
-        f"🧝 **Раса:** {race_text}\n"
-        f"📜 **Предыстория:** {background}\n\n"
-        f"**🎲 Характеристики переброшены!**\n\n"
-        f"**Новые характеристики:**\n"
-        f"💪 **Сила (STR):** {stats['STR']} ({modifier(stats['STR']):+d})\n"
-        f"🤸 **Ловкость (DEX):** {stats['DEX']} ({modifier(stats['DEX']):+d})\n"
-        f"🏋️ **Телосложение (CON):** {stats['CON']} ({modifier(stats['CON']):+d})\n"
-        f"🧠 **Интеллект (INT):** {stats['INT']} ({modifier(stats['INT']):+d})\n"
-        f"🧙 **Мудрость (WIS):** {stats['WIS']} ({modifier(stats['WIS']):+d})\n"
-        f"✨ **Харизма (CHA):** {stats['CHA']} ({modifier(stats['CHA']):+d})\n\n"
-        f"Можете перебросить ещё раз или подтвердить."
+        f"Нажмите «✅ Подтвердить», чтобы принять эти характеристики.\n"
+        f"Если хотите изменить класс, расу или предысторию, нажмите «🔄 Создать нового персонажа»."
     )
 
     reply_markup = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎲 Перебросить ещё раз", callback_data="reroll_stats")],
-        [InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm_stats")]
+        [InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm_stats")],
+        [InlineKeyboardButton(text="🔄 Создать нового персонажа", callback_data="cancel_creation")]
     ])
 
-    await call.message.edit_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    await call.message.delete()
+    await call.message.answer(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
     await call.answer()
 
 

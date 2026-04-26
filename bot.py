@@ -73,7 +73,8 @@ def main_menu() -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(text="🎲 Создать персонажа")],
         [KeyboardButton(text="📋 Мои персонажи")],
-        [KeyboardButton(text="🗑 Удалить персонажа")]
+        [KeyboardButton(text="🗑 Удалить персонажа")],
+        [KeyboardButton(text="ℹ️ О боте"), KeyboardButton(text="❓ Помощь")]
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
@@ -84,6 +85,75 @@ def cancel_kb() -> ReplyKeyboardMarkup:
         keyboard=[[KeyboardButton(text="❌ Отмена")]],
         resize_keyboard=True
     )
+
+# ---------------- HELP & INFO ----------------
+@dp.message(Command("help"))
+async def help_command(m: Message):
+    """Обработчик команды /help"""
+    help_text = (
+        "❓ **Помощь по использованию бота**\n\n"
+        "**Доступные команды:**\n"
+        "• `/start` - Запустить бота и показать главное меню\n"
+        "• `/help` - Показать это сообщение\n"
+        "• `/info` - Информация о боте\n"
+        "• `/skip` - Пропустить загрузку картинки персонажа\n\n"
+        "**Как создать персонажа:**\n"
+        "1️⃣ Нажмите кнопку «🎲 Создать персонажа»\n"
+        "2️⃣ Выберите расу из предложенных\n"
+        "3️⃣ Выберите класс\n"
+        "4️⃣ Введите имя персонажа\n"
+        "5️⃣ Выберите предысторию\n"
+        "6️⃣ Выберите стартовое снаряжение\n"
+        "7️⃣ Напишите историю персонажа\n"
+        "8️⃣ Загрузите портрет (или пропустите)\n\n"
+        "**Другие возможности:**\n"
+        "• 📋 Мои персонажи - посмотреть список всех персонажей\n"
+        "• 🗑 Удалить персонажа - удалить ненужного персонажа\n\n"
+        "По всем вопросам обращайтесь к @danila6022000"
+    )
+    await m.answer(help_text, parse_mode=ParseMode.MARKDOWN)
+
+
+@dp.message(Command("info"))
+async def info_command(m: Message):
+    """Обработчик команды /info"""
+    info_text = (
+        "ℹ️ **О боте D&D Character Creator**\n\n"
+        "**Версия:** 2.0.0\n"
+        "**Разработчик:** @danila6022000\n\n"
+        "**Описание:**\n"
+        "Этот бот помогает создавать персонажей для игры в Dungeons & Dragons 5-й редакции.\n\n"
+        "**Возможности:**\n"
+        "• 16 рас с подробным описанием и изображениями\n"
+        "• 13 классов с характеристиками и умениями\n"
+        "• 17 предысторий с выбором снаряжения\n"
+        "• Генерация PDF-листа персонажа\n"
+        "• Сохранение истории персонажа\n"
+        "• Загрузка портрета персонажа\n\n"
+        "**Технологии:**\n"
+        "• Python + aiogram\n"
+        "• PostgreSQL\n"
+        "• WeasyPrint для генерации PDF\n\n"
+        "**Планы на будущее:**\n"
+        "• Система уровней и опыта\n"
+        "• Боевая система\n"
+        "• Инвентарь и экипировка\n"
+        "• Броски кубиков 🎲\n\n"
+        "Приятной игры! 🎮"
+    )
+    await m.answer(info_text, parse_mode=ParseMode.MARKDOWN)
+
+
+@dp.message(F.text == "ℹ️ О боте")
+async def info_button(m: Message):
+    """Кнопка информации о боте"""
+    await info_command(m)
+
+
+@dp.message(F.text == "❓ Помощь")
+async def help_button(m: Message):
+    """Кнопка помощи"""
+    await help_command(m)
 
 
 # ---------------- INLINE KEYBOARDS ----------------
@@ -196,19 +266,73 @@ def create_delete_keyboard(characters: list) -> InlineKeyboardMarkup:
 @dp.message(Command("start"))
 async def start(m: Message, state: FSMContext):
     await state.clear()
+
+    # Приветственное сообщение с описанием
+    welcome_text = (
+        "🎮 **Добро пожаловать в D&D Character Creator!**\n\n"
+        "Я помогу тебе создать персонажа для Dungeons & Dragons 5-й редакции.\n\n"
+        "**Что я умею:**\n"
+        "• Создавать персонажей с нуля 🎲\n"
+        "• Показывать информацию о расах и классах 📖\n"
+        "• Генерировать красивый PDF-лист персонажа 📄\n"
+        "• Сохранять историю и портрет персонажа 🖼️\n\n"
+        "**Как начать:**\n"
+        "Нажми кнопку «🎲 Создать персонажа» и следуй инструкциям!\n\n"
+        "В любое время можешь нажать «❓ Помощь» для подсказок."
+    )
+
     try:
         count = get_user_characters_count(m.from_user.id)
         await m.answer(
-            f"🎮 Добро пожаловать в D&D Character Creator!\n\n"
-            f"У вас создано персонажей: {count}\n\n"
-            f"Используйте кнопки меню для создания нового персонажа или просмотра существующих.",
-            reply_markup=main_menu()
+            f"{welcome_text}\n\n"
+            f"📊 У вас создано персонажей: {count}",
+            reply_markup=main_menu(),
+            parse_mode=ParseMode.MARKDOWN
         )
     except Exception as e:
         logger.error(f"Ошибка при старте: {e}")
         await m.answer(
-            "🎮 Добро пожаловать в D&D Character Creator!\n\n"
-            "Используйте кнопки меню для создания нового персонажа.",
+            welcome_text,
+            reply_markup=main_menu(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+@dp.message(Command("menu"))
+async def menu_command(m: Message, state: FSMContext):
+    """Возврат в главное меню"""
+    await state.clear()
+    await m.answer(
+        "🎮 Возвращаемся в главное меню",
+        reply_markup=main_menu()
+    )
+
+@dp.message(F.text == "❌ Отмена")
+async def cancel_creation(m: Message, state: FSMContext):
+    await state.clear()
+    await m.answer(
+        "❌ Создание персонажа отменено.\n\n"
+        "Чтобы начать заново, нажмите «🎲 Создать персонажа»",
+        reply_markup=main_menu()
+    )
+
+
+@dp.message()
+async def unknown_command(m: Message, state: FSMContext):
+    """Обработчик неизвестных команд"""
+    current_state = await state.get_state()
+
+    if current_state:
+        # Если пользователь в процессе создания персонажа
+        await m.answer(
+            "⏳ Вы находитесь в процессе создания персонажа.\n\n"
+            "Пожалуйста, следуйте инструкциям или нажмите «❌ Отмена» чтобы начать заново.",
+            reply_markup=cancel_kb()
+        )
+    else:
+        # Если пользователь не в процессе
+        await m.answer(
+            "❓ Я не понимаю эту команду.\n\n"
+            "Используйте кнопки меню или команду /help для получения справки.",
             reply_markup=main_menu()
         )
 

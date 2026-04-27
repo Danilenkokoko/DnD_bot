@@ -3,6 +3,7 @@
 """
 bot.py - D&D Character Creator Bot for D&D 5.5e (2024)
 Обновлённая версия с правильной последовательностью шагов
+ИСПРАВЛЕНА ОШИБКА: конфликт префиксов class_ и class_equip_
 """
 
 import asyncio
@@ -166,10 +167,10 @@ def create_class_equipment_keyboard(class_name: str) -> Optional[InlineKeyboardM
         choice = eq.get('choice', 'A')
         weapon = eq.get('weapon', 'нет оружия')
         armor = eq.get('armor', 'нет брони')
-        # ПРАВИЛЬНО: ТОЛЬКО choice
+        # ИСПРАВЛЕНО: изменён префикс с "class_equip_" на "equip_" для избежания конфликта
         buttons.append([InlineKeyboardButton(
             text=f"📦 Вариант {choice}: {weapon}, {armor}",
-            callback_data=f"class_equip_{choice}"  # Только "class_equip_A" или "class_equip_B"
+            callback_data=f"equip_{choice}"  # Было: "class_equip_{choice}"
         )])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к классам", callback_data="back_to_classes")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -851,7 +852,7 @@ async def create_char_start(m: Message, state: FSMContext):
 @dp.callback_query(lambda c: c.data.startswith("class_"))
 async def select_class(call: CallbackQuery, state: FSMContext):
     class_name = call.data.replace("class_", "")
-    await state.update_data(class_name=class_name)  # ТОЛЬКО ЗДЕСЬ сохраняем class_name
+    await state.update_data(class_name=class_name)
     logger.info(f"[FLOW] Выбран класс: {class_name}")
 
     class_desc = get_class_description(class_name)
@@ -908,21 +909,22 @@ async def select_class(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
-@dp.callback_query(lambda c: c.data.startswith("class_equip_"))
+# ============================================================
+# ШАГ 2: ВЫБОР СНАРЯЖЕНИЯ КЛАССА (ИСПРАВЛЕНО)
+# ============================================================
+
+@dp.callback_query(lambda c: c.data.startswith("equip_"))  # ИСПРАВЛЕНО: было "class_equip_"
 async def select_class_equipment(call: CallbackQuery, state: FSMContext):
     # Извлекаем choice (должно быть "A" или "B")
-    choice = call.data.replace("class_equip_", "")
+    choice = call.data.replace("equip_", "")  # ИСПРАВЛЕНО: было "class_equip_"
 
-    # НЕ СОЗДАЁМ НОВЫЙ class_name из choice!
     data = await state.get_data()
-    class_name = data.get("class_name")  # Берём существующий
+    class_name = data.get("class_name")
 
     logger.info(f"[FLOW] Выбор снаряжения: class_name='{class_name}', choice='{choice}'")
 
-    # Сохраняем только choice
     await state.update_data(equipment_choice=choice)
 
-    # Получаем снаряжение
     equipment = get_class_equipment(class_name, choice)
     if equipment:
         eq = equipment[0]
@@ -953,7 +955,7 @@ async def back_to_classes(call: CallbackQuery, state: FSMContext):
 
 
 # ============================================================
-# ШАГ 2: ЗАКЛИНАНИЯ (ОБРАБОТЧИКИ)
+# ШАГ 3: ЗАКЛИНАНИЯ (ОБРАБОТЧИКИ)
 # ============================================================
 
 @dp.callback_query(lambda c: c.data.startswith("cantrip_cat_"))
@@ -1274,7 +1276,7 @@ async def continue_after_spells(m: Message, state: FSMContext):
 
 
 # ============================================================
-# ШАГ 3: БОЕВОЙ СТИЛЬ И ВОЗВАНИЯ
+# ШАГ 4: БОЕВОЙ СТИЛЬ И ВОЗВАНИЯ
 # ============================================================
 
 @dp.callback_query(lambda c: c.data.startswith("style_") and c.data != "style_skip")
@@ -1341,7 +1343,7 @@ async def skip_invocations(call: CallbackQuery, state: FSMContext):
 
 
 # ============================================================
-# ШАГ 4: ПРЕДЫСТОРИЯ (ОБРАБОТЧИКИ)
+# ШАГ 5: ПРЕДЫСТОРИЯ (ОБРАБОТЧИКИ)
 # ============================================================
 
 @dp.callback_query(lambda c: c.data.startswith("bg_") and not c.data.startswith("bg_equip_"))
@@ -1403,7 +1405,7 @@ async def back_to_background_list(call: CallbackQuery, state: FSMContext):
 
 
 # ============================================================
-# ШАГ 5: РАСА (ОБРАБОТЧИКИ)
+# ШАГ 6: РАСА (ОБРАБОТЧИКИ)
 # ============================================================
 
 @dp.callback_query(lambda c: c.data.startswith("race_"))
@@ -1479,7 +1481,7 @@ async def back_to_races(call: CallbackQuery, state: FSMContext):
 
 
 # ============================================================
-# ШАГ 6: ИМЯ И ИСТОРИЯ (ОБРАБОТЧИКИ)
+# ШАГ 7: ИМЯ И ИСТОРИЯ (ОБРАБОТЧИКИ)
 # ============================================================
 
 @dp.message(CreateCharacter.name_input)
@@ -1515,7 +1517,7 @@ async def set_backstory(m: Message, state: FSMContext):
 
 
 # ============================================================
-# ШАГ 7: ИЗОБРАЖЕНИЕ И ФИНАЛ
+# ШАГ 8: ИЗОБРАЖЕНИЕ И ФИНАЛ
 # ============================================================
 
 @dp.message(F.text == "⏩ Пропустить")
@@ -1621,7 +1623,7 @@ async def unknown_command(m: Message, state: FSMContext):
 
 async def main():
     logger.info("=" * 50)
-    logger.info("🚀 ЗАПУСК БОТА D&D CHARACTER CREATOR 5.5e (ВЕРСИЯ 2)")
+    logger.info("🚀 ЗАПУСК БОТА D&D CHARACTER CREATOR 5.5e (ВЕРСИЯ 3 - ИСПРАВЛЕННАЯ)")
     logger.info("=" * 50)
     try:
         from db import init_database, migrate_database_v2

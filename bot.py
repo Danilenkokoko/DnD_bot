@@ -230,9 +230,20 @@ def create_spell_detail_keyboard(spell_id: int, spell_name: str, spell_type: str
 
 def create_fighting_style_keyboard(class_name: str) -> InlineKeyboardMarkup:
     styles = get_fighting_styles_for_class(class_name)
+
+    if not styles:
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="➡️ Продолжить (нет стилей)", callback_data="style_skip")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_spells")]
+        ])
+
     buttons = []
     for s in styles:
-        buttons.append([InlineKeyboardButton(text=f"🛡️ {s['name']}: {s['description'][:50]}", callback_data=f"style_{s['id']}")])
+        buttons.append([InlineKeyboardButton(
+            text=f"🛡️ {s['name']}: {s['description'][:50]}",
+            callback_data=f"style_{s['id']}"
+        )])
+
     buttons.append([InlineKeyboardButton(text="➡️ Пропустить", callback_data="style_skip")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_spells")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -330,8 +341,24 @@ def create_delete_keyboard(characters: list) -> InlineKeyboardMarkup:
 async def start_cantrips_selection(m: Message, state: FSMContext):
     """Начало выбора заговоров"""
     data = await state.get_data()
-    selector_data = data.get("spell_selector", {})
-    selector = SpellSelector.from_dict(selector_data)
+    selector_data = data.get("spell_selector")
+    class_name = data.get("class_name")
+
+    # Если класс не заклинающий, сразу переходим к боевому стилю
+    class_info = get_class_info(class_name)
+    spell_counts = get_class_spell_counts(class_name)
+    is_spellcaster = class_info.get("spellcasting", False) and spell_counts.get('cantrips', 0) > 0
+
+    if not is_spellcaster:
+        await go_to_fighting_style(m, state)
+        return
+
+    # Создаём селектор, если его нет
+    if not selector_data:
+        selector = SpellSelector(class_name)
+        await state.update_data(spell_selector=selector.to_dict())
+    else:
+        selector = SpellSelector.from_dict(selector_data)
 
     if not selector.has_cantrips:
         await start_level1_selection(m, state)
@@ -405,14 +432,23 @@ async def go_to_fighting_style(m: Message, state: FSMContext):
     """Переход к выбору боевого стиля"""
     data = await state.get_data()
     class_name = data.get("class_name")
-    fighting_style_classes = ["Воин", "Паладин", "Следопыт"]
+    fighting_style_classes = ["Воин", "Паладин", "Следопыт", "Варвар"]  # Добавил Варвара
 
     if class_name in fighting_style_classes:
+        styles = get_fighting_styles_for_class(class_name)
+
+        if not styles:
+            logger.warning(f"Нет боевых стилей для класса {class_name}")
+            await m.answer(f"⚠️ Для класса {class_name} нет доступных боевых стилей.\n\nПереходим к следующему шагу...")
+            await go_to_invocations(m, state)
+            return
+
         await state.set_state(CreateCharacter.fighting_style_select)
         await m.answer(
             f"⚔️ **Шаг 5/12: Выбор БОЕВОГО СТИЛЯ**\n\n"
             f"Класс **{class_name}** может выбрать один боевой стиль.\n\n"
-            f"Боевой стиль даёт постоянный бонус в бою.",
+            f"Боевой стиль даёт постоянный бонус в бою.\n\n"
+            f"Доступные стили ({len(styles)}):",
             parse_mode=None,
             reply_markup=create_fighting_style_keyboard(class_name)
         )
@@ -545,18 +581,29 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         stats = data.get("final_stats", {})
         if not stats:
             stats = data.get("stats", {})
-        selector_data = data.get("spell_selector", {})
-        selector = SpellSelector.from_dict(selector_data)
-        selected_spells = selector.get_all_selected_spells()
+
+        # БЕЗОПАСНОЕ получение заклинаний
+        selected_spells = []
+        selector_data = data.get("spell_selector")
+        if selector_data and isinstance(selector_data, dict) and "class_name" in selector_data:
+            try:
+                selector = SpellSelector.from_dict(selector_data)
+                selected_spells = selector.get_all_selected_spells()
+            except Exception as e:
+                logger.warning(f"Ошибка восстановления селектора заклинаний: {e}")
+                selected_spells = []
+
         selected_masteries = data.get("selected_masteries", [])
         selected_fighting_style = data.get("selected_fighting_style")
         selected_invocations = data.get("selected_invocations", [])
         selected_weapon = data.get("selected_weapon")
         selected_armor = data.get("selected_armor")
+
         if not name:
             await m.answer("❌ Ошибка: имя не сохранено.", reply_markup=main_menu())
             await state.clear()
             return
+
         logger.info(f"📛 Сохраняем персонажа: {name}")
         race_id = subrace_id = class_id = background_id = None
         with get_connection() as conn:

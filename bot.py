@@ -166,10 +166,10 @@ def create_class_equipment_keyboard(class_name: str) -> Optional[InlineKeyboardM
         choice = eq.get('choice', 'A')
         weapon = eq.get('weapon', 'нет оружия')
         armor = eq.get('armor', 'нет брони')
-        # ВАЖНО: ТОЛЬКО choice, НЕ class_name!
+        # ПРАВИЛЬНО: ТОЛЬКО choice
         buttons.append([InlineKeyboardButton(
             text=f"📦 Вариант {choice}: {weapon}, {armor}",
-            callback_data=f"class_equip_{choice}"
+            callback_data=f"class_equip_{choice}"  # Только "class_equip_A" или "class_equip_B"
         )])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к классам", callback_data="back_to_classes")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -910,20 +910,19 @@ async def select_class(call: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data.startswith("class_equip_"))
 async def select_class_equipment(call: CallbackQuery, state: FSMContext):
-    # Извлекаем choice (A или B)
+    # Извлекаем choice (должно быть "A" или "B")
     choice = call.data.replace("class_equip_", "")
 
-    # Получаем данные из state - НЕ ОБНОВЛЯЕМ class_name!
+    # НЕ СОЗДАЁМ НОВЫЙ class_name из choice!
     data = await state.get_data()
-    class_name = data.get("class_name")  # Должно быть "Воин"
+    class_name = data.get("class_name")  # Берём существующий
 
-    # ДИАГНОСТИКА
     logger.info(f"[FLOW] Выбор снаряжения: class_name='{class_name}', choice='{choice}'")
 
-    # Сохраняем ТОЛЬКО choice - НЕ ТРОГАЕМ class_name!
+    # Сохраняем только choice
     await state.update_data(equipment_choice=choice)
 
-    # Получаем снаряжение для класса с выбранным вариантом
+    # Получаем снаряжение
     equipment = get_class_equipment(class_name, choice)
     if equipment:
         eq = equipment[0]
@@ -938,12 +937,9 @@ async def select_class_equipment(call: CallbackQuery, state: FSMContext):
         if weapon_name:
             masteries = auto_assign_masteries(weapon_name, class_name)
             await state.update_data(selected_masteries=masteries)
-            logger.info(f"[FLOW] Приёмы для {weapon_name}: {masteries}")
 
     await call.message.delete()
     await call.message.answer(f"✅ Снаряжение выбрано (вариант {choice})")
-
-    # Переход к следующему шагу
     await go_to_spells(call.message, state)
     await call.answer()
 

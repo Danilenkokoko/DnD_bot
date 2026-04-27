@@ -168,7 +168,7 @@ def create_class_equipment_keyboard(class_name: str) -> Optional[InlineKeyboardM
         armor = eq.get('armor', 'нет брони')
         buttons.append([InlineKeyboardButton(
             text=f"📦 Вариант {choice}: {weapon}, {armor}",
-            callback_data=f"class_equip_{choice}"
+            callback_data=f"class_equip_{choice}"  # Только choice, без class_name!
         )])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к классам", callback_data="back_to_classes")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -912,7 +912,9 @@ async def select_class_equipment(call: CallbackQuery, state: FSMContext):
     choice = call.data.replace("class_equip_", "")
     await state.update_data(equipment_choice=choice)
     data = await state.get_data()
-    class_name = data.get("class_name")
+    class_name = data.get("class_name")  # БЕРЁМ class_name из state, НЕ ПЕРЕЗАПИСЫВАЕМ!
+    logger.info(f"[FLOW] Выбрано снаряжение: вариант {choice} для класса {class_name}")
+
     equipment = get_class_equipment(class_name, choice)
     if equipment:
         eq = equipment[0]
@@ -927,6 +929,7 @@ async def select_class_equipment(call: CallbackQuery, state: FSMContext):
         if weapon_name:
             masteries = auto_assign_masteries(weapon_name, class_name)
             await state.update_data(selected_masteries=masteries)
+
     await call.message.delete()
     await call.message.answer(f"✅ Снаряжение выбрано (вариант {choice})")
     await go_to_spells(call.message, state)

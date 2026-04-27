@@ -341,6 +341,7 @@ async def start_cantrips_selection(m: Message, state: FSMContext):
     await m.answer(
         f"📖 **Шаг 3/12: Выбор ЗАГОВОРОВ**\n\n"
         f"Класс **{selector.class_name}** может выбрать {required} заговор(а).\n"
+        f"Осталось выбрать: {required - selected_count}\n\n"
         f"Выберите категорию для просмотра заговоров:",
         parse_mode=None,
         reply_markup=create_category_keyboard(categories, "cantrip", selected_count, required)
@@ -846,7 +847,7 @@ async def back_to_classes(call: CallbackQuery, state: FSMContext):
 
 
 # ============================================================
-# ШАГ 2: ЗАКЛИНАНИЯ (ИСПРАВЛЕННЫЕ ОБРАБОТЧИКИ)
+# ШАГ 2: ЗАКЛИНАНИЯ (ПОЛНЫЕ ИСПРАВЛЕННЫЕ ОБРАБОТЧИКИ)
 # ============================================================
 
 def continue_kb_for_spells() -> ReplyKeyboardMarkup:
@@ -855,6 +856,55 @@ def continue_kb_for_spells() -> ReplyKeyboardMarkup:
         keyboard=[[KeyboardButton(text="✅ Продолжить")]],
         resize_keyboard=True
     )
+
+
+@dp.callback_query(lambda c: c.data.startswith("cantrip_cat_"))
+async def show_cantrips_in_category(call: CallbackQuery, state: FSMContext):
+    category = call.data.replace("cantrip_cat_", "")
+    data = await state.get_data()
+    selector_data = data.get("spell_selector", {})
+    selector = SpellSelector.from_dict(selector_data)
+    spells = selector.get_cantrips_in_category(category)
+    selected_spells = selector.get_selected_cantrips()
+    await state.update_data(current_category=category)
+    await state.set_state(CreateCharacter.spells_cantrips_list)
+    if not spells:
+        await call.message.edit_text(f"📖 В категории **{category}** нет заговоров для этого класса.")
+        return
+    await call.message.edit_text(
+        f"📖 **Категория: {category}**\n\nВыберите заговор для просмотра:",
+        reply_markup=create_spell_list_keyboard(spells, "cantrip", selected_spells, category)
+    )
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("cantrip_view_"))
+async def view_cantrip_detail(call: CallbackQuery, state: FSMContext):
+    spell_id = int(call.data.replace("cantrip_view_", ""))
+    spell = get_spell_by_id(spell_id)
+    if not spell:
+        await call.answer("❌ Заклинание не найдено")
+        return
+    data = await state.get_data()
+    selector_data = data.get("spell_selector", {})
+    selector = SpellSelector.from_dict(selector_data)
+    is_selected = spell['name'] in selector.get_selected_cantrips()
+    remaining = 0
+    if selector.cantrip_state:
+        remaining = selector.cantrip_state.remaining_count
+    await state.update_data(current_spell_id=spell_id, current_spell_name=spell['name'])
+    await state.set_state(CreateCharacter.spells_cantrips_detail)
+    description = spell.get('description', 'Описание отсутствует')
+    category = spell.get('category', 'Прочее')
+    icon = get_category_icon(category)
+    await call.message.edit_text(
+        f"{icon} **{spell['name']}**\n\n📖 **Описание:**\n{description}\n\n"
+        f"🏷️ **Категория:** {category}\n"
+        f"📊 **Уровень:** {'Заговор' if spell.get('is_cantrip') else f'{spell.get('level')} уровень'}\n\n"
+        f"{'✅ Уже выбран' if is_selected else '❌ Не выбран'}",
+        reply_markup=create_spell_detail_keyboard(spell_id, spell['name'], "cantrip", is_selected, remaining)
+    )
+    await call.answer()
 
 
 @dp.callback_query(lambda c: c.data.startswith("cantrip_add_"))
@@ -871,6 +921,7 @@ async def add_cantrip(call: CallbackQuery, state: FSMContext):
     if success:
         await state.update_data(spell_selector=selector.to_dict())
 
+        # Проверяем, завершён ли выбор заговоров
         if selector.cantrip_state and selector.cantrip_state.remaining_count == 0:
             await call.message.delete()
             await call.message.answer(
@@ -881,7 +932,25 @@ async def add_cantrip(call: CallbackQuery, state: FSMContext):
             )
             await state.set_state(CreateCharacter.spells_cantrips_complete)
         else:
+            # Возвращаемся к категориям
             await start_cantrips_selection(call.message, state)
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("cantrip_remove_"))
+async def remove_cantrip(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    selector_data = data.get("spell_selector", {})
+    selector = SpellSelector.from_dict(selector_data)
+    spell_name = data.get("current_spell_name")
+    if not spell_name:
+        await call.answer("❌ Ошибка: название заклинания не найдено")
+        return
+    success, msg = selector.remove_cantrip(spell_name)
+    await call.answer(msg)
+    if success:
+        await state.update_data(spell_selector=selector.to_dict())
+        await start_cantrips_selection(call.message, state)
     await call.answer()
 
 
@@ -892,11 +961,61 @@ async def back_to_cantrip_categories(call: CallbackQuery, state: FSMContext):
     selector_data = data.get("spell_selector", {})
     selector = SpellSelector.from_dict(selector_data)
 
+    # Проверяем, не завершён ли уже выбор
     if selector.cantrip_state and selector.cantrip_state.remaining_count == 0:
         await call.answer("Вы уже выбрали все заговоры! Нажмите «Продолжить».")
         return
 
     await start_cantrips_selection(call.message, state)
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("level1_cat_"))
+async def show_level1_in_category(call: CallbackQuery, state: FSMContext):
+    category = call.data.replace("level1_cat_", "")
+    data = await state.get_data()
+    selector_data = data.get("spell_selector", {})
+    selector = SpellSelector.from_dict(selector_data)
+    spells = selector.get_level1_spells_in_category(category)
+    selected_spells = selector.get_selected_level1_spells()
+    await state.update_data(current_category=category)
+    await state.set_state(CreateCharacter.spells_level1_list)
+    if not spells:
+        await call.message.edit_text(f"🔮 В категории **{category}** нет заклинаний 1 уровня для этого класса.")
+        return
+    await call.message.edit_text(
+        f"🔮 **Категория: {category}**\n\nВыберите заклинание для просмотра:",
+        reply_markup=create_spell_list_keyboard(spells, "level1", selected_spells, category)
+    )
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("level1_view_"))
+async def view_level1_detail(call: CallbackQuery, state: FSMContext):
+    spell_id = int(call.data.replace("level1_view_", ""))
+    spell = get_spell_by_id(spell_id)
+    if not spell:
+        await call.answer("❌ Заклинание не найдено")
+        return
+    data = await state.get_data()
+    selector_data = data.get("spell_selector", {})
+    selector = SpellSelector.from_dict(selector_data)
+    is_selected = spell['name'] in selector.get_selected_level1_spells()
+    remaining = 0
+    if selector.level1_state:
+        remaining = selector.level1_state.remaining_count
+    await state.update_data(current_spell_id=spell_id, current_spell_name=spell['name'])
+    await state.set_state(CreateCharacter.spells_level1_detail)
+    description = spell.get('description', 'Описание отсутствует')
+    category = spell.get('category', 'Прочее')
+    icon = get_category_icon(category)
+    await call.message.edit_text(
+        f"{icon} **{spell['name']}**\n\n📖 **Описание:**\n{description}\n\n"
+        f"🏷️ **Категория:** {category}\n"
+        f"📊 **Уровень:** {spell.get('level')}\n\n"
+        f"{'✅ Уже выбран' if is_selected else '❌ Не выбран'}",
+        reply_markup=create_spell_detail_keyboard(spell_id, spell['name'], "level1", is_selected, remaining)
+    )
     await call.answer()
 
 
@@ -914,6 +1033,7 @@ async def add_level1_spell(call: CallbackQuery, state: FSMContext):
     if success:
         await state.update_data(spell_selector=selector.to_dict())
 
+        # Проверяем, завершён ли выбор заклинаний 1 уровня
         if selector.level1_state and selector.level1_state.remaining_count == 0:
             await call.message.delete()
             await call.message.answer(
@@ -925,6 +1045,23 @@ async def add_level1_spell(call: CallbackQuery, state: FSMContext):
             await state.set_state(CreateCharacter.spells_level1_complete)
         else:
             await start_level1_selection(call.message, state)
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("level1_remove_"))
+async def remove_level1_spell(call: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    selector_data = data.get("spell_selector", {})
+    selector = SpellSelector.from_dict(selector_data)
+    spell_name = data.get("current_spell_name")
+    if not spell_name:
+        await call.answer("❌ Ошибка: название заклинания не найдено")
+        return
+    success, msg = selector.remove_level1_spell(spell_name)
+    await call.answer(msg)
+    if success:
+        await state.update_data(spell_selector=selector.to_dict())
+        await start_level1_selection(call.message, state)
     await call.answer()
 
 
@@ -940,6 +1077,12 @@ async def back_to_level1_categories(call: CallbackQuery, state: FSMContext):
         return
 
     await start_level1_selection(call.message, state)
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "back_to_spells")
+async def back_to_spells(call: CallbackQuery, state: FSMContext):
+    await go_to_spells(call.message, state)
     await call.answer()
 
 

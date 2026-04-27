@@ -149,10 +149,8 @@ def create_class_keyboard() -> InlineKeyboardMarkup:
 
 def create_class_equipment_keyboard(class_name: str) -> Optional[InlineKeyboardMarkup]:
     equipment = get_class_equipment(class_name)
-
     if len(equipment) <= 1:
         return None
-
     buttons = []
     for eq in equipment:
         choice = eq.get('choice', 'A')
@@ -162,7 +160,6 @@ def create_class_equipment_keyboard(class_name: str) -> Optional[InlineKeyboardM
             text=f"📦 Вариант {choice}: {weapon}, {armor}",
             callback_data=f"class_equip_{choice}"
         )])
-
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к классам", callback_data="back_to_classes")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -186,13 +183,11 @@ def create_category_keyboard(categories: Dict[str, Dict], spell_type: str,
                              selected_count: int, required_count: int) -> InlineKeyboardMarkup:
     buttons = []
     if required_count > 0:
-        buttons.append(
-            [InlineKeyboardButton(text=f"📖 Выбрано: {selected_count}/{required_count}", callback_data="progress_info")])
+        buttons.append([InlineKeyboardButton(text=f"📖 Выбрано: {selected_count}/{required_count}", callback_data="progress_info")])
     for cat_name, cat_data in categories.items():
         icon = cat_data.get('icon', '✨')
         count = len(cat_data.get('spells', []))
-        buttons.append(
-            [InlineKeyboardButton(text=f"{icon} {cat_name} ({count})", callback_data=f"{spell_type}_cat_{cat_name}")])
+        buttons.append([InlineKeyboardButton(text=f"{icon} {cat_name} ({count})", callback_data=f"{spell_type}_cat_{cat_name}")])
     buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -205,8 +200,7 @@ def create_spell_list_keyboard(spells: List[Dict], spell_type: str,
         spell_name = spell.get('name', 'Unknown')
         is_selected = spell_name in selected_spells
         emoji = "✅" if is_selected else "🔘"
-        buttons.append(
-            [InlineKeyboardButton(text=f"{emoji} {spell_name}", callback_data=f"{spell_type}_view_{spell_id}")])
+        buttons.append([InlineKeyboardButton(text=f"{emoji} {spell_name}", callback_data=f"{spell_type}_view_{spell_id}")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к категориям", callback_data=f"{spell_type}_back_categories")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -228,8 +222,7 @@ def create_fighting_style_keyboard(class_name: str) -> InlineKeyboardMarkup:
     styles = get_fighting_styles_for_class(class_name)
     buttons = []
     for s in styles:
-        buttons.append(
-            [InlineKeyboardButton(text=f"🛡️ {s['name']}: {s['description'][:50]}", callback_data=f"style_{s['id']}")])
+        buttons.append([InlineKeyboardButton(text=f"🛡️ {s['name']}: {s['description'][:50]}", callback_data=f"style_{s['id']}")])
     buttons.append([InlineKeyboardButton(text="➡️ Пропустить", callback_data="style_skip")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_spells")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -245,8 +238,7 @@ def create_invocations_keyboard(level: int = 1) -> InlineKeyboardMarkup:
     buttons = []
     for inv in invocations[:8]:
         emoji = "🔮" if inv['level_required'] == 1 else "🔷"
-        buttons.append([InlineKeyboardButton(text=f"{emoji} {inv['name']} (ур. {inv['level_required']})",
-                                             callback_data=f"inv_{inv['id']}")])
+        buttons.append([InlineKeyboardButton(text=f"{emoji} {inv['name']} (ур. {inv['level_required']})", callback_data=f"inv_{inv['id']}")])
     buttons.append([InlineKeyboardButton(text="➡️ Пропустить", callback_data="inv_skip")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -268,8 +260,7 @@ def create_background_keyboard() -> InlineKeyboardMarkup:
 def create_background_equipment_keyboard(background: str) -> InlineKeyboardMarkup:
     bg_info = get_background_by_name(background)
     if not bg_info:
-        return InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="❌ Ошибка", callback_data="cancel_creation")]])
+        return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Ошибка", callback_data="cancel_creation")]])
     equip_a = bg_info.get('equipment_a', 'Нет описания')[:60]
     equip_b = bg_info.get('equipment_b', 'Нет описания')[:60]
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -310,22 +301,20 @@ def create_character_list_keyboard(user_id: int) -> Optional[InlineKeyboardMarku
         return None
     buttons = []
     for char in characters:
-        buttons.append([InlineKeyboardButton(text=f"{char['name']} - {char['class_name']} ур.{char['level']}",
-                                             callback_data=f"view_{char['id']}")])
+        buttons.append([InlineKeyboardButton(text=f"{char['name']} - {char['class_name']} ур.{char['level']}", callback_data=f"view_{char['id']}")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def create_delete_keyboard(characters: list) -> InlineKeyboardMarkup:
     buttons = []
     for char in characters:
-        buttons.append([InlineKeyboardButton(text=f"🗑 {char['name']} ({char['class_name']})",
-                                             callback_data=f"delete_{char['id']}")])
+        buttons.append([InlineKeyboardButton(text=f"🗑 {char['name']} ({char['class_name']})", callback_data=f"delete_{char['id']}")])
     buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_delete")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 # ============================================================
-# ОСНОВНЫЕ ФУНКЦИИ ПОРЯДКА ШАГОВ (ОПРЕДЕЛЕНЫ ДО ИСПОЛЬЗОВАНИЯ)
+# ОСНОВНЫЕ ФУНКЦИИ ПОРЯДКА ШАГОВ
 # ============================================================
 
 async def start_cantrips_selection(m: Message, state: FSMContext):
@@ -405,7 +394,6 @@ async def go_to_fighting_style(m: Message, state: FSMContext):
     """Переход к выбору боевого стиля"""
     data = await state.get_data()
     class_name = data.get("class_name")
-
     fighting_style_classes = ["Воин", "Паладин", "Следопыт"]
 
     if class_name in fighting_style_classes:
@@ -528,6 +516,136 @@ async def calculate_and_show_stats(m: Message, state: FSMContext):
     )
 
     await state.set_state(CreateCharacter.race_select)
+
+
+async def finalize_character(m: Message, state: FSMContext, image_file_id: Optional[str] = None):
+    """Финальная генерация персонажа и PDF"""
+    temp_pdf_file = None
+    try:
+        await m.answer("⏳ Создаю персонажа и генерирую PDF...", reply_markup=ReplyKeyboardRemove())
+        data = await state.get_data()
+        class_name = data.get("class_name")
+        background = data.get("background")
+        race = data.get("race")
+        subrace = data.get("subrace")
+        name = data.get("name")
+        backstory = data.get("backstory", "Нет истории")
+        background_equipment_choice = data.get("background_equipment_choice", "A")
+        stats = data.get("final_stats", {})
+        if not stats:
+            stats = data.get("stats", {})
+        selector_data = data.get("spell_selector", {})
+        selector = SpellSelector.from_dict(selector_data)
+        selected_spells = selector.get_all_selected_spells()
+        selected_masteries = data.get("selected_masteries", [])
+        selected_fighting_style = data.get("selected_fighting_style")
+        selected_invocations = data.get("selected_invocations", [])
+        selected_weapon = data.get("selected_weapon")
+        selected_armor = data.get("selected_armor")
+        if not name:
+            await m.answer("❌ Ошибка: имя не сохранено.", reply_markup=main_menu())
+            await state.clear()
+            return
+        logger.info(f"📛 Сохраняем персонажа: {name}")
+        race_id = subrace_id = class_id = background_id = None
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                if race:
+                    cur.execute("SELECT id FROM races WHERE name = %s", (race,))
+                    result = cur.fetchone()
+                    race_id = result[0] if result else None
+                if subrace and race_id:
+                    cur.execute("SELECT id FROM subraces WHERE name = %s AND race_id = %s", (subrace, race_id))
+                    result = cur.fetchone()
+                    subrace_id = result[0] if result else None
+                if class_name:
+                    cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
+                    result = cur.fetchone()
+                    class_id = result[0] if result else None
+                if background:
+                    cur.execute("SELECT id FROM backgrounds WHERE name = %s", (background,))
+                    result = cur.fetchone()
+                    background_id = result[0] if result else None
+        ac = calc_ac_with_armor(stats.get("DEX", 10), selected_armor)
+        hp = calc_hp(class_id, stats.get("CON", 10), 1) if class_id else 10
+        race_traits = get_race_traits_list(race, subrace)
+        class_features = get_class_features(class_name, 1) if class_name else []
+        bg_info = get_background_by_name(background) if background else None
+        bg_skills = bg_info.get('skills', []) if bg_info else []
+        bg_trait = bg_info.get('trait', "Нет") if bg_info else "Нет"
+        equipment_list = []
+        if selected_weapon:
+            equipment_list.append(selected_weapon)
+        if selected_armor:
+            equipment_list.append(selected_armor)
+        if data.get("selected_other_items"):
+            equipment_list.append(data.get("selected_other_items"))
+        if bg_info:
+            chosen_equipment_key = f"equipment_{background_equipment_choice.lower()}"
+            equipment_text = bg_info.get(chosen_equipment_key, "")
+            for item in equipment_text.split(","):
+                item = item.strip()
+                if item and item not in equipment_list:
+                    equipment_list.append(item)
+        save_character(
+            user_id=m.from_user.id, name=name, race_id=race_id, subrace_id=subrace_id,
+            class_id=class_id, subclass_id=None, background_id=background_id, level=1, experience=0,
+            stats=stats, hp=hp, ac=ac, speed=30, selected_skills=bg_skills,
+            selected_masteries=selected_masteries, selected_fighting_style=selected_fighting_style,
+            selected_invocations=selected_invocations, selected_spells=selected_spells,
+            selected_weapon=selected_weapon, selected_armor=selected_armor,
+            selected_equipment_choice=background_equipment_choice, backstory=backstory,
+            image_file_id=image_file_id, alignment="Нейтральное"
+        )
+        pdf_data = {
+            "name": name, "class_name": class_name if class_name else "Без класса",
+            "race": f"{race} ({subrace})" if subrace else (race if race else "Неизвестно"),
+            "level": 1, "stats": stats, "hp": hp, "ac": ac, "speed": 30,
+            "skills": bg_skills, "equipment": equipment_list, "spells": selected_spells,
+            "proficiency_bonus": calculate_proficiency_bonus(1),
+            "background": background if background else "Нет", "background_trait": bg_trait,
+            "background_description": bg_info.get("description", "") if bg_info else "",
+            "race_traits": race_traits, "class_features": class_features, "backstory": backstory,
+            "alignment": "Нейтральное", "player_name": m.from_user.full_name,
+            "experience": 0, "saving_throws": [], "notes": "", "coins": data.get("selected_coins", 0)
+        }
+        safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{safe_name}.pdf")
+        temp_pdf_file = tmp.name
+        tmp.close()
+        pdf_file = generate_pdf(pdf_data, temp_pdf_file)
+        spells_preview = ""
+        if selected_spells:
+            spells_preview = f"\n🔮 **Заклинания:** {', '.join(selected_spells[:5])}"
+            if len(selected_spells) > 5:
+                spells_preview += f" и ещё {len(selected_spells) - 5}"
+        caption = (f"✅ **Персонаж создан!**\n\n📛 **{name}**\n⚔️ **Класс:** {class_name}\n"
+                   f"📜 **Предыстория:** {background}\n🧝 **Раса:** {race}{f' ({subrace})' if subrace else ''}\n"
+                   f"❤️ **HP:** {hp} | 🛡️ **AC:** {ac}\n\n🎯 **Характеристики:**\n{format_stats_display(stats)}{spells_preview}\n\n"
+                   f"📄 Лист персонажа в формате PDF прикреплён ниже!")
+        if image_file_id:
+            await m.answer_photo(photo=image_file_id, caption=caption, parse_mode=None)
+        else:
+            await m.answer(caption, parse_mode=None)
+        if pdf_file and os.path.exists(pdf_file):
+            await m.answer_document(FSInputFile(pdf_file, filename=f"{safe_name}_character_sheet.pdf"),
+                                    caption="📄 Лист персонажа в формате PDF")
+        else:
+            logger.error(f"PDF не создан: {pdf_file}")
+            await m.answer("⚠️ Не удалось создать PDF файл, но персонаж сохранён!")
+        await m.answer("🎮 Главное меню", reply_markup=main_menu())
+        await state.clear()
+    except Exception as e:
+        logger.error(f"Ошибка при создании персонажа: {e}", exc_info=True)
+        await m.answer(f"❌ Произошла ошибка: {str(e)[:200]}\n\nПерсонаж может быть сохранён, но PDF не создан.",
+                       reply_markup=main_menu())
+        await state.clear()
+    finally:
+        if temp_pdf_file and os.path.exists(temp_pdf_file):
+            try:
+                os.remove(temp_pdf_file)
+            except:
+                pass
 
 
 # ============================================================
@@ -921,6 +1039,10 @@ async def back_to_spells(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
+# ============================================================
+# ШАГ 3: БОЕВОЙ СТИЛЬ И ВОЗВАНИЯ
+# ============================================================
+
 @dp.callback_query(lambda c: c.data.startswith("style_"))
 async def select_fighting_style(call: CallbackQuery, state: FSMContext):
     style_id = int(call.data.replace("style_", ""))
@@ -980,408 +1102,301 @@ async def back_to_fighting(call: CallbackQuery, state: FSMContext):
     await go_to_fighting_style(call.message, state)
     await call.answer()
 
-    # ============================================================
-    # ШАГ 4: ПРЕДЫСТОРИЯ (ОБРАБОТЧИКИ)
-    # ============================================================
 
-    @dp.callback_query(lambda c: c.data.startswith("bg_") and not c.data.startswith("bg_equip_"))
-    async def select_background(call: CallbackQuery, state: FSMContext):
-        background = call.data.replace("bg_", "")
-        await state.update_data(background=background)
-        logger.info(f"[FLOW] Выбрана предыстория: {background}")
-        bg_info = get_background_by_name(background)
-        if not bg_info:
-            await call.message.answer(f"❌ Ошибка: предыстория '{background}' не найдена.", reply_markup=main_menu())
-            await state.clear()
-            return
-        await state.update_data(selected_skills=bg_info.get('skills', []), background_trait=bg_info.get('trait', 'Нет'))
-        await state.set_state(CreateCharacter.background_equipment_select)
-        equip_a = bg_info.get('equipment_a', 'Нет описания')[:60]
-        equip_b = bg_info.get('equipment_b', 'Нет описания')[:60]
-        await call.message.delete()
-        await call.message.answer(
-            f"📜 **Предыстория: {background}**\n\n📖 {bg_info.get('description', 'Нет описания')[:300]}...\n\n"
-            f"✨ **Бонусы к характеристикам:**\n   • +2 к {bg_info['characteristics'][0]}\n   • +1 к {bg_info['characteristics'][1]}\n\n"
-            f"🔧 **Черта:** {bg_info.get('trait', 'Нет')}\n📚 **Навыки:** {', '.join(bg_info.get('skills', []))}\n"
-            f"🛠️ **Инструменты:** {bg_info.get('tools', 'Нет')}\n\n"
-            f"**Шаг 8/12: Выберите СНАРЯЖЕНИЕ от предыстории**\n\n"
-            f"📦 Вариант А: {equip_a}...\n🎒 Вариант Б: {equip_b}...",
-            parse_mode=None, reply_markup=create_background_equipment_keyboard(background)
-        )
-        await call.answer()
+# ============================================================
+# ШАГ 4: ПРЕДЫСТОРИЯ (ОБРАБОТЧИКИ)
+# ============================================================
 
-    @dp.callback_query(lambda c: c.data.startswith("bg_equip_"))
-    async def select_background_equipment(call: CallbackQuery, state: FSMContext):
-        equipment_choice = call.data.replace("bg_equip_", "")
-        data = await state.get_data()
-        background = data.get("background")
-        if not background or background in ["equip_A", "equip_B", "equip_", "A", "B", None]:
-            logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: background = '{background}'")
-            await call.message.answer(
-                "❌ Ошибка: данные о предыстории потеряны.\nПожалуйста, начните создание заново: /start",
-                reply_markup=main_menu())
-            await state.clear()
-            return
-        await state.update_data(background_equipment_choice=equipment_choice)
-        bg_info = get_background_by_name(background)
-        if bg_info:
-            chosen_equipment = bg_info['equipment_a'] if equipment_choice == "A" else bg_info['equipment_b']
-            await state.update_data(background_equipment=chosen_equipment)
-        await calculate_and_show_stats(call.message, state)
-        await call.message.delete()
-        await call.answer()
-
-    @dp.callback_query(lambda c: c.data == "back_to_background")
-    async def back_to_background_list(call: CallbackQuery, state: FSMContext):
-        await state.set_state(CreateCharacter.background_select)
-        await call.message.delete()
-        await call.message.answer("Шаг 7/12: Выберите ПРЕДЫСТОРИЮ", parse_mode=None,
-                                  reply_markup=create_background_keyboard())
-        await call.answer()
-
-    # ============================================================
-    # ШАГ 5: РАСА (ОБРАБОТЧИКИ)
-    # ============================================================
-
-    @dp.callback_query(lambda c: c.data.startswith("race_"))
-    async def select_race(call: CallbackQuery, state: FSMContext):
-        race = call.data.replace("race_", "")
-        await state.update_data(race=race)
-        logger.info(f"[FLOW] Выбрана раса: {race}")
-        race_desc = get_race_description(race)
-        race_speed = get_race_speed(race)
-        race_size = get_race_size(race)
-        has_sub = has_subraces(race)
-        subraces_list = get_subraces(race) if has_sub else []
-        text = f"🧝 **Раса: {race}**\n\n📖 {race_desc}\n\n🏃 **Скорость:** {race_speed} футов\n📏 **Размер:** {race_size}\n"
-        if has_sub and subraces_list:
-            text += f"\n🌟 **Доступные подрасы:**\n"
-            for sub in subraces_list:
-                sub_trait = get_subrace_trait(race, sub)
-                text += f"   • **{sub}** — {sub_trait[:50] + '...' if len(sub_trait) > 50 else sub_trait}\n"
-            text += f"\n**Шаг 10/12: Выберите ПОДРАСУ**"
-            reply_markup = create_subrace_keyboard(race)
-            next_state = CreateCharacter.subrace_select
-            await state.set_state(next_state)
-        else:
-            await go_to_name(call.message, state)
-            await call.answer()
-            return
-        img_path = get_race_image_path(race)
-        try:
-            await call.message.delete()
-            if img_path and os.path.exists(img_path):
-                photo = FSInputFile(img_path)
-                await call.message.answer_photo(photo=photo, caption=text, parse_mode=None, reply_markup=reply_markup)
-            else:
-                await call.message.answer(text, parse_mode=None, reply_markup=reply_markup)
-        except Exception as e:
-            logger.error(f"Ошибка: {e}")
-            await call.message.answer(text, parse_mode=None, reply_markup=reply_markup)
-        await call.answer()
-
-    @dp.callback_query(lambda c: c.data.startswith("subrace_") and c.data != "subrace_skip")
-    async def select_subrace(call: CallbackQuery, state: FSMContext):
-        subrace = call.data.replace("subrace_", "")
-        await state.update_data(subrace=subrace)
-        data = await state.get_data()
-        race = data.get("race")
-        sub_desc = get_subrace_description(race, subrace)
-        sub_trait = get_subrace_trait(race, subrace)
-        text = f"🧝 **{race} — {subrace}**\n\n📖 {sub_desc}\n\n✨ **Особенность:** {sub_trait}\n\nПереходим к вводу имени..."
-        await call.message.delete()
-        await call.message.answer(text, parse_mode=None)
-        await go_to_name(call.message, state)
-        await call.answer()
-
-    @dp.callback_query(lambda c: c.data == "subrace_skip")
-    async def skip_subrace(call: CallbackQuery, state: FSMContext):
-        await state.update_data(subrace=None)
-        await call.message.delete()
-        await go_to_name(call.message, state)
-        await call.answer()
-
-    @dp.callback_query(lambda c: c.data == "back_to_races")
-    async def back_to_races(call: CallbackQuery, state: FSMContext):
-        await state.set_state(CreateCharacter.race_select)
-        await call.message.delete()
-        await call.message.answer("Шаг 9/12: Выберите РАСУ", parse_mode=None, reply_markup=create_race_keyboard())
-        await call.answer()
-
-    # ============================================================
-    # ШАГ 6: ИМЯ И ИСТОРИЯ (ОБРАБОТЧИКИ)
-    # ============================================================
-
-    @dp.message(CreateCharacter.name_input)
-    async def set_name(m: Message, state: FSMContext):
-        if m.text == "❌ Отмена":
-            await cancel_creation(m, state)
-            return
-        valid, msg = validate_name(m.text)
-        if not valid:
-            await m.answer(f"{msg}\nПожалуйста, введите другое имя:", reply_markup=cancel_kb())
-            return
-        await state.update_data(name=m.text.strip())
-        logger.info(f"✅ Имя сохранено: {m.text.strip()}")
-        await m.answer(f"✅ Имя: {m.text.strip()}", reply_markup=ReplyKeyboardRemove())
-        await go_to_backstory(m, state)
-
-    @dp.message(CreateCharacter.backstory_input)
-    async def set_backstory(m: Message, state: FSMContext):
-        if m.text == "❌ Отмена":
-            await cancel_creation(m, state)
-            return
-        backstory = m.text.strip()
-        if len(backstory) > 2000:
-            await m.answer("❌ История слишком длинная (максимум 2000 символов).", reply_markup=cancel_kb())
-            return
-        await state.update_data(backstory=backstory)
-        await state.set_state(CreateCharacter.image_input)
-        await m.answer(
-            f"📖 История сохранена!\n\n🖼️ **Финальный шаг: Изображение персонажа**\n\nЗагрузите картинку или нажмите «⏩ Пропустить».",
-            parse_mode=None, reply_markup=skip_kb()
-        )
-
-    # ============================================================
-    # ШАГ 7: ИЗОБРАЖЕНИЕ И ФИНАЛ
-    # ============================================================
-
-    @dp.message(F.text == "⏩ Пропустить")
-    async def skip_image(m: Message, state: FSMContext):
-        await finalize_character(m, state, image_file_id=None)
-
-    @dp.message(CreateCharacter.image_input, F.photo)
-    async def set_image(m: Message, state: FSMContext):
-        photo = m.photo[-1]
-        file_id = photo.file_id
-        await finalize_character(m, state, image_file_id=file_id)
-
-    async def finalize_character(m: Message, state: FSMContext, image_file_id: Optional[str] = None):
-        temp_pdf_file = None
-        try:
-            await m.answer("⏳ Создаю персонажа и генерирую PDF...", reply_markup=ReplyKeyboardRemove())
-            data = await state.get_data()
-            class_name = data.get("class_name")
-            background = data.get("background")
-            race = data.get("race")
-            subrace = data.get("subrace")
-            name = data.get("name")
-            backstory = data.get("backstory", "Нет истории")
-            background_equipment_choice = data.get("background_equipment_choice", "A")
-            stats = data.get("final_stats", {})
-            if not stats:
-                stats = data.get("stats", {})
-            selector_data = data.get("spell_selector", {})
-            selector = SpellSelector.from_dict(selector_data)
-            selected_spells = selector.get_all_selected_spells()
-            selected_masteries = data.get("selected_masteries", [])
-            selected_fighting_style = data.get("selected_fighting_style")
-            selected_invocations = data.get("selected_invocations", [])
-            selected_weapon = data.get("selected_weapon")
-            selected_armor = data.get("selected_armor")
-            if not name:
-                await m.answer("❌ Ошибка: имя не сохранено.", reply_markup=main_menu())
-                await state.clear()
-                return
-            logger.info(f"📛 Сохраняем персонажа: {name}")
-            race_id = subrace_id = class_id = background_id = None
-            with get_connection() as conn:
-                with conn.cursor() as cur:
-                    if race:
-                        cur.execute("SELECT id FROM races WHERE name = %s", (race,))
-                        result = cur.fetchone()
-                        race_id = result[0] if result else None
-                    if subrace and race_id:
-                        cur.execute("SELECT id FROM subraces WHERE name = %s AND race_id = %s", (subrace, race_id))
-                        result = cur.fetchone()
-                        subrace_id = result[0] if result else None
-                    if class_name:
-                        cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
-                        result = cur.fetchone()
-                        class_id = result[0] if result else None
-                    if background:
-                        cur.execute("SELECT id FROM backgrounds WHERE name = %s", (background,))
-                        result = cur.fetchone()
-                        background_id = result[0] if result else None
-            ac = calc_ac_with_armor(stats.get("DEX", 10), selected_armor)
-            hp = calc_hp(class_id, stats.get("CON", 10), 1) if class_id else 10
-            race_traits = get_race_traits_list(race, subrace)
-            class_features = get_class_features(class_name, 1) if class_name else []
-            bg_info = get_background_by_name(background) if background else None
-            bg_skills = bg_info.get('skills', []) if bg_info else []
-            bg_trait = bg_info.get('trait', "Нет") if bg_info else "Нет"
-            equipment_list = []
-            if selected_weapon:
-                equipment_list.append(selected_weapon)
-            if selected_armor:
-                equipment_list.append(selected_armor)
-            if data.get("selected_other_items"):
-                equipment_list.append(data.get("selected_other_items"))
-            if bg_info:
-                chosen_equipment_key = f"equipment_{background_equipment_choice.lower()}"
-                equipment_text = bg_info.get(chosen_equipment_key, "")
-                for item in equipment_text.split(","):
-                    item = item.strip()
-                    if item and item not in equipment_list:
-                        equipment_list.append(item)
-            save_character(
-                user_id=m.from_user.id, name=name, race_id=race_id, subrace_id=subrace_id,
-                class_id=class_id, subclass_id=None, background_id=background_id, level=1, experience=0,
-                stats=stats, hp=hp, ac=ac, speed=30, selected_skills=bg_skills,
-                selected_masteries=selected_masteries, selected_fighting_style=selected_fighting_style,
-                selected_invocations=selected_invocations, selected_spells=selected_spells,
-                selected_weapon=selected_weapon, selected_armor=selected_armor,
-                selected_equipment_choice=background_equipment_choice, backstory=backstory,
-                image_file_id=image_file_id, alignment="Нейтральное"
-            )
-            pdf_data = {
-                "name": name, "class_name": class_name if class_name else "Без класса",
-                "race": f"{race} ({subrace})" if subrace else (race if race else "Неизвестно"),
-                "level": 1, "stats": stats, "hp": hp, "ac": ac, "speed": 30,
-                "skills": bg_skills, "equipment": equipment_list, "spells": selected_spells,
-                "proficiency_bonus": calculate_proficiency_bonus(1),
-                "background": background if background else "Нет", "background_trait": bg_trait,
-                "background_description": bg_info.get("description", "") if bg_info else "",
-                "race_traits": race_traits, "class_features": class_features, "backstory": backstory,
-                "alignment": "Нейтральное", "player_name": m.from_user.full_name,
-                "experience": 0, "saving_throws": [], "notes": "", "coins": data.get("selected_coins", 0)
-            }
-            safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
-            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{safe_name}.pdf")
-            temp_pdf_file = tmp.name
-            tmp.close()
-            pdf_file = generate_pdf(pdf_data, temp_pdf_file)
-            spells_preview = ""
-            if selected_spells:
-                spells_preview = f"\n🔮 **Заклинания:** {', '.join(selected_spells[:5])}"
-                if len(selected_spells) > 5:
-                    spells_preview += f" и ещё {len(selected_spells) - 5}"
-            caption = (f"✅ **Персонаж создан!**\n\n📛 **{name}**\n⚔️ **Класс:** {class_name}\n"
-                       f"📜 **Предыстория:** {background}\n🧝 **Раса:** {race}{f' ({subrace})' if subrace else ''}\n"
-                       f"❤️ **HP:** {hp} | 🛡️ **AC:** {ac}\n\n🎯 **Характеристики:**\n{format_stats_display(stats)}{spells_preview}\n\n"
-                       f"📄 Лист персонажа в формате PDF прикреплён ниже!")
-            if image_file_id:
-                await m.answer_photo(photo=image_file_id, caption=caption, parse_mode=None)
-            else:
-                await m.answer(caption, parse_mode=None)
-            if pdf_file and os.path.exists(pdf_file):
-                await m.answer_document(FSInputFile(pdf_file, filename=f"{safe_name}_character_sheet.pdf"),
-                                        caption="📄 Лист персонажа в формате PDF")
-            else:
-                logger.error(f"PDF не создан: {pdf_file}")
-                await m.answer("⚠️ Не удалось создать PDF файл, но персонаж сохранён!")
-            await m.answer("🎮 Главное меню", reply_markup=main_menu())
-            await state.clear()
-        except Exception as e:
-            logger.error(f"Ошибка при создании персонажа: {e}", exc_info=True)
-            await m.answer(f"❌ Произошла ошибка: {str(e)[:200]}\n\nПерсонаж может быть сохранён, но PDF не создан.",
-                           reply_markup=main_menu())
-            await state.clear()
-        finally:
-            if temp_pdf_file and os.path.exists(temp_pdf_file):
-                try:
-                    os.remove(temp_pdf_file)
-                except:
-                    pass
-
-    # ============================================================
-    # ПРОСМОТР И УДАЛЕНИЕ ПЕРСОНАЖЕЙ
-    # ============================================================
-
-    @dp.message(F.text == "📋 Мои персонажи")
-    async def list_characters(m: Message):
-        characters = get_user_characters(m.from_user.id)
-        if not characters:
-            await m.answer("📭 У вас пока нет персонажей.")
-            return
-        await m.answer("📋 Ваши персонажи:", reply_markup=create_character_list_keyboard(m.from_user.id))
-
-    @dp.callback_query(lambda c: c.data.startswith("view_"))
-    async def view_character(call: CallbackQuery):
-        char_id = int(call.data.replace("view_", ""))
-        character = get_character_by_id(char_id)
-        if not character:
-            await call.answer("❌ Персонаж не найден")
-            return
-        info = (f"📛 **{character['name']}**\n\n🧝 **Раса:** {character.get('race_name', 'Неизвестно')}\n"
-                f"⚔️ **Класс:** {character.get('class_name', 'Неизвестно')}\n📜 **Предыстория:** {character.get('background_name', 'Нет')}\n"
-                f"📊 **Уровень:** {character['level']}\n❤️ **HP:** {character['hp']} | 🛡️ **AC:** {character['ac']}\n\n"
-                f"**Характеристики:**\nSTR {character['str']} | DEX {character['dex']} | CON {character['con']} | "
-                f"INT {character['int']} | WIS {character['wis']} | CHA {character['cha']}")
-        if character.get('image_file_id'):
-            await call.message.answer_photo(photo=character['image_file_id'], caption=info, parse_mode=None)
-        else:
-            await call.message.answer(info, parse_mode=None)
-        await call.answer()
-
-    @dp.message(F.text == "🗑 Удалить персонажа")
-    async def delete_character_menu(m: Message):
-        characters = get_user_characters(m.from_user.id)
-        if not characters:
-            await m.answer("📭 У вас нет персонажей для удаления.")
-            return
-        await m.answer("🗑 Выберите персонажа для удаления:\n\n⚠️ Удаление необратимо.",
-                       reply_markup=create_delete_keyboard(characters))
-
-    @dp.callback_query(lambda c: c.data.startswith("delete_"))
-    async def confirm_delete(call: CallbackQuery):
-        char_id = int(call.data.replace("delete_", ""))
-        character = get_character_by_id(char_id)
-        if not character:
-            await call.answer("❌ Персонаж не найден")
-            return
-        if delete_character(char_id, call.from_user.id):
-            await call.message.edit_text(f"✅ Персонаж {character['name']} удалён!", parse_mode=None)
-        else:
-            await call.message.edit_text("❌ Не удалось удалить персонажа.")
-        await call.answer()
-
-    @dp.callback_query(lambda c: c.data == "cancel_delete")
-    async def cancel_delete(call: CallbackQuery):
-        await call.message.edit_text("❌ Удаление отменено")
-        await call.answer()
-
-    @dp.callback_query(lambda c: c.data == "cancel_creation")
-    async def cancel_creation_callback(call: CallbackQuery, state: FSMContext):
+@dp.callback_query(lambda c: c.data.startswith("bg_") and not c.data.startswith("bg_equip_"))
+async def select_background(call: CallbackQuery, state: FSMContext):
+    background = call.data.replace("bg_", "")
+    await state.update_data(background=background)
+    logger.info(f"[FLOW] Выбрана предыстория: {background}")
+    bg_info = get_background_by_name(background)
+    if not bg_info:
+        await call.message.answer(f"❌ Ошибка: предыстория '{background}' не найдена.", reply_markup=main_menu())
         await state.clear()
-        await call.message.edit_text("❌ Создание персонажа отменено")
+        return
+    await state.update_data(selected_skills=bg_info.get('skills', []), background_trait=bg_info.get('trait', 'Нет'))
+    await state.set_state(CreateCharacter.background_equipment_select)
+    equip_a = bg_info.get('equipment_a', 'Нет описания')[:60]
+    equip_b = bg_info.get('equipment_b', 'Нет описания')[:60]
+    await call.message.delete()
+    await call.message.answer(
+        f"📜 **Предыстория: {background}**\n\n📖 {bg_info.get('description', 'Нет описания')[:300]}...\n\n"
+        f"✨ **Бонусы к характеристикам:**\n   • +2 к {bg_info['characteristics'][0]}\n   • +1 к {bg_info['characteristics'][1]}\n\n"
+        f"🔧 **Черта:** {bg_info.get('trait', 'Нет')}\n📚 **Навыки:** {', '.join(bg_info.get('skills', []))}\n"
+        f"🛠️ **Инструменты:** {bg_info.get('tools', 'Нет')}\n\n"
+        f"**Шаг 8/12: Выберите СНАРЯЖЕНИЕ от предыстории**\n\n"
+        f"📦 Вариант А: {equip_a}...\n🎒 Вариант Б: {equip_b}...",
+        parse_mode=None, reply_markup=create_background_equipment_keyboard(background)
+    )
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("bg_equip_"))
+async def select_background_equipment(call: CallbackQuery, state: FSMContext):
+    equipment_choice = call.data.replace("bg_equip_", "")
+    data = await state.get_data()
+    background = data.get("background")
+    if not background or background in ["equip_A", "equip_B", "equip_", "A", "B", None]:
+        logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: background = '{background}'")
+        await call.message.answer(
+            "❌ Ошибка: данные о предыстории потеряны.\nПожалуйста, начните создание заново: /start",
+            reply_markup=main_menu())
+        await state.clear()
+        return
+    await state.update_data(background_equipment_choice=equipment_choice)
+    bg_info = get_background_by_name(background)
+    if bg_info:
+        chosen_equipment = bg_info['equipment_a'] if equipment_choice == "A" else bg_info['equipment_b']
+        await state.update_data(background_equipment=chosen_equipment)
+    await calculate_and_show_stats(call.message, state)
+    await call.message.delete()
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "back_to_background")
+async def back_to_background_list(call: CallbackQuery, state: FSMContext):
+    await state.set_state(CreateCharacter.background_select)
+    await call.message.delete()
+    await call.message.answer("Шаг 7/12: Выберите ПРЕДЫСТОРИЮ", parse_mode=None,
+                              reply_markup=create_background_keyboard())
+    await call.answer()
+
+
+# ============================================================
+# ШАГ 5: РАСА (ОБРАБОТЧИКИ)
+# ============================================================
+
+@dp.callback_query(lambda c: c.data.startswith("race_"))
+async def select_race(call: CallbackQuery, state: FSMContext):
+    race = call.data.replace("race_", "")
+    await state.update_data(race=race)
+    logger.info(f"[FLOW] Выбрана раса: {race}")
+    race_desc = get_race_description(race)
+    race_speed = get_race_speed(race)
+    race_size = get_race_size(race)
+    has_sub = has_subraces(race)
+    subraces_list = get_subraces(race) if has_sub else []
+    text = f"🧝 **Раса: {race}**\n\n📖 {race_desc}\n\n🏃 **Скорость:** {race_speed} футов\n📏 **Размер:** {race_size}\n"
+    if has_sub and subraces_list:
+        text += f"\n🌟 **Доступные подрасы:**\n"
+        for sub in subraces_list:
+            sub_trait = get_subrace_trait(race, sub)
+            text += f"   • **{sub}** — {sub_trait[:50] + '...' if len(sub_trait) > 50 else sub_trait}\n"
+        text += f"\n**Шаг 10/12: Выберите ПОДРАСУ**"
+        reply_markup = create_subrace_keyboard(race)
+        next_state = CreateCharacter.subrace_select
+        await state.set_state(next_state)
+    else:
+        await go_to_name(call.message, state)
         await call.answer()
-
-    @dp.callback_query(lambda c: c.data == "progress_info")
-    async def progress_info(call: CallbackQuery):
-        await call.answer("Это информационное сообщение", show_alert=False)
-
-    @dp.message()
-    async def unknown_command(m: Message, state: FSMContext):
-        current_state = await state.get_state()
-        if current_state:
-            await m.answer("⏳ Вы в процессе создания персонажа.\n\nСледуйте инструкциям или нажмите «❌ Отмена».",
-                           reply_markup=cancel_kb())
+        return
+    img_path = get_race_image_path(race)
+    try:
+        await call.message.delete()
+        if img_path and os.path.exists(img_path):
+            photo = FSInputFile(img_path)
+            await call.message.answer_photo(photo=photo, caption=text, parse_mode=None, reply_markup=reply_markup)
         else:
-            await m.answer("❓ Я не понимаю эту команду.\n\nИспользуйте кнопки меню или /help.",
-                           reply_markup=main_menu())
+            await call.message.answer(text, parse_mode=None, reply_markup=reply_markup)
+    except Exception as e:
+        logger.error(f"Ошибка: {e}")
+        await call.message.answer(text, parse_mode=None, reply_markup=reply_markup)
+    await call.answer()
 
-    # ============================================================
-    # ЗАПУСК
-    # ============================================================
 
-    async def main():
-        logger.info("=" * 50)
-        logger.info("🚀 ЗАПУСК БОТА D&D CHARACTER CREATOR 5.5e (ВЕРСИЯ 2)")
-        logger.info("=" * 50)
-        try:
-            from db import init_database, migrate_database_v2
-            init_database()
-            migrate_database_v2()
-            logger.info("✅ База данных готова (версия 2)")
-            await bot.delete_webhook(drop_pending_updates=True)
-            logger.info("✅ Webhook удалён")
-            bot_info = await bot.get_me()
-            logger.info(f"✅ Бот: @{bot_info.username}")
-            logger.info("🎲 БОТ ГОТОВ К РАБОТЕ!")
-            await dp.start_polling(bot)
-        except Exception as e:
-            logger.error(f"❌ Ошибка: {e}", exc_info=True)
+@dp.callback_query(lambda c: c.data.startswith("subrace_") and c.data != "subrace_skip")
+async def select_subrace(call: CallbackQuery, state: FSMContext):
+    subrace = call.data.replace("subrace_", "")
+    await state.update_data(subrace=subrace)
+    data = await state.get_data()
+    race = data.get("race")
+    sub_desc = get_subrace_description(race, subrace)
+    sub_trait = get_subrace_trait(race, subrace)
+    text = f"🧝 **{race} — {subrace}**\n\n📖 {sub_desc}\n\n✨ **Особенность:** {sub_trait}\n\nПереходим к вводу имени..."
+    await call.message.delete()
+    await call.message.answer(text, parse_mode=None)
+    await go_to_name(call.message, state)
+    await call.answer()
 
-    if __name__ == "__main__":
-        asyncio.run(main())
+
+@dp.callback_query(lambda c: c.data == "subrace_skip")
+async def skip_subrace(call: CallbackQuery, state: FSMContext):
+    await state.update_data(subrace=None)
+    await call.message.delete()
+    await go_to_name(call.message, state)
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "back_to_races")
+async def back_to_races(call: CallbackQuery, state: FSMContext):
+    await state.set_state(CreateCharacter.race_select)
+    await call.message.delete()
+    await call.message.answer("Шаг 9/12: Выберите РАСУ", parse_mode=None, reply_markup=create_race_keyboard())
+    await call.answer()
+
+
+# ============================================================
+# ШАГ 6: ИМЯ И ИСТОРИЯ (ОБРАБОТЧИКИ)
+# ============================================================
+
+@dp.message(CreateCharacter.name_input)
+async def set_name(m: Message, state: FSMContext):
+    if m.text == "❌ Отмена":
+        await cancel_creation(m, state)
+        return
+    valid, msg = validate_name(m.text)
+    if not valid:
+        await m.answer(f"{msg}\nПожалуйста, введите другое имя:", reply_markup=cancel_kb())
+        return
+    await state.update_data(name=m.text.strip())
+    logger.info(f"✅ Имя сохранено: {m.text.strip()}")
+    await m.answer(f"✅ Имя: {m.text.strip()}", reply_markup=ReplyKeyboardRemove())
+    await go_to_backstory(m, state)
+
+
+@dp.message(CreateCharacter.backstory_input)
+async def set_backstory(m: Message, state: FSMContext):
+    if m.text == "❌ Отмена":
+        await cancel_creation(m, state)
+        return
+    backstory = m.text.strip()
+    if len(backstory) > 2000:
+        await m.answer("❌ История слишком длинная (максимум 2000 символов).", reply_markup=cancel_kb())
+        return
+    await state.update_data(backstory=backstory)
+    await state.set_state(CreateCharacter.image_input)
+    await m.answer(
+        f"📖 История сохранена!\n\n🖼️ **Финальный шаг: Изображение персонажа**\n\nЗагрузите картинку или нажмите «⏩ Пропустить».",
+        parse_mode=None, reply_markup=skip_kb()
+    )
+
+
+# ============================================================
+# ШАГ 7: ИЗОБРАЖЕНИЕ И ФИНАЛ
+# ============================================================
+
+@dp.message(F.text == "⏩ Пропустить")
+async def skip_image(m: Message, state: FSMContext):
+    await finalize_character(m, state, image_file_id=None)
+
+
+@dp.message(CreateCharacter.image_input, F.photo)
+async def set_image(m: Message, state: FSMContext):
+    photo = m.photo[-1]
+    file_id = photo.file_id
+    await finalize_character(m, state, image_file_id=file_id)
+
+
+# ============================================================
+# ПРОСМОТР И УДАЛЕНИЕ ПЕРСОНАЖЕЙ
+# ============================================================
+
+@dp.message(F.text == "📋 Мои персонажи")
+async def list_characters(m: Message):
+    characters = get_user_characters(m.from_user.id)
+    if not characters:
+        await m.answer("📭 У вас пока нет персонажей.")
+        return
+    await m.answer("📋 Ваши персонажи:", reply_markup=create_character_list_keyboard(m.from_user.id))
+
+
+@dp.callback_query(lambda c: c.data.startswith("view_"))
+async def view_character(call: CallbackQuery):
+    char_id = int(call.data.replace("view_", ""))
+    character = get_character_by_id(char_id)
+    if not character:
+        await call.answer("❌ Персонаж не найден")
+        return
+    info = (f"📛 **{character['name']}**\n\n🧝 **Раса:** {character.get('race_name', 'Неизвестно')}\n"
+            f"⚔️ **Класс:** {character.get('class_name', 'Неизвестно')}\n📜 **Предыстория:** {character.get('background_name', 'Нет')}\n"
+            f"📊 **Уровень:** {character['level']}\n❤️ **HP:** {character['hp']} | 🛡️ **AC:** {character['ac']}\n\n"
+            f"**Характеристики:**\nSTR {character['str']} | DEX {character['dex']} | CON {character['con']} | "
+            f"INT {character['int']} | WIS {character['wis']} | CHA {character['cha']}")
+    if character.get('image_file_id'):
+        await call.message.answer_photo(photo=character['image_file_id'], caption=info, parse_mode=None)
+    else:
+        await call.message.answer(info, parse_mode=None)
+    await call.answer()
+
+
+@dp.message(F.text == "🗑 Удалить персонажа")
+async def delete_character_menu(m: Message):
+    characters = get_user_characters(m.from_user.id)
+    if not characters:
+        await m.answer("📭 У вас нет персонажей для удаления.")
+        return
+    await m.answer("🗑 Выберите персонажа для удаления:\n\n⚠️ Удаление необратимо.",
+                   reply_markup=create_delete_keyboard(characters))
+
+
+@dp.callback_query(lambda c: c.data.startswith("delete_"))
+async def confirm_delete(call: CallbackQuery):
+    char_id = int(call.data.replace("delete_", ""))
+    character = get_character_by_id(char_id)
+    if not character:
+        await call.answer("❌ Персонаж не найден")
+        return
+    if delete_character(char_id, call.from_user.id):
+        await call.message.edit_text(f"✅ Персонаж {character['name']} удалён!", parse_mode=None)
+    else:
+        await call.message.edit_text("❌ Не удалось удалить персонажа.")
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "cancel_delete")
+async def cancel_delete(call: CallbackQuery):
+    await call.message.edit_text("❌ Удаление отменено")
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "cancel_creation")
+async def cancel_creation_callback(call: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await call.message.edit_text("❌ Создание персонажа отменено")
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "progress_info")
+async def progress_info(call: CallbackQuery):
+    await call.answer("Это информационное сообщение", show_alert=False)
+
+
+@dp.message()
+async def unknown_command(m: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state:
+        await m.answer("⏳ Вы в процессе создания персонажа.\n\nСледуйте инструкциям или нажмите «❌ Отмена».",
+                       reply_markup=cancel_kb())
+    else:
+        await m.answer("❓ Я не понимаю эту команду.\n\nИспользуйте кнопки меню или /help.",
+                       reply_markup=main_menu())
+
+
+# ============================================================
+# ЗАПУСК
+# ============================================================
+
+async def main():
+    logger.info("=" * 50)
+    logger.info("🚀 ЗАПУСК БОТА D&D CHARACTER CREATOR 5.5e (ВЕРСИЯ 2)")
+    logger.info("=" * 50)
+    try:
+        from db import init_database, migrate_database_v2
+        init_database()
+        migrate_database_v2()
+        logger.info("✅ База данных готова (версия 2)")
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("✅ Webhook удалён")
+        bot_info = await bot.get_me()
+        logger.info(f"✅ Бот: @{bot_info.username}")
+        logger.info("🎲 БОТ ГОТОВ К РАБОТЕ!")
+        await dp.start_polling(bot)
+    except Exception as e:
+        logger.error(f"❌ Ошибка: {e}", exc_info=True)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

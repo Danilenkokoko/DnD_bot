@@ -243,10 +243,78 @@ def get_class_primary_stats(class_name: str) -> List[str]:
     return class_primary_map.get(class_name, ["STR"])
 
 
+def calculate_final_stats_with_background(class_name: str, background_name: str,
+                                          class_starting_stats: Dict[str, int]) -> Dict[str, int]:
+    """
+    Распределяет бонусы предыстории по правилам:
+    - Если основная характеристика класса входит в тройку предыстории → +2 к ней, +1 к случайной из оставшихся
+    - Иначе → +1 к двум случайным характеристикам из тройки
+
+    Args:
+        class_name: название класса
+        background_name: название предыстории
+        class_starting_stats: начальные характеристики класса
+
+    Returns:
+        Dict[str, int]: финальные характеристики
+    """
+    # Получаем основную характеристику класса (берём первую)
+    class_primary = get_class_primary_stats(class_name)
+    primary_stat = class_primary[0] if class_primary else "STR"
+
+    # Получаем тройку характеристик предыстории
+    bg = get_background_by_name(background_name)
+    if not bg:
+        logger.warning(f"Предыстория {background_name} не найдена, возвращаем начальные статы")
+        return class_starting_stats.copy()
+
+    bg_stats = bg['characteristics']  # ['STR', 'DEX', 'CON'] например
+
+    result = class_starting_stats.copy()
+
+    # Правило А: основная характеристика класса входит в тройку
+    if primary_stat in bg_stats:
+        # +2 к основной характеристике
+        result[primary_stat] += 2
+
+        # +1 к случайной из двух оставшихся
+        remaining = [s for s in bg_stats if s != primary_stat]
+        if remaining:
+            random_stat = random.choice(remaining)
+            result[random_stat] += 1
+            logger.info(f"[Stats] Правило А: +2 к {primary_stat}, +1 к {random_stat}")
+        else:
+            # Если нет оставшихся (не бывает, но на всякий случай)
+            result[bg_stats[0]] += 1
+            logger.info(f"[Stats] Правило А: +2 к {primary_stat}, +1 к {bg_stats[0]}")
+    else:
+        # Правило Б: +1 к двум случайным характеристикам из тройки
+        random.shuffle(bg_stats)
+        result[bg_stats[0]] += 1
+        result[bg_stats[1]] += 1
+        logger.info(f"[Stats] Правило Б: +1 к {bg_stats[0]}, +1 к {bg_stats[1]}")
+
+    # Ограничиваем максимум 20
+    for stat in result:
+        result[stat] = min(20, result[stat])
+
+    return result
+
+
+def get_initial_stats_intelligent(background_name: str, class_name: str, variant: str = None) -> Dict[str, int]:
+    """
+    Получает начальные характеристики с учётом класса и предыстории (упрощённая версия)
+    Используется как fallback, если нет возможности использовать calculate_final_stats_with_background
+    """
+    base_stats = get_class_starting_stats(class_name, variant)
+    return apply_intelligent_background_bonuses(base_stats, background_name, class_name)
+
+
 def apply_intelligent_background_bonuses(stats: Dict[str, int], background_name: str, class_name: str) -> Dict[
     str, int]:
     """
     Умное распределение бонусов характеристик от предыстории с учётом класса
+    (старая версия, оставлена для совместимости)
     """
     result = stats.copy()
     bg = get_background_by_name(background_name)
@@ -275,14 +343,6 @@ def apply_intelligent_background_bonuses(stats: Dict[str, int], background_name:
         result[stat] = min(20, result[stat])
 
     return result
-
-
-def get_initial_stats_intelligent(background_name: str, class_name: str, variant: str = None) -> Dict[str, int]:
-    """
-    Получает начальные характеристики с учётом класса и предыстории
-    """
-    base_stats = get_class_starting_stats(class_name, variant)
-    return apply_intelligent_background_bonuses(base_stats, background_name, class_name)
 
 
 # =========================================================
@@ -444,7 +504,7 @@ def get_subrace_info(race_name: str, subrace_name: str) -> Optional[Dict[str, An
             if row:
                 return {
                     'id': row[0], 'name': row[1], 'trait': row[2] if row[2] else "",
-                    'description': row[3] if row[3] else _get_fallback_subrace_description(subrace_name),
+                    ' description': row[3] if row[3] else _get_fallback_subrace_description(subrace_name),
                     'extra_speed': row[4] if row[4] else 0, 'extra_traits': row[5] if row[5] else []
                 }
     return None
@@ -548,11 +608,13 @@ def get_all_classes() -> List[Dict[str, Any]]:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, name, hit_die, primary_stats, saving_throws, 
-                       skill_choices, description, image_path, is_spellcaster, spellcasting_ability
+                       skill_choices, description, image_path, is_spellcaster, spellcasting_ability,
+                       cantrips_count, spells_count_level1, masteries_count
                 FROM classes ORDER BY name
             """)
             columns = ['id', 'name', 'hit_die', 'primary_stats', 'saving_throws',
-                       'skill_choices', 'description', 'image_path', 'is_spellcaster', 'spellcasting_ability']
+                       'skill_choices', 'description', 'image_path', 'is_spellcaster', 'spellcasting_ability',
+                       'cantrips_count', 'spells_count_level1', 'masteries_count']
             return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
@@ -570,7 +632,8 @@ def get_class_by_name(class_name: str) -> Optional[Dict[str, Any]]:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, name, hit_die, primary_stats, saving_throws, 
-                       skill_choices, description, image_path, is_spellcaster, spellcasting_ability
+                       skill_choices, description, image_path, is_spellcaster, spellcasting_ability,
+                       cantrips_count, spells_count_level1, masteries_count
                 FROM classes WHERE name = %s
             """, (class_name,))
             row = cur.fetchone()
@@ -588,9 +651,29 @@ def get_class_by_name(class_name: str) -> Optional[Dict[str, Any]]:
                     'saving_throws': saving_throws,
                     'skill_choices': row[5],
                     'description': row[6] if row[6] else _get_fallback_class_description(class_name),
-                    'image_path': row[7], 'is_spellcaster': row[8], 'spellcasting_ability': row[9]
+                    'image_path': row[7], 'is_spellcaster': row[8], 'spellcasting_ability': row[9],
+                    'cantrips_count': row[10] if row[10] else 0,
+                    'spells_count_level1': row[11] if row[11] else 0,
+                    'masteries_count': row[12] if row[12] else 0
                 }
     return None
+
+
+def get_class_spell_counts(class_name: str) -> Dict[str, int]:
+    """Возвращает количество заговоров и заклинаний для класса"""
+    class_data = get_class_by_name(class_name)
+    if class_data:
+        return {
+            'cantrips': class_data.get('cantrips_count', 0),
+            'level1': class_data.get('spells_count_level1', 0)
+        }
+    return {'cantrips': 0, 'level1': 0}
+
+
+def get_class_masteries_count(class_name: str) -> int:
+    """Возвращает количество оружейных приёмов для класса"""
+    class_data = get_class_by_name(class_name)
+    return class_data.get('masteries_count', 0) if class_data else 0
 
 
 def _get_fallback_class_description(class_name: str) -> str:
@@ -898,7 +981,7 @@ def get_armor_by_name(armor_name: str) -> Optional[Dict[str, Any]]:
 
 
 # =========================================================
-# 8. РАБОТА С ОРУЖИЕМ И ПРИЁМАМИ
+# 8. РАБОТА С ОРУЖИЕМ И ПРИЁМАМИ (ОБНОВЛЕНА)
 # =========================================================
 
 def get_weapon_by_name(weapon_name: str) -> Optional[Dict[str, Any]]:
@@ -949,23 +1032,30 @@ def get_detailed_masteries_for_weapon(weapon_name: str) -> List[Dict[str, Any]]:
 def auto_assign_masteries(weapon_name: str, class_name: str) -> List[str]:
     """
     Автоматически выбирает оружейные приёмы для оружия
+    Количество зависит от класса (берётся из БД):
+    - Воин: 3
+    - Варвар, Паладин, Следопыт: 2
+    - Плут: 1
+    - Остальные: 0
     """
+    # Получаем количество приёмов из БД
+    masteries_count = get_class_masteries_count(class_name)
+
+    if masteries_count == 0:
+        return []
+
+    # Получаем детальные приёмы для оружия
     masteries = get_detailed_masteries_for_weapon(weapon_name)
 
     if not masteries:
         return []
 
-    martial_classes = ["Воин", "Паладин", "Следопыт", "Варвар", "Плут"]
-    if class_name not in martial_classes:
-        return []
-
-    masteries_count = 2 if class_name == "Воин" else 1
-
+    # Возвращаем нужное количество
     if len(masteries) <= masteries_count:
         return [m['name'] for m in masteries]
 
+    # Иначе выбираем оптимальные (помеченные как optimal)
     optimal = [m for m in masteries if m.get('optimal', False)]
-    selected = []
 
     if len(optimal) >= masteries_count:
         selected = [m['name'] for m in optimal[:masteries_count]]
@@ -977,6 +1067,7 @@ def auto_assign_masteries(weapon_name: str, class_name: str) -> List[str]:
             random.shuffle(remaining)
             selected += [m['name'] for m in remaining[:needed]]
 
+    logger.info(f"[Masteries] {class_name} выбрал {len(selected)} приём(ов) для {weapon_name}: {selected}")
     return selected
 
 
@@ -1098,11 +1189,9 @@ def get_spells_for_class(class_name: str, level: int = 1, is_cantrip: bool = Non
     with get_connection() as conn:
         with conn.cursor() as cur:
             query = """
-                SELECT s.id, s.name, s.level, s.is_cantrip, s.description, s.school,
-                       sc.name as category, sc.icon
+                SELECT s.id, s.name, s.level, s.is_cantrip, s.description, s.school, s.category
                 FROM spells s
                 JOIN class_spells cs ON s.id = cs.spell_id
-                LEFT JOIN spell_categories sc ON s.category_id = sc.id
                 WHERE cs.class_id = %s AND cs.is_available = TRUE
             """
             params = [class_data['id']]
@@ -1118,8 +1207,34 @@ def get_spells_for_class(class_name: str, level: int = 1, is_cantrip: bool = Non
             query += " ORDER BY s.level, s.name"
 
             cur.execute(query, params)
-            columns = ['id', 'name', 'level', 'is_cantrip', 'description', 'school', 'category', 'icon']
+            columns = ['id', 'name', 'level', 'is_cantrip', 'description', 'school', 'category']
             return [dict(zip(columns, row)) for row in cur.fetchall()]
+
+
+def get_spells_grouped_by_category(class_name: str, is_cantrip: bool = True) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Возвращает заклинания для класса, сгруппированные по категориям
+    """
+    spells = get_spells_for_class(class_name, is_cantrip=is_cantrip)
+
+    result = {}
+    for spell in spells:
+        category = spell.get('category', 'Прочее')
+        if category not in result:
+            result[category] = []
+        result[category].append(spell)
+
+    # Сортируем категории в нужном порядке
+    category_order = ["Урон", "Защита", "Лечение", "Контроль", "Утилита", "Иллюзии", "Природа", "Прочее"]
+    sorted_result = {}
+    for cat in category_order:
+        if cat in result:
+            sorted_result[cat] = result[cat]
+    for cat in result:
+        if cat not in sorted_result:
+            sorted_result[cat] = result[cat]
+
+    return sorted_result
 
 
 def get_cantrips_for_class(class_name: str) -> List[Dict[str, Any]]:
@@ -1140,22 +1255,6 @@ def get_cantrips_for_class_with_details(class_name: str) -> List[Dict[str, Any]]
 def get_level1_spells_for_class_with_details(class_name: str) -> List[Dict[str, Any]]:
     """Возвращает все доступные заклинания 1 уровня для класса с деталями"""
     return get_spells_for_class(class_name, level=1, is_cantrip=False)
-
-
-def get_spells_grouped_by_category(class_name: str, is_cantrip: bool = True) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    Возвращает заклинания для класса, сгруппированные по категориям
-    """
-    spells = get_spells_for_class(class_name, is_cantrip=is_cantrip)
-
-    result = {}
-    for spell in spells:
-        category = spell.get('category', 'Прочее')
-        if category not in result:
-            result[category] = []
-        result[category].append(spell)
-
-    return result
 
 
 def get_recommended_spells(class_name: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -1277,7 +1376,7 @@ def validate_character(name: str, class_name: str, race: str, background: str, s
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("ТЕСТ D&D LOGIC MODULE (PostgreSQL версия)")
+    print("ТЕСТ D&D LOGIC MODULE (PostgreSQL версия 2)")
     print("=" * 60)
 
     print("\n1. ТЕСТ КАРТИНОК:")
@@ -1296,15 +1395,39 @@ if __name__ == "__main__":
         stats = get_class_starting_stats(class_name)
         print(f"   • {class_name}: STR={stats['STR']}, DEX={stats['DEX']}, CON={stats['CON']}")
 
-    print("\n3. ТЕСТ УМНОГО РАСПРЕДЕЛЕНИЯ ХАРАКТЕРИСТИК:")
+    print("\n3. ТЕСТ НОВОГО РАСПРЕДЕЛЕНИЯ ХАРАКТЕРИСТИК (ПО ПРАВИЛАМ):")
     test_cases = [
-        ("Воин", "Солдат"),
-        ("Волшебник", "Мудрец"),
-        ("Варвар", "Солдат"),
+        ("Воин", "Солдат"),  # Основная характеристика входит в тройку
+        ("Волшебник", "Мудрец"),  # Основная характеристика входит в тройку
+        ("Варвар", "Стражник"),  # Основная характеристика НЕ входит в тройку
     ]
     for class_name, bg_name in test_cases:
-        stats = get_initial_stats_intelligent(bg_name, class_name)
-        print(f"   • {class_name} + {bg_name}: STR={stats['STR']}, DEX={stats['DEX']}, CON={stats['CON']}")
+        starting = get_class_starting_stats(class_name)
+        final = calculate_final_stats_with_background(class_name, bg_name, starting)
+        print(f"   • {class_name} + {bg_name}:")
+        print(f"     Старт: STR={starting['STR']}, DEX={starting['DEX']}, CON={starting['CON']}")
+        print(f"     Финал: STR={final['STR']}, DEX={final['DEX']}, CON={final['CON']}")
 
-    print("\n✅ МОДУЛЬ DND_LOGIC.PY ГОТОВ К РАБОТЕ!")
+    print("\n4. ТЕСТ КОЛИЧЕСТВА ЗАКЛИНАНИЙ ПО КЛАССАМ:")
+    for class_name in ["Волшебник", "Жрец", "Варвар"]:
+        counts = get_class_spell_counts(class_name)
+        masteries = get_class_masteries_count(class_name)
+        print(f"   • {class_name}: заговоров={counts['cantrips']}, заклинаний={counts['level1']}, приёмов={masteries}")
+
+    print("\n5. ТЕСТ ОРУЖЕЙНЫХ ПРИЁМОВ (НОВОЕ КОЛИЧЕСТВО):")
+    test_weapons = [
+        ("Двуручный меч", "Воин"),
+        ("Двуручный меч", "Варвар"),
+        ("Двуручный меч", "Плут"),
+    ]
+    for weapon, class_name in test_weapons:
+        masteries = auto_assign_masteries(weapon, class_name)
+        print(f"   • {class_name} + {weapon}: {len(masteries)} приём(ов) - {masteries}")
+
+    print("\n6. ТЕСТ КАТЕГОРИЙ ЗАКЛИНАНИЙ:")
+    for class_name in ["Волшебник", "Жрец"]:
+        categories = get_spells_grouped_by_category(class_name, is_cantrip=True)
+        print(f"   • {class_name} - категории заговоров: {list(categories.keys())}")
+
+    print("\n✅ МОДУЛЬ DND_LOGIC.PY ВЕРСИИ 2 ГОТОВ К РАБОТЕ!")
     print("=" * 60)

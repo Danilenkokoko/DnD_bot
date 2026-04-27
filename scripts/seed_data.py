@@ -5,7 +5,7 @@ seed_data.py - Наполнение базы данных D&D 5.5e (2024) дан
 Запуск: python seed_data.py
 Скрипт не зависит от внешних файлов — все данные встроены в код.
 Включает: расы, классы, предыстории, заклинания, оружие, броню,
-снаряжение классов, оружейные приёмы.
+снаряжение классов, оружейные приёмы, боевые стили.
 """
 
 import psycopg2
@@ -88,7 +88,14 @@ RACES_DATA = {
     "Голиаф": {
         "speed": 30, "size": "Средний",
         "description": "Возвышающиеся над большинством народов голиафы — отдалённые потомки великанов.",
-        "subraces": {}
+        "subraces": {
+            "Облачный великан": {"trait": "Телепортация", "description": "Может телепортироваться на короткое расстояние"},
+            "Огненный великан": {"trait": "Огненный урон", "description": "Добавляет огненный урон к атакам"},
+            "Ледяной великан": {"trait": "Холод + замедление", "description": "Наносит холод и замедляет цель"},
+            "Холмовой великан": {"trait": "Опрокидывание", "description": "Может опрокинуть врага"},
+            "Каменный великан": {"trait": "Снижение урона", "description": "Получает сопротивление к урону"},
+            "Штормовой великан": {"trait": "Ответный урон", "description": "При попадании возвращает урон молнией/громом"}
+        }
     },
     "Дампир": {
         "speed": 35, "size": "Средний",
@@ -153,7 +160,11 @@ RACES_DATA = {
     "Тифлинг": {
         "speed": 30, "size": "Средний",
         "description": "Тифлинги связаны кровными узами с дьяволом, демоном или другим Исчадием.",
-        "subraces": {}
+        "subraces": {
+            "Инфернальный": {"trait": "Огонь + атаки", "description": "Усиливает огненные атаки"},
+            "Бездны": {"trait": "Яд + контроль", "description": "Добавляет ядовитый урон и контроль"},
+            "Хтонический": {"trait": "Некротика + ослабление", "description": "Наносит некротический урон и ослабляет"}
+        }
     },
     "Человек": {
         "speed": 30, "size": "Средний",
@@ -252,7 +263,7 @@ CLASSES_DATA = {
         "description": "Бард плетёт магию из слов и музыки, вдохновляя союзников и деморализуя противников."
     },
     "Варвар": {
-        "hit_die": 12, "primary_stats": ["STR", "CON"], "saving_throws": ["STR", "CON"],
+        "hit_die": 12, "primary_stats": ["STR"], "saving_throws": ["STR", "CON"],
         "skill_choices": 2, "is_spellcaster": False, "spellcasting_ability": None,
         "description": "Варваров объединяет их ярость — необузданный, неугасимый и бездумный гнев."
     },
@@ -473,22 +484,14 @@ def migrate_backgrounds(conn):
 # =========================================================
 
 WEAPON_MASTERIES = [
-    {"name": "Выпад", "trigger": "Атака лёгким оружием", "effect": "Доп. атака становится частью Действия Атака",
-     "weapons": "Кинжал, Серп, Скимитар, Лёгкий молот"},
-    {"name": "Прорубание", "trigger": "Попадание по врагу",
-     "effect": "Можно атаковать второго врага рядом (без бонуса к урону)", "weapons": "Двуручный топор, Алебарда"},
-    {"name": "Задевание", "trigger": "Промах атакой", "effect": "Всё равно наносите урон = модификатору характеристики",
-     "weapons": "Глефа, Двуручный меч"},
-    {"name": "Толкание", "trigger": "Попадание", "effect": "Отодвинуть врага (до 10 футов)",
-     "weapons": "Большая дубина, Пика, Военный молот"},
-    {"name": "Изнурение", "trigger": "Попадание", "effect": "У врага помеха на следующую атаку",
-     "weapons": "Булава, Копьё, Длинный меч"},
-    {"name": "Замедление", "trigger": "Попадание+урон", "effect": "Скорость врага падает на 10 футов",
-     "weapons": "Дубина, Кнут, Длинный лук"},
-    {"name": "Опрокидывание", "trigger": "Попадание", "effect": "Враг падает ничком",
-     "weapons": "Боевой топор, Ланс, Трезубец"},
-    {"name": "Подавление", "trigger": "Попадание+урон", "effect": "Вы получаете преимущество на следующую атаку",
-     "weapons": "Рапира, Короткий лук, Метательный топор"},
+    {"name": "Рассечение", "trigger": "Попадание по цели", "effect": "Нанести урон ещё одной цели рядом", "weapons": "глефа, двуручный топор, алебарда, двуручный молот, двуручный меч"},
+    {"name": "Задевание", "trigger": "Промах атакой", "effect": "Нанести частичный урон", "weapons": "двуручный меч, двуручный топор, алебарда, двуручный молот, глефа"},
+    {"name": "Быстрый удар", "trigger": "Атака лёгким оружием", "effect": "Дополнительная атака", "weapons": "кинжал, короткий меч, серп, ручной топор, лёгкий молот, ятаган"},
+    {"name": "Отталкивание", "trigger": "Попадание", "effect": "Оттолкнуть цель на 10 футов", "weapons": "боевой молот, моргенштерн, копьё, пика"},
+    {"name": "Ослабление", "trigger": "Попадание", "effect": "Помеха на следующую атаку цели", "weapons": "булава, боевой посох, цеп, моргенштерн, дубинка"},
+    {"name": "Замедление", "trigger": "Попадание", "effect": "Снизить скорость цели на 10 футов", "weapons": "арбалеты, длинный лук, копьё, рапира, боевой молот"},
+    {"name": "Сбивание", "trigger": "Попадание", "effect": "Сбить цель с ног", "weapons": "копьё, пика, алебарда, боевой молот, боевой топор, длинный меч"},
+    {"name": "Преимущество", "trigger": "Попадание", "effect": "Преимущество на следующую атаку", "weapons": "рапира, короткий меч, длинный лук, ручной арбалет, кинжал, ятаган"},
 ]
 
 
@@ -652,79 +655,85 @@ WEAPONS_DATA = [
     # ===== ПРОСТОЕ ОРУЖИЕ =====
     {
         "name": "Кинжал", "category": "simple", "damage_dice": "1d4", "damage_type": "piercing",
-        "properties": ["легкое", "метательное"], "suitable_masteries": ["Выпад", "Подавление"],
+        "properties": ["легкое", "метательное"], "suitable_masteries": ["Быстрый удар", "Преимущество"],
         "detailed_masteries": [
-            {"name": "Пригвоздить",
-             "description": "При попадании кинжалом можете пригвоздить существо к стене, скорость цели падает до 0",
-             "optimal": True},
-            {"name": "Скрытый клинок", "description": "Можете спрятать кинжал и совершить атаку с преимуществом",
-             "optimal": False}
+            {"name": "Пригвоздить", "description": "При попадании кинжалом можете пригвоздить существо к стене", "optimal": True},
+            {"name": "Скрытый клинок", "description": "Можете спрятать кинжал и совершить атаку с преимуществом", "optimal": False}
         ]
     },
     {
         "name": "Серп", "category": "simple", "damage_dice": "1d4", "damage_type": "slashing",
-        "properties": ["легкое"], "suitable_masteries": ["Выпад"],
+        "properties": ["легкое"], "suitable_masteries": ["Быстрый удар"],
         "detailed_masteries": []
     },
     {
         "name": "Дубина", "category": "simple", "damage_dice": "1d4", "damage_type": "bludgeoning",
-        "properties": ["легкое"], "suitable_masteries": ["Замедление"],
+        "properties": ["легкое"], "suitable_masteries": ["Ослабление"],
         "detailed_masteries": [
-            {"name": "Оглушение", "description": "Действием можете оглушить гуманоида до начала его следующего хода",
-             "optimal": True},
-            {"name": "Импровизированный удар", "description": "Можете сломать оружие для критического попадания",
-             "optimal": False}
+            {"name": "Оглушение", "description": "Действием можете оглушить гуманоида", "optimal": True}
         ]
     },
     {
         "name": "Копьё", "category": "simple", "damage_dice": "1d6", "damage_type": "piercing",
-        "properties": ["метательное", "универсальное"], "suitable_masteries": ["Изнурение", "Толкание"],
+        "properties": ["метательное", "универсальное"], "suitable_masteries": ["Ослабление", "Отталкивание", "Замедление", "Сбивание"],
         "detailed_masteries": []
     },
     {
         "name": "Булава", "category": "simple", "damage_dice": "1d6", "damage_type": "bludgeoning",
-        "properties": [], "suitable_masteries": ["Изнурение"],
+        "properties": [], "suitable_masteries": ["Ослабление"],
         "detailed_masteries": [
-            {"name": "Сильный удар", "description": "Цель не может добавлять Ловкость к КД", "optimal": True},
-            {"name": "Ребролом", "description": "Ошеломляет гуманоида", "optimal": False}
+            {"name": "Сильный удар", "description": "Цель не может добавлять Ловкость к КД", "optimal": True}
         ]
     },
     {
         "name": "Боевой посох", "category": "simple", "damage_dice": "1d6", "damage_type": "bludgeoning",
-        "properties": ["универсальное"], "suitable_masteries": ["Толкание"],
+        "properties": ["универсальное"], "suitable_masteries": ["Ослабление"],
         "detailed_masteries": [
             {"name": "Прыжок", "description": "Можете использовать посох, чтобы прыгать дальше", "optimal": True}
         ]
     },
     {
         "name": "Лёгкий молот", "category": "simple", "damage_dice": "1d4", "damage_type": "bludgeoning",
-        "properties": ["легкое", "метательное"], "suitable_masteries": ["Выпад"],
+        "properties": ["легкое", "метательное"], "suitable_masteries": ["Быстрый удар"],
         "detailed_masteries": [
-            {"name": "Оглушающий удар", "description": "Цель становится недееспособной", "optimal": True},
-            {"name": "Повреждение доспеха", "description": "Скорость цели уменьшается на 10 футов", "optimal": False}
+            {"name": "Оглушающий удар", "description": "Цель становится недееспособной", "optimal": True}
         ]
     },
     {
-        "name": "Метательный топор", "category": "simple", "damage_dice": "1d6", "damage_type": "slashing",
-        "properties": ["легкое", "метательное"], "suitable_masteries": ["Подавление"],
+        "name": "Метательное копьё", "category": "simple", "damage_dice": "1d6", "damage_type": "piercing",
+        "properties": ["метательное"], "suitable_masteries": [],
         "detailed_masteries": [
-            {"name": "Пригвоздить", "description": "При попадании можете пригвоздить существо к стене", "optimal": True}
+            {"name": "Устрашающая точность", "description": "Цель становится испуганной", "optimal": True}
+        ]
+    },
+    {
+        "name": "Ручной топор", "category": "simple", "damage_dice": "1d6", "damage_type": "slashing",
+        "properties": ["легкое", "метательное"], "suitable_masteries": ["Быстрый удар"],
+        "detailed_masteries": [
+            {"name": "Пригвоздить", "description": "Можете пригвоздить существо к стене", "optimal": True}
+        ]
+    },
+    {
+        "name": "Короткий лук", "category": "simple", "damage_dice": "1d6", "damage_type": "piercing",
+        "properties": ["двуручное", "дальнобойное"], "suitable_masteries": ["Замедление", "Преимущество"],
+        "detailed_masteries": [
+            {"name": "Пригвоздить", "description": "Можете пригвоздить существо к стене", "optimal": True},
+            {"name": "Отвлекающий выстрел", "description": "Даёте союзнику преимущество", "optimal": False}
         ]
     },
 
     # ===== ВОИНСКОЕ ОРУЖИЕ =====
     {
         "name": "Длинный меч", "category": "martial", "damage_dice": "1d8", "damage_type": "slashing",
-        "properties": ["универсальное"], "suitable_masteries": ["Изнурение"],
+        "properties": ["универсальное"], "suitable_masteries": ["Ослабление", "Сбивание", "Гибкость"],
         "detailed_masteries": [
             {"name": "Скрестить клинки", "description": "Реакцией можете парировать атаку", "optimal": True},
-            {"name": "Внезапный удар", "description": "Можете ударить рукоятью, давая преимущество следующей атаке",
-             "optimal": False}
+            {"name": "Внезапный удар", "description": "Можете ударить рукоятью, давая преимущество", "optimal": False}
         ]
     },
     {
         "name": "Рапира", "category": "martial", "damage_dice": "1d8", "damage_type": "piercing",
-        "properties": ["изящное"], "suitable_masteries": ["Подавление"],
+        "properties": ["изящное"], "suitable_masteries": ["Замедление", "Преимущество", "Гибкость"],
         "detailed_masteries": [
             {"name": "Удар левой рукой", "description": "С кинжалом даёт +1к4 к КД", "optimal": True},
             {"name": "Скрестить клинки", "description": "Реакцией можете парировать атаку", "optimal": True}
@@ -732,14 +741,14 @@ WEAPONS_DATA = [
     },
     {
         "name": "Боевой топор", "category": "martial", "damage_dice": "1d8", "damage_type": "slashing",
-        "properties": ["универсальное"], "suitable_masteries": ["Опрокидывание", "Изнурение"],
+        "properties": ["универсальное"], "suitable_masteries": ["Сбивание", "Гибкость"],
         "detailed_masteries": [
             {"name": "Сокрушительный удар", "description": "КД цели снижается на 1", "optimal": True}
         ]
     },
     {
         "name": "Двуручный меч", "category": "martial", "damage_dice": "2d6", "damage_type": "slashing",
-        "properties": ["двуручное", "тяжёлое"], "suitable_masteries": ["Задевание", "Прорубание"],
+        "properties": ["двуручное", "тяжёлое"], "suitable_masteries": ["Рассечение", "Задевание"],
         "detailed_masteries": [
             {"name": "Атака по дуге", "description": "Можете атаковать двух существ одновременно", "optimal": True},
             {"name": "Упор в землю", "description": "Бонус к спасброску от вынужденного перемещения", "optimal": True}
@@ -747,12 +756,12 @@ WEAPONS_DATA = [
     },
     {
         "name": "Двуручный топор", "category": "martial", "damage_dice": "1d12", "damage_type": "slashing",
-        "properties": ["двуручное", "тяжёлое"], "suitable_masteries": ["Прорубание", "Задевание"],
+        "properties": ["двуручное", "тяжёлое"], "suitable_masteries": ["Рассечение", "Задевание"],
         "detailed_masteries": []
     },
     {
         "name": "Алебарда", "category": "martial", "damage_dice": "1d10", "damage_type": "slashing",
-        "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Прорубание"],
+        "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Рассечение", "Задевание", "Сбивание"],
         "detailed_masteries": [
             {"name": "Натиск", "description": "Можете оттолкнуть до двух существ", "optimal": True},
             {"name": "Подсечка", "description": "Можете сбить противника с ног", "optimal": True}
@@ -760,7 +769,7 @@ WEAPONS_DATA = [
     },
     {
         "name": "Глефа", "category": "martial", "damage_dice": "1d10", "damage_type": "slashing",
-        "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Задевание"],
+        "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Рассечение", "Задевание"],
         "detailed_masteries": [
             {"name": "Обезоруживающее парирование", "description": "Можете обезоружить противника", "optimal": True},
             {"name": "Подсечка", "description": "Можете сбить противника с ног", "optimal": True}
@@ -768,38 +777,45 @@ WEAPONS_DATA = [
     },
     {
         "name": "Пика", "category": "martial", "damage_dice": "1d10", "damage_type": "piercing",
-        "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Толкание"],
+        "properties": ["двуручное", "тяжёлое", "досягаемость"], "suitable_masteries": ["Отталкивание", "Сбивание"],
         "detailed_masteries": [
-            {"name": "Фаланга", "description": "Атаки с преимуществом рядом с другими обладателями пик",
-             "optimal": True},
+            {"name": "Фаланга", "description": "Атаки с преимуществом рядом с другими обладателями пик", "optimal": True},
             {"name": "Упреждение", "description": "Можете атаковать движущегося к вам врага", "optimal": True}
         ]
     },
     {
         "name": "Большая дубина", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
-        "properties": ["двуручное"], "suitable_masteries": ["Толкание"],
+        "properties": ["двуручное"], "suitable_masteries": ["Отталкивание"],
         "detailed_masteries": []
     },
     {
         "name": "Военный молот", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
-        "properties": ["универсальное"], "suitable_masteries": ["Толкание"],
+        "properties": ["универсальное"], "suitable_masteries": ["Отталкивание", "Замедление", "Сбивание", "Гибкость"],
         "detailed_masteries": [
-            {"name": "Сильный удар", "description": "Цель не может добавлять Ловкость к КД", "optimal": True},
-            {"name": "Раскалывающий удар", "description": "Можете повредить или уничтожить оружие цели",
-             "optimal": False}
+            {"name": "Сильный удар", "description": "Цель не может добавлять Ловкость к КД", "optimal": True}
         ]
     },
     {
-        "name": "Ланс", "category": "martial", "damage_dice": "1d10", "damage_type": "piercing",
-        "properties": ["досягаемость", "особое"], "suitable_masteries": ["Опрокидывание"],
-        "detailed_masteries": []
+        "name": "Короткий меч", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
+        "properties": ["изящное", "легкое"], "suitable_masteries": ["Быстрый удар", "Преимущество"],
+        "detailed_masteries": [
+            {"name": "Ближний бой", "description": "Можете атаковать после захвата", "optimal": True},
+            {"name": "Внезапный удар", "description": "Можете ударить рукоятью, давая преимущество", "optimal": False}
+        ]
     },
     {
-        "name": "Трезубец", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
-        "properties": ["метательное", "универсальное"], "suitable_masteries": ["Опрокидывание", "Толкание"],
+        "name": "Моргенштерн", "category": "martial", "damage_dice": "1d8", "damage_type": "piercing",
+        "properties": [], "suitable_masteries": ["Отталкивание", "Ослабление", "Гибкость"],
         "detailed_masteries": [
-            {"name": "Укол", "description": "Можете опутать захваченное существо", "optimal": True},
-            {"name": "Обезоруживающее парирование", "description": "Можете обезоружить противника", "optimal": True}
+            {"name": "Ребролом", "description": "Ошеломляет гуманоида", "optimal": True}
+        ]
+    },
+    {
+        "name": "Цеп", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
+        "properties": [], "suitable_masteries": ["Ослабление"],
+        "detailed_masteries": [
+            {"name": "Цепная удавка", "description": "Можете схватить существо", "optimal": True},
+            {"name": "Обвить щит", "description": "Игнорирует бонус КД от щита", "optimal": True}
         ]
     },
     {
@@ -807,58 +823,55 @@ WEAPONS_DATA = [
         "properties": ["изящное", "досягаемость"], "suitable_masteries": ["Замедление"],
         "detailed_masteries": [
             {"name": "Щелчок", "description": "Можете испугать зверя", "optimal": True},
-            {"name": "Петля", "description": "Можете опутать существо или выбить оружие", "optimal": True}
-        ]
-    },
-    {
-        "name": "Короткий лук", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
-        "properties": ["двуручное", "дальнобойное"], "suitable_masteries": ["Замедление", "Подавление"],
-        "detailed_masteries": [
-            {"name": "Пригвоздить", "description": "Можете пригвоздить существо к стене", "optimal": True},
-            {"name": "Отвлекающий выстрел", "description": "Даёте союзнику преимущество", "optimal": False},
-            {"name": "Меткий выстрел", "description": "Совершаете выстрел с помехой, но при попадании крит",
-             "optimal": False}
+            {"name": "Петля", "description": "Можете опутать существо", "optimal": True}
         ]
     },
     {
         "name": "Длинный лук", "category": "martial", "damage_dice": "1d8", "damage_type": "piercing",
-        "properties": ["двуручное", "тяжёлое", "дальнобойное"], "suitable_masteries": ["Замедление"],
+        "properties": ["двуручное", "тяжёлое", "дальнобойное"], "suitable_masteries": ["Замедление", "Преимущество"],
         "detailed_masteries": [
             {"name": "Пригвоздить", "description": "Можете пригвоздить существо к стене", "optimal": True},
             {"name": "Отвлекающий выстрел", "description": "Даёте союзнику преимущество", "optimal": False}
         ]
     },
     {
-        "name": "Скимитар", "category": "martial", "damage_dice": "1d6", "damage_type": "slashing",
-        "properties": ["изящное"], "suitable_masteries": ["Выпад"],
+        "name": "Ятаган", "category": "martial", "damage_dice": "1d6", "damage_type": "slashing",
+        "properties": ["изящное"], "suitable_masteries": ["Быстрый удар", "Преимущество"],
         "detailed_masteries": [
-            {"name": "Кровавая рана", "description": "Цель получает 1к6 рубящего урона в начале каждого хода",
-             "optimal": True},
-            {"name": "Внезапный удар", "description": "Можете ударить рукоятью, давая преимущество", "optimal": False}
+            {"name": "Кровавая рана", "description": "Цель получает 1к6 рубящего урона в начале каждого хода", "optimal": True}
         ]
     },
     {
-        "name": "Короткий меч", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
-        "properties": ["изящное", "легкое"], "suitable_masteries": ["Подавление"],
+        "name": "Ручной арбалет", "category": "martial", "damage_dice": "1d6", "damage_type": "piercing",
+        "properties": ["лёгкое", "дальнобойное"], "suitable_masteries": ["Преимущество"],
         "detailed_masteries": [
-            {"name": "Ближний бой", "description": "Можете атаковать после захвата", "optimal": True},
-            {"name": "Внезапный удар", "description": "Можете ударить рукоятью, давая преимущество", "optimal": False}
+            {"name": "Быстрый выстрел", "description": "Бонусным действием можно совершить атаку с помехой", "optimal": True}
         ]
     },
     {
-        "name": "Цеп", "category": "martial", "damage_dice": "1d8", "damage_type": "bludgeoning",
-        "properties": [], "suitable_masteries": ["Изнурение"],
+        "name": "Тяжёлый арбалет", "category": "martial", "damage_dice": "1d10", "damage_type": "piercing",
+        "properties": ["двуручное", "тяжёлое", "дальнобойное"], "suitable_masteries": ["Замедление"],
         "detailed_masteries": [
-            {"name": "Цепная удавка", "description": "Можете схватить существо, оно не может говорить и дышать",
-             "optimal": True},
-            {"name": "Обвить щит", "description": "Игнорирует бонус КД от щита", "optimal": True}
+            {"name": "Терпеливый выстрел", "description": "Если не двигались, атака с преимуществом", "optimal": True}
         ]
     },
     {
-        "name": "Секира", "category": "martial", "damage_dice": "1d8", "damage_type": "slashing",
-        "properties": ["универсальное"], "suitable_masteries": ["Опрокидывание"],
+        "name": "Лёгкий арбалет", "category": "simple", "damage_dice": "1d8", "damage_type": "piercing",
+        "properties": ["двуручное", "дальнобойное"], "suitable_masteries": ["Замедление"],
         "detailed_masteries": []
     },
+    {
+        "name": "Праща", "category": "simple", "damage_dice": "1d4", "damage_type": "bludgeoning",
+        "properties": ["дальнобойное"], "suitable_masteries": [],
+        "detailed_masteries": [
+            {"name": "Камнем по голове", "description": "Цель становится ошеломлённой", "optimal": True}
+        ]
+    },
+    {
+        "name": "Дротик", "category": "simple", "damage_dice": "1d4", "damage_type": "piercing",
+        "properties": ["метательное", "дальнобойное"], "suitable_masteries": [],
+        "detailed_masteries": []
+    }
 ]
 
 
@@ -909,28 +922,7 @@ def migrate_weapons(conn, class_id_map):
                 """, (class_id_map["Паладин"], weapon_id))
             logger.info(f"    • Паладин → всё оружие")
 
-        # Следопыт — простое + лёгкое воинское
-        ranger_weapons = ["Короткий меч", "Кинжал", "Лёгкий молот", "Метательный топор",
-                          "Короткий лук", "Длинный лук", "Скимитар"]
-        if "Следопыт" in class_id_map:
-            for weapon_name in ranger_weapons:
-                if weapon_name in weapon_id_map:
-                    cur.execute("""
-                        INSERT INTO class_weapons (class_id, weapon_id)
-                        VALUES (%s, %s)
-                        ON CONFLICT (class_id, weapon_id) DO NOTHING
-                    """, (class_id_map["Следопыт"], weapon_id_map[weapon_name]))
-            # Также простое оружие
-            for weapon in WEAPONS_DATA:
-                if weapon["category"] == "simple" and weapon["name"] in weapon_id_map:
-                    cur.execute("""
-                        INSERT INTO class_weapons (class_id, weapon_id)
-                        VALUES (%s, %s)
-                        ON CONFLICT (class_id, weapon_id) DO NOTHING
-                    """, (class_id_map["Следопыт"], weapon_id_map[weapon["name"]]))
-            logger.info(f"    • Следопыт → простое и лёгкое воинское оружие")
-
-        # Варвар — простое + воинское
+        # Варвар — всё оружие
         if "Варвар" in class_id_map:
             for weapon_name, weapon_id in weapon_id_map.items():
                 cur.execute("""
@@ -939,6 +931,26 @@ def migrate_weapons(conn, class_id_map):
                     ON CONFLICT (class_id, weapon_id) DO NOTHING
                 """, (class_id_map["Варвар"], weapon_id))
             logger.info(f"    • Варвар → всё оружие")
+
+        # Следопыт — простое + лёгкое воинское
+        ranger_weapons = ["Короткий меч", "Кинжал", "Лёгкий молот", "Метательное копьё",
+                          "Короткий лук", "Длинный лук", "Ятаган", "Ручной топор"]
+        if "Следопыт" in class_id_map:
+            for weapon in WEAPONS_DATA:
+                if weapon["category"] == "simple" and weapon["name"] in weapon_id_map:
+                    cur.execute("""
+                        INSERT INTO class_weapons (class_id, weapon_id)
+                        VALUES (%s, %s)
+                        ON CONFLICT (class_id, weapon_id) DO NOTHING
+                    """, (class_id_map["Следопыт"], weapon_id_map[weapon["name"]]))
+            for weapon_name in ranger_weapons:
+                if weapon_name in weapon_id_map:
+                    cur.execute("""
+                        INSERT INTO class_weapons (class_id, weapon_id)
+                        VALUES (%s, %s)
+                        ON CONFLICT (class_id, weapon_id) DO NOTHING
+                    """, (class_id_map["Следопыт"], weapon_id_map[weapon_name]))
+            logger.info(f"    • Следопыт → простое и лёгкое воинское оружие")
 
         # Плут — простое + избранное воинское
         rogue_weapons = ["Рапира", "Короткий лук", "Длинный меч", "Короткий меч", "Кинжал"]
@@ -968,16 +980,23 @@ def migrate_weapons(conn, class_id_map):
 # =========================================================
 
 ARMOR_DATA = [
-    {"name": "Проклёпанный кожаный доспех", "ac_base": 12, "ac_modifier": "dex", "has_shield": False},
-    {"name": "Кожаный доспех", "ac_base": 11, "ac_modifier": "dex", "has_shield": False},
-    {"name": "Кольчуга", "ac_base": 16, "ac_modifier": "none", "has_shield": False},
-    {"name": "Кольчужная рубаха", "ac_base": 13, "ac_modifier": "dex_max2", "has_shield": False},
-    {"name": "Щит", "ac_base": 2, "ac_modifier": "shield", "has_shield": True},
+    {"name": "Стёганый доспех", "ac_base": 11, "ac_modifier": "dex"},
+    {"name": "Кожаный доспех", "ac_base": 11, "ac_modifier": "dex"},
+    {"name": "Проклёпанный кожаный доспех", "ac_base": 12, "ac_modifier": "dex"},
+    {"name": "Шкурный доспех", "ac_base": 12, "ac_modifier": "dex_max2"},
+    {"name": "Кольчужная рубаха", "ac_base": 13, "ac_modifier": "dex_max2"},
+    {"name": "Кираса", "ac_base": 14, "ac_modifier": "dex_max2"},
+    {"name": "Чешуйчатый доспех", "ac_base": 14, "ac_modifier": "dex_max2"},
+    {"name": "Полулаты", "ac_base": 15, "ac_modifier": "dex_max2"},
+    {"name": "Кольчужный доспех", "ac_base": 14, "ac_modifier": "none"},
+    {"name": "Колечный доспех", "ac_base": 14, "ac_modifier": "none"},
+    {"name": "Пластинчатый доспех", "ac_base": 15, "ac_modifier": "none"},
+    {"name": "Латный доспех", "ac_base": 18, "ac_modifier": "none"},
 ]
 
 
 def migrate_armor(conn):
-    """Перенос брони"""
+    """Перенос брони (без щита)"""
     logger.info("\n" + "=" * 50)
     logger.info("8. ПЕРЕНОС БРОНИ")
     logger.info("=" * 50)
@@ -985,10 +1004,10 @@ def migrate_armor(conn):
     with conn.cursor() as cur:
         for armor in ARMOR_DATA:
             cur.execute("""
-                INSERT INTO armor (name, ac_base, ac_modifier, has_shield)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO armor (name, ac_base, ac_modifier)
+                VALUES (%s, %s, %s)
                 ON CONFLICT (name) DO NOTHING
-            """, (armor["name"], armor["ac_base"], armor["ac_modifier"], armor["has_shield"]))
+            """, (armor["name"], armor["ac_base"], armor["ac_modifier"]))
             logger.info(f"  ✅ Броня '{armor['name']}'")
 
         conn.commit()
@@ -996,7 +1015,7 @@ def migrate_armor(conn):
 
 
 # =========================================================
-# 9. ДАННЫЕ СНАРЯЖЕНИЯ ПО КЛАССАМ
+# 9. ДАННЫЕ СНАРЯЖЕНИЯ ПО КЛАССАМ (БЕЗ ЩИТА)
 # =========================================================
 
 CLASS_EQUIPMENT_DATA = [
@@ -1004,39 +1023,37 @@ CLASS_EQUIPMENT_DATA = [
      "weapon": "Кинжал", "secondary": None,
      "other": "Воровские инструменты, Инструменты ремонтника, Набор исследователя подземелий", "coins": 16},
     {"class": "Бард", "choice": None, "armor": "Кожаный доспех",
-     "weapon": "Кинжал", "secondary": "Кинжал", "other": "Музыкальный инструмент (любой), Набор артиста", "coins": 19},
+     "weapon": "Кинжал", "secondary": "Кинжал", "other": "Музыкальный инструмент, Набор артиста", "coins": 19},
     {"class": "Варвар", "choice": None, "armor": None,
      "weapon": "Секира", "secondary": None, "other": "4 Одноручных топора, Набор путешественника", "coins": 15},
-    {"class": "Воин", "choice": "A", "armor": "Кольчуга",
-     "weapon": "Двуручный меч", "secondary": "Цеп", "other": "8 Метательных копий, Набор исследователя подземелий",
-     "coins": 4},
+    {"class": "Воин", "choice": "A", "armor": "Кольчужный доспех",
+     "weapon": "Двуручный меч", "secondary": "Цеп", "other": "8 Метательных копий, Набор исследователя подземелий", "coins": 4},
     {"class": "Воин", "choice": "B", "armor": "Проклёпанный кожаный доспех",
-     "weapon": "Скимитар", "secondary": "Короткий меч",
+     "weapon": "Ятаган", "secondary": "Короткий меч",
      "other": "Длинный лук, 20 Стрел, Колчан, Набор исследователя подземелий", "coins": 11},
     {"class": "Волшебник", "choice": None, "armor": None,
      "weapon": "Кинжал", "secondary": "Кинжал",
      "other": "Магическая фокусировка (Боевой посох), Мантия, Книга заклинаний, Набор учёного", "coins": 5},
     {"class": "Друид", "choice": None, "armor": "Кожаный доспех",
      "weapon": "Серп", "secondary": None,
-     "other": "Щит, Друидическая фокусировка (Боевой посох), Набор путешественника, Набор травника", "coins": 9},
+     "other": "Друидическая фокусировка (Боевой посох), Набор путешественника, Набор травника", "coins": 9},
     {"class": "Жрец", "choice": None, "armor": "Кольчужная рубаха",
-     "weapon": "Булава", "secondary": None, "other": "Щит, Священный символ, Набор священника", "coins": 7},
+     "weapon": "Булава", "secondary": None, "other": "Священный символ, Набор священника", "coins": 7},
     {"class": "Колдун", "choice": None, "armor": "Кожаный доспех",
      "weapon": "Серп", "secondary": "Кинжал",
      "other": "Кинжал, Магическая фокусировка (сфера), Книга (оккультные знания), Набор учёного", "coins": 15},
     {"class": "Монах", "choice": None, "armor": None,
      "weapon": "Копьё", "secondary": None,
-     "other": "5 Кинжалов, Ремесленные или Музыкальный инструмент, Набор путешественника", "coins": 11},
-    {"class": "Паладин", "choice": None, "armor": "Кольчуга",
+     "other": "5 Кинжалов, Ремесленные инструменты или Музыкальный инструмент, Набор путешественника", "coins": 11},
+    {"class": "Паладин", "choice": None, "armor": "Кольчужный доспех",
      "weapon": "Длинный меч", "secondary": None,
-     "other": "Щит, 6 Метательных копий, Священный символ, Набор священника", "coins": 9},
+     "other": "6 Метательных копий, Священный символ, Набор священника", "coins": 9},
     {"class": "Плут", "choice": None, "armor": "Кожаный доспех",
      "weapon": "Кинжал", "secondary": "Короткий меч",
      "other": "Кинжал, Короткий лук, 20 Стрел, Колчан, Воровские инструменты, Набор взломщика", "coins": 8},
     {"class": "Следопыт", "choice": None, "armor": "Проклёпанный кожаный доспех",
-     "weapon": "Скимитар", "secondary": "Короткий меч",
-     "other": "Длинный лук, 20 Стрел, Колчан, Друидическая фокусировка (веточка омелы), Набор путешественника",
-     "coins": 7},
+     "weapon": "Ятаган", "secondary": "Короткий меч",
+     "other": "Длинный лук, 20 Стрел, Колчан, Друидическая фокусировка (веточка омелы), Набор путешественника", "coins": 7},
     {"class": "Чародей", "choice": None, "armor": None,
      "weapon": "Копьё", "secondary": "Кинжал",
      "other": "Кинжал, Магическая фокусировка (кристалл), Набор исследователя подземелий", "coins": 28},
@@ -1044,7 +1061,7 @@ CLASS_EQUIPMENT_DATA = [
 
 
 def migrate_class_equipment(conn, class_id_map):
-    """Перенос снаряжения по классам"""
+    """Перенос снаряжения по классам (без щита)"""
     logger.info("\n" + "=" * 50)
     logger.info("9. ПЕРЕНОС СНАРЯЖЕНИЯ ПО КЛАССАМ")
     logger.info("=" * 50)
@@ -1065,8 +1082,7 @@ def migrate_class_equipment(conn, class_id_map):
                     eq["other"],
                     eq["coins"]
                 ))
-                logger.info(
-                    f"  ✅ Снаряжение для '{eq['class']}' (вариант {eq['choice'] if eq['choice'] else 'стандарт'})")
+                logger.info(f"  ✅ Снаряжение для '{eq['class']}' (вариант {eq['choice'] if eq['choice'] else 'стандарт'})")
 
         conn.commit()
     logger.info(f"✅ Перенесено снаряжения: {len(CLASS_EQUIPMENT_DATA)}")
@@ -1092,6 +1108,33 @@ SPELLS_DATA = [
     {"name": "Мистический залп", "level": 0, "is_cantrip": True, "description": "Луч энергии, наносящий 1к10 урона."},
     {"name": "Вдохновение насмешки", "level": 0, "is_cantrip": True,
      "description": "Оскорбляете врага, давая ему помеху."},
+    {"name": "Брызги кислоты", "level": 0, "is_cantrip": True, "description": "Кислотная струя, 1к6 урона."},
+    {"name": "Луч холода", "level": 0, "is_cantrip": True, "description": "Луч холода, 1к8 урона."},
+    {"name": "Огненный снаряд", "level": 0, "is_cantrip": True, "description": "Огненная стрела, 1к10 урона."},
+    {"name": "Терновый кнут", "level": 0, "is_cantrip": True, "description": "Кнут из шипов, 1к6 урона."},
+    {"name": "Погребальный звон", "level": 0, "is_cantrip": True, "description": "Некротический урон, 1к8."},
+    {"name": "Злая насмешка", "level": 0, "is_cantrip": True, "description": "Психический урон, помеха атаке."},
+    {"name": "Леденящее прикосновение", "level": 0, "is_cantrip": True, "description": "Некротический урон, цель не лечится."},
+    {"name": "Малая иллюзия", "level": 0, "is_cantrip": True, "description": "Создаёте простую иллюзию."},
+    {"name": "Электрошок", "level": 0, "is_cantrip": True, "description": "Электрический разряд, 1к6 урона."},
+    {"name": "Чародейский выброс", "level": 0, "is_cantrip": True, "description": "Силовой снаряд, 1к6 урона."},
+    {"name": "Дубинка", "level": 0, "is_cantrip": True, "description": "Оружие становится магическим, 1к8 урона."},
+    {"name": "Слово сияния", "level": 0, "is_cantrip": True, "description": "Луч света, 1к6 урона."},
+    {"name": "Расщепление разума", "level": 0, "is_cantrip": True, "description": "Психический урон, 1к6."},
+    {"name": "Меткий удар", "level": 0, "is_cantrip": True, "description": "Атака заклинанием, 1к6 урона."},
+    {"name": "Звёздный светлячок", "level": 0, "is_cantrip": True, "description": "Светящаяся сфера."},
+    {"name": "Сопротивление", "level": 0, "is_cantrip": True, "description": "Даёт сопротивление урону."},
+    {"name": "Уход за умирающим", "level": 0, "is_cantrip": True, "description": "Стабилизирует умирающего."},
+    {"name": "Ядовитые брызги", "level": 0, "is_cantrip": True, "description": "Ядовитый спрей, 1к12 урона."},
+    {"name": "Элементализм", "level": 0, "is_cantrip": True, "description": "Мелкий эффект стихии."},
+    {"name": "Искусство друидов", "level": 0, "is_cantrip": True, "description": "Природный эффект."},
+    {"name": "Чудотворство", "level": 0, "is_cantrip": True, "description": "Малый божественный знак."},
+    {"name": "Наставление", "level": 0, "is_cantrip": True, "description": "+1к4 к проверке."},
+    {"name": "Свет", "level": 0, "is_cantrip": True, "description": "Создаёте свет."},
+    {"name": "Пляшущие огоньки", "level": 0, "is_cantrip": True, "description": "4 огонька света."},
+    {"name": "Защита от оружия", "level": 0, "is_cantrip": True, "description": "Преимущество к КД."},
+    {"name": "Дружба", "level": 0, "is_cantrip": True, "description": "Преимущество на Харизму."},
+    {"name": "Сотворение пламени", "level": 0, "is_cantrip": True, "description": "Создаёте пламя в руке."},
 
     # Заклинания 1 уровня
     {"name": "Лечение ран", "level": 1, "is_cantrip": False, "description": "Восстанавливает 1к8 + модификатор хитов."},
@@ -1114,6 +1157,56 @@ SPELLS_DATA = [
     {"name": "Божественная кара", "level": 1, "is_cantrip": False, "description": "Добавляете 2к8 урона к атаке."},
     {"name": "Доспехи Агатиса", "level": 1, "is_cantrip": False,
      "description": "Получаете временные хиты и ледяную защиту."},
+    {"name": "Волшебная стрела", "level": 1, "is_cantrip": False, "description": "Три стрелы силы, 1к4+1 каждая."},
+    {"name": "Огненные ладони", "level": 1, "is_cantrip": False, "description": "Конус огня, 3к6 урона."},
+    {"name": "Ледяной кинжал", "level": 1, "is_cantrip": False, "description": "Ледяной кинжал, 2к6 урона."},
+    {"name": "Луч болезни", "level": 1, "is_cantrip": False, "description": "Луч некротической энергии, 2к8 урона."},
+    {"name": "Псевдожизнь", "level": 1, "is_cantrip": False, "description": "Получаете временные хиты."},
+    {"name": "Доспехи мага", "level": 1, "is_cantrip": False, "description": "Базовый КД = 13 + DEX."},
+    {"name": "Огонь фей", "level": 1, "is_cantrip": False, "description": "Цель светится, атаки по ней с преимуществом."},
+    {"name": "Намасливание", "level": 1, "is_cantrip": False, "description": "Создаёте скользкое пятно."},
+    {"name": "Падение пёрышком", "level": 1, "is_cantrip": False, "description": "Медленное падение."},
+    {"name": "Поспешное отступление", "level": 1, "is_cantrip": False, "description": "Действие Рывок как бонусное."},
+    {"name": "Скороход", "level": 1, "is_cantrip": False, "description": "Удваивает скорость цели."},
+    {"name": "Убежище", "level": 1, "is_cantrip": False, "description": "Атаки по цели с помехой."},
+    {"name": "Сигнал тревоги", "level": 1, "is_cantrip": False, "description": "Защищает область от вторжения."},
+    {"name": "Очищение пищи и питья", "level": 1, "is_cantrip": False, "description": "Очищает еду и воду."},
+    {"name": "Обнаружение добра и зла", "level": 1, "is_cantrip": False, "description": "Чувствуете присутствие существ."},
+    {"name": "Обнаружение болезней и ядов", "level": 1, "is_cantrip": False, "description": "Обнаруживает болезни и яды."},
+    {"name": "Лечащее слово", "level": 1, "is_cantrip": False, "description": "Лечит на 1к4 + модификатор на расстоянии."},
+    {"name": "Нанесение ран", "level": 1, "is_cantrip": False, "description": "Касание, 3к10 некротического урона."},
+    {"name": "Направляющий снаряд", "level": 1, "is_cantrip": False, "description": "Снаряд света, 4к6 урона."},
+    {"name": "Щит веры", "level": 1, "is_cantrip": False, "description": "+2 к КД цели."},
+    {"name": "Героизм", "level": 1, "is_cantrip": False, "description": "Цель невосприимчива к страху, получает временные хиты."},
+    {"name": "Приказ", "level": 1, "is_cantrip": False, "description": "Однословный приказ."},
+    {"name": "Порча", "level": 1, "is_cantrip": False, "description": "Проклинает цель."},
+    {"name": "Жуткий смех Таши", "level": 1, "is_cantrip": False, "description": "Цель падает и смеётся."},
+    {"name": "Диссонирующий шёпот", "level": 1, "is_cantrip": False, "description": "Психический урон, цель убегает."},
+    {"name": "Невидимый слуга", "level": 1, "is_cantrip": False, "description": "Создаёте невидимого слугу."},
+    {"name": "Безмолвный образ", "level": 1, "is_cantrip": False, "description": "Создаёте визуальную иллюзию."},
+    {"name": "Иллюзорные письмена", "level": 1, "is_cantrip": False, "description": "Скрываете сообщение."},
+    {"name": "Опознание", "level": 1, "is_cantrip": False, "description": "Узнаёте свойства магического предмета."},
+    {"name": "Парящий диск Тензера", "level": 1, "is_cantrip": False, "description": "Создаёте парящий диск для груза."},
+    {"name": "Обретение фамильяра", "level": 1, "is_cantrip": False, "description": "Призываете духа-помощника."},
+    {"name": "Сотворение или уничтожение воды", "level": 1, "is_cantrip": False, "description": "Создаёте или уничтожаете воду."},
+    {"name": "Туманное облако", "level": 1, "is_cantrip": False, "description": "Создаёте облако тумана."},
+    {"name": "Добряника", "level": 1, "is_cantrip": False, "description": "Создаёте 4 магических ягоды."},
+    {"name": "Очарование личности", "level": 1, "is_cantrip": False, "description": "Очаровываете гуманоида."},
+    {"name": "Понимание языков", "level": 1, "is_cantrip": False, "description": "Понимаете все языки."},
+    {"name": "Палящая кара", "level": 1, "is_cantrip": False, "description": "Огненный урон при атаке."},
+    {"name": "Гневная кара", "level": 1, "is_cantrip": False, "description": "Урон силой при атаке."},
+    {"name": "Громовая кара", "level": 1, "is_cantrip": False, "description": "Громовой урон при атаке."},
+    {"name": "Вызов на дуэль", "level": 1, "is_cantrip": False, "description": "Принуждаете врага атаковать вас."},
+    {"name": "Ведьмин снаряд", "level": 1, "is_cantrip": False, "description": "Луч силы, 1к10 урона."},
+    {"name": "Вспышка чаропламени", "level": 1, "is_cantrip": False, "description": "Луч силы, 2к8 урона."},
+    {"name": "Руки Хадара", "level": 1, "is_cantrip": False, "description": "Психический урон, цель не реагирует."},
+    {"name": "Адское возмездие", "level": 1, "is_cantrip": False, "description": "Огненный урон при получении урона."},
+    {"name": "Оберегающий разряд", "level": 1, "is_cantrip": False, "description": "Союзник получает сопротивление урону."},
+    {"name": "Град шипов", "level": 1, "is_cantrip": False, "description": "Создаёте зону шипов."},
+    {"name": "Опутывающий удар", "level": 1, "is_cantrip": False, "description": "Опутываете цель."},
+    {"name": "Дружба с животными", "level": 1, "is_cantrip": False, "description": "Очаровываете животное."},
+    {"name": "Сверкающие брызги", "level": 1, "is_cantrip": False, "description": "Ослепляете существ."},
+    {"name": "Усыпление", "level": 1, "is_cantrip": False, "description": "Погружаете существ в сон."},
 ]
 
 RECOMMENDED_SPELLS = {
@@ -1138,22 +1231,47 @@ RECOMMENDED_SPELLS = {
 }
 
 CLASS_SPELLS = {
-    "Волшебник": ["Волшебная рука", "Вспышка света", "Починка", "Сообщение", "Удар грома",
-                  "Лечение ран", "Громовая волна", "Щит", "Хроматическая сфера", "Сон", "Обнаружение магии"],
-    "Бард": ["Вдохновение насмешки", "Удар грома", "Сообщение", "Фокус-покус",
-             "Лечение ран", "Сон", "Благословение", "Маскировка", "Громовая волна"],
-    "Жрец": ["Руководство", "Священное пламя", "Вспышка света",
-             "Лечение ран", "Благословение", "Обнаружение магии", "Громовая волна"],
-    "Друид": ["Руководство", "Фокус-покус", "Удар грома",
-              "Лечение ран", "Опутывание", "Разговор с животными", "Прыжок"],
-    "Колдун": ["Мистический залп", "Волшебная рука", "Удар грома",
-               "Гекс", "Доспехи Агатиса", "Щит", "Сон"],
-    "Чародей": ["Волшебная рука", "Вспышка света", "Удар грома",
-                "Щит", "Хроматическая сфера", "Сон", "Обнаружение магии"],
-    "Паладин": ["Лечение ран", "Божественная кара", "Благословение"],
-    "Следопыт": ["Метка охотника", "Лечение ран", "Прыжок"],
-    "Артефактор": ["Починка", "Вспышка света", "Волшебная рука",
-                   "Щит", "Лечение ран", "Обнаружение магии"],
+    "Волшебник": ["Волшебная рука", "Вспышка света", "Починка", "Сообщение", "Удар грома", "Фокус-покус",
+                  "Руководство", "Священное пламя", "Мистический залп", "Вдохновение насмешки", "Брызги кислоты",
+                  "Луч холода", "Огненный снаряд", "Терновый кнут", "Погребальный звон", "Леденящее прикосновение",
+                  "Малая иллюзия", "Электрошок", "Лечение ран", "Громовая волна", "Благословение", "Маскировка",
+                  "Щит", "Хроматическая сфера", "Сон", "Обнаружение магии", "Прыжок", "Разговор с животными",
+                  "Опутывание", "Метка охотника", "Доспехи Агатиса", "Волшебная стрела", "Огненные ладони",
+                  "Ледяной кинжал", "Луч болезни", "Псевдожизнь", "Доспехи мага", "Огонь фей", "Намасливание",
+                  "Падение пёрышком", "Поспешное отступление", "Скороход", "Убежище", "Сигнал тревоги",
+                  "Обнаружение добра и зла", "Обнаружение болезней и ядов", "Лечащее слово", "Нанесение ран",
+                  "Направляющий снаряд", "Щит веры", "Приказ", "Порча", "Жуткий смех Таши", "Диссонирующий шёпот",
+                  "Невидимый слуга", "Безмолвный образ", "Иллюзорные письмена", "Опознание", "Парящий диск Тензера",
+                  "Обретение фамильяра", "Сотворение или уничтожение воды", "Туманное облако", "Добряника",
+                  "Очарование личности", "Понимание языков", "Палящая кара", "Гневная кара"],
+    "Бард": ["Вдохновение насмешки", "Удар грома", "Сообщение", "Фокус-покус", "Волшебная рука", "Вспышка света",
+             "Починка", "Руководство", "Лечение ран", "Сон", "Благословение", "Маскировка", "Громовая волна",
+             "Щит", "Хроматическая сфера", "Обнаружение магии", "Прыжок", "Лечащее слово", "Диссонирующий шёпот",
+             "Жуткий смех Таши", "Невидимый слуга", "Очарование личности", "Понимание языков", "Порча", "Приказ"],
+    "Жрец": ["Руководство", "Священное пламя", "Вспышка света", "Починка", "Свет", "Сопротивление",
+             "Уход за умирающим", "Чудотворство", "Лечение ран", "Благословение", "Обнаружение магии",
+             "Громовая волна", "Лечащее слово", "Нанесение ран", "Направляющий снаряд", "Щит веры", "Приказ",
+             "Порча", "Убежище", "Обнаружение добра и зла", "Обнаружение болезней и ядов", "Сотворение или уничтожение воды"],
+    "Друид": ["Руководство", "Фокус-покус", "Удар грома", "Терновый кнут", "Дубинка", "Сотворение пламени",
+              "Искусство друидов", "Починка", "Сообщение", "Сопротивление", "Элементализм", "Лечение ран",
+              "Опутывание", "Разговор с животными", "Прыжок", "Громовая волна", "Добряника", "Лечащее слово",
+              "Огонь фей", "Туманное облако", "Сотворение или уничтожение воды", "Обнаружение магии",
+              "Обнаружение болезней и ядов", "Очарование личности"],
+    "Колдун": ["Мистический залп", "Волшебная рука", "Удар грома", "Леденящее прикосновение", "Погребальный звон",
+               "Расщепление разума", "Гекс", "Доспехи Агатиса", "Щит", "Сон", "Ведьмин снаряд", "Адское возмездие",
+               "Руки Хадара", "Понимание языков", "Порча", "Очарование личности", "Обнаружение магии"],
+    "Чародей": ["Волшебная рука", "Вспышка света", "Удар грома", "Брызги кислоты", "Луч холода", "Огненный снаряд",
+                "Починка", "Сообщение", "Фокус-покус", "Чародейский выброс", "Электрошок", "Лечение ран",
+                "Щит", "Хроматическая сфера", "Сон", "Обнаружение магии", "Доспехи мага", "Огненные ладони",
+                "Ледяной кинжал", "Волшебная стрела", "Лечащее слово", "Маскировка", "Падение пёрышком",
+                "Прыжок", "Псевдожизнь", "Туманное облако", "Усыпление"],
+    "Паладин": ["Лечение ран", "Божественная кара", "Благословение", "Гневная кара", "Громовая кара", "Палящая кара",
+                "Приказ", "Вызов на дуэль", "Героизм", "Обнаружение магии", "Обнаружение добра и зла"],
+    "Следопыт": ["Метка охотника", "Лечение ран", "Прыжок", "Добряника", "Опутывание", "Опутывающий удар",
+                 "Разговор с животными", "Туманное облако", "Обнаружение магии", "Обнаружение болезней и ядов",
+                 "Град шипов", "Скороход", "Сигнал тревоги"],
+    "Артефактор": ["Починка", "Вспышка света", "Волшебная рука", "Лечение ран", "Щит", "Обнаружение магии",
+                   "Маскировка", "Огонь фей", "Падение пёрышком", "Прыжок", "Псевдожизнь", "Скороход", "Убежище"],
 }
 
 
@@ -1212,8 +1330,7 @@ def migrate_spells(conn, class_id_map):
                         """, (class_id_map[class_name], spell_id_map[spell_name], False, priority))
                         priority += 1
 
-                logger.info(
-                    f"    • {class_name} → рекомендовано {len(spells.get('cantrips', [])) + len(spells.get('level1', []))} заклинаний")
+                logger.info(f"    • {class_name} → рекомендовано {len(spells.get('cantrips', [])) + len(spells.get('level1', []))} заклинаний")
 
         conn.commit()
 

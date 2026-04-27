@@ -48,10 +48,11 @@ from dnd_logic import (
     get_cantrips_for_class_with_details, get_level1_spells_for_class_with_details,
     get_class_equipment, get_armor_by_name,
     auto_assign_masteries, get_weapon_by_name,
-    get_all_fighting_styles, get_fighting_styles_for_class,
+    get_all_fighting_styles, get_fighting_styles_for_class, get_available_fighting_styles,
     get_all_invocations,
     validate_character, validate_name,
     get_class_features, get_class_by_name,
+    get_spells_grouped_by_category,
 )
 from pdf_generator import generate_pdf
 
@@ -258,31 +259,44 @@ def create_spells_method_keyboard() -> InlineKeyboardMarkup:
 
 
 def create_cantrips_keyboard(class_name: str, selected: List[str], max_count: int) -> InlineKeyboardMarkup:
-    cantrips = get_cantrips_for_class_with_details(class_name)
+    """Клавиатура выбора заговоров с группировкой по категориям"""
+    spells_by_category = get_spells_grouped_by_category(class_name, is_cantrip=True)
+
+    category_icons = {
+        "Урон": "💥", "Защита": "🛡️", "Лечение": "❤️",
+        "Контроль": "🎭", "Утилита": "🧭", "Иллюзии": "🧠",
+        "Природа": "🌿", "Прочее": "⚙️"
+    }
+
     buttons = []
 
+    # Заголовок с прогрессом
     buttons.append([InlineKeyboardButton(
         text=f"📖 Выберите {max_count} заговора(ов) | Выбрано: {len(selected)}/{max_count}",
         callback_data="cantrips_info"
     )])
 
-    for spell in cantrips:
-        is_selected = spell['name'] in selected
-        emoji = "✅" if is_selected else "🔘"
-        school_emoji = {
-            "Очарование": "🎭", "Некромантия": "💀", "Превращение": "🔄",
-            "Вызов": "🔮", "Воплощение": "⚡", "Иллюзия": "👻",
-            "Прорицание": "👁️"
-        }.get(spell.get('school', ''), "✨")
+    # Выводим заклинания по категориям
+    for category, spells in spells_by_category.items():
+        icon = category_icons.get(category, "✨")
+        # Заголовок категории (некликабельный)
+        buttons.append([InlineKeyboardButton(
+            text=f"{icon} {category} ─────────────────",
+            callback_data="category_header"
+        )])
 
-        buttons.append([InlineKeyboardButton(
-            text=f"{emoji} {school_emoji} {spell['name']}",
-            callback_data=f"cantrip_{spell['id']}"
-        )])
-        buttons.append([InlineKeyboardButton(
-            text=f"   📖 {spell.get('description', 'Нет описания')[:55]}...",
-            callback_data="spell_info"
-        )])
+        for spell in spells:
+            is_selected = spell['name'] in selected
+            emoji = "✅" if is_selected else "🔘"
+            buttons.append([InlineKeyboardButton(
+                text=f"{emoji} {icon} {spell['name']}",
+                callback_data=f"cantrip_{spell['id']}"
+            )])
+            if spell.get('description'):
+                buttons.append([InlineKeyboardButton(
+                    text=f"   📖 {spell['description'][:55]}...",
+                    callback_data="spell_info"
+                )])
 
     buttons.append([InlineKeyboardButton(text="✅ Подтвердить выбор", callback_data="cantrips_confirm")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_spells_method")])
@@ -291,31 +305,44 @@ def create_cantrips_keyboard(class_name: str, selected: List[str], max_count: in
 
 
 def create_level1_spells_keyboard(class_name: str, selected: List[str], max_count: int) -> InlineKeyboardMarkup:
-    spells = get_level1_spells_for_class_with_details(class_name)
+    """Клавиатура выбора заклинаний 1 уровня с группировкой по категориям"""
+    spells_by_category = get_spells_grouped_by_category(class_name, is_cantrip=False)
+
+    category_icons = {
+        "Урон": "💥", "Защита": "🛡️", "Лечение": "❤️",
+        "Контроль": "🎭", "Утилита": "🧭", "Иллюзии": "🧠",
+        "Природа": "🌿", "Прочее": "⚙️"
+    }
+
     buttons = []
 
+    # Заголовок с прогрессом
     buttons.append([InlineKeyboardButton(
         text=f"🔮 Выберите {max_count} заклинание(й) 1 ур. | Выбрано: {len(selected)}/{max_count}",
         callback_data="level1_info"
     )])
 
-    for spell in spells:
-        is_selected = spell['name'] in selected
-        emoji = "✅" if is_selected else "🔘"
-        school_emoji = {
-            "Очарование": "🎭", "Некромантия": "💀", "Превращение": "🔄",
-            "Вызов": "🔮", "Воплощение": "⚡", "Иллюзия": "👻",
-            "Прорицание": "👁️"
-        }.get(spell.get('school', ''), "✨")
+    # Выводим заклинания по категориям
+    for category, spells in spells_by_category.items():
+        icon = category_icons.get(category, "✨")
+        # Заголовок категории (некликабельный)
+        buttons.append([InlineKeyboardButton(
+            text=f"{icon} {category} ─────────────────",
+            callback_data="category_header"
+        )])
 
-        buttons.append([InlineKeyboardButton(
-            text=f"{emoji} {school_emoji} {spell['name']}",
-            callback_data=f"level1_{spell['id']}"
-        )])
-        buttons.append([InlineKeyboardButton(
-            text=f"   📖 {spell.get('description', 'Нет описания')[:55]}...",
-            callback_data="spell_info"
-        )])
+        for spell in spells:
+            is_selected = spell['name'] in selected
+            emoji = "✅" if is_selected else "🔘"
+            buttons.append([InlineKeyboardButton(
+                text=f"{emoji} {icon} {spell['name']}",
+                callback_data=f"level1_{spell['id']}"
+            )])
+            if spell.get('description'):
+                buttons.append([InlineKeyboardButton(
+                    text=f"   📖 {spell['description'][:55]}...",
+                    callback_data="spell_info"
+                )])
 
     buttons.append([InlineKeyboardButton(text="✅ Подтвердить выбор", callback_data="level1_confirm")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к заговорам", callback_data="back_to_cantrips")])
@@ -323,8 +350,26 @@ def create_level1_spells_keyboard(class_name: str, selected: List[str], max_coun
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def create_fighting_style_keyboard(class_name: str) -> InlineKeyboardMarkup:
-    styles = get_fighting_styles_for_class(class_name)
+def create_fighting_style_keyboard(class_name: str, selected_weapon: Optional[str] = None) -> InlineKeyboardMarkup:
+    """Клавиатура выбора боевого стиля с учётом типа оружия"""
+    # Определяем тип оружия для фильтрации
+    weapon_type = None
+    if selected_weapon:
+        weapon_info = get_weapon_by_name(selected_weapon)
+        if weapon_info:
+            properties = weapon_info.get('properties', [])
+            if 'двуручное' in properties or 'тяжёлое' in properties:
+                weapon_type = 'heavy'
+            elif 'лёгкое' in properties:
+                weapon_type = 'light'
+            elif 'метательное' in properties:
+                weapon_type = 'thrown'
+            elif 'дальнобойное' in properties:
+                weapon_type = 'ranged'
+            else:
+                weapon_type = 'melee'
+
+    styles = get_available_fighting_styles(class_name, weapon_type)
     buttons = []
 
     for s in styles:
@@ -472,8 +517,7 @@ async def info_button(m: Message):
         "• 13 классов\n"
         "• 16 предысторий\n"
         "• Автоматическое распределение характеристик\n"
-        "• Генерация PDF листа персонажа\n"
-        "• Есть идеи? Нашли баги? Пишите: @danilenkokoko007_official",
+        "• Генерация PDF листа персонажа",
         parse_mode=None
     )
 
@@ -586,8 +630,6 @@ async def back_to_classes(call: CallbackQuery, state: FSMContext):
 
 
 # ---------------- ШАГ 2: ПРЕДЫСТОРИЯ ----------------
-# ВАЖНО: СНАЧАЛА ИДЕТ ОБРАБОТЧИК ДЛЯ bg_equip_ (БОЛЕЕ КОНКРЕТНЫЙ)
-
 @dp.callback_query(lambda c: c.data.startswith("bg_equip_"))
 async def select_background_equipment(call: CallbackQuery, state: FSMContext):
     """Обработчик выбора варианта снаряжения (bg_equip_A, bg_equip_B)"""
@@ -832,7 +874,9 @@ async def apply_equipment_and_masteries(m: Message, state: FSMContext, equipment
     masteries = auto_assign_masteries(weapon_name, class_name)
     await state.update_data(selected_masteries=masteries)
 
-    text = f"Шаг 4/12: Снаряжение выдано!\n\n⚔️ Класс: {class_name}\n🛡️ Броня: {armor_name if armor_name else 'нет'}\n🗡️ Оружие: {weapon_name}\n"
+    text = f"Шаг 4/12: Снаряжение выдано!\n\n⚔️ Класс: {class_name}\n"
+    text += f"🛡️ Броня: {armor_name if armor_name else 'нет'}\n"
+    text += f"🗡️ Оружие: {weapon_name}\n"
     if secondary_weapon:
         text += f"🔪 Доп. оружие: {secondary_weapon}\n"
     if other_items:
@@ -857,8 +901,12 @@ async def auto_calculate_stats(m: Message, state: FSMContext):
     background = data.get("background")
     race = data.get("race")
     subrace = data.get("subrace", "")
+    equipment_choice = data.get("equipment_choice")
 
-    stats = get_initial_stats_intelligent(background, class_name)
+    # Получаем начальные характеристики с учётом варианта снаряжения
+    from dnd_logic import get_initial_stats_intelligent
+    stats = get_initial_stats_intelligent(background, class_name, equipment_choice)
+
     await state.update_data(stats=stats)
     await state.update_data(final_stats=stats)
 
@@ -1146,6 +1194,7 @@ async def spell_info(call: CallbackQuery):
 async def go_to_fighting_style(m: Message, state: FSMContext):
     data = await state.get_data()
     class_name = data.get("class_name")
+    selected_weapon = data.get("selected_weapon")
 
     fighting_style_classes = ["Воин", "Паладин", "Следопыт"]
 
@@ -1154,7 +1203,7 @@ async def go_to_fighting_style(m: Message, state: FSMContext):
         await m.answer(
             f"Шаг 8/12: Выберите БОЕВОЙ СТИЛЬ\n\n⚔️ Класс {class_name} может выбрать один боевой стиль.",
             parse_mode=None,
-            reply_markup=create_fighting_style_keyboard(class_name)
+            reply_markup=create_fighting_style_keyboard(class_name, selected_weapon)
         )
     else:
         await go_to_invocations(m, state)
@@ -1365,8 +1414,9 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         name = data.get("name")
         backstory = data.get("backstory", "Нет истории")
         background_equipment_choice = data.get("background_equipment_choice", "A")
+        equipment_choice = data.get("equipment_choice")
 
-        # Получаем характеристики - проверяем оба возможных ключа
+        # Получаем характеристики
         stats = data.get("final_stats", {})
         if not stats:
             stats = data.get("stats", {})
@@ -1374,13 +1424,8 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         # Если stats пустые - создаем стандартные с бонусами предыстории
         if not stats or len(stats) == 0:
             logger.warning("Stats не найдены, создаем стандартные")
-            stats = {"STR": 15, "DEX": 14, "CON": 13, "INT": 12, "WIS": 10, "CHA": 8}
-            bg_info = get_background_data_direct(background)
-            if bg_info:
-                chars = bg_info.get('characteristics', ["STR", "DEX", "CON"])
-                if len(chars) >= 2:
-                    stats[chars[0]] = min(20, stats.get(chars[0], 10) + 2)
-                    stats[chars[1]] = min(20, stats.get(chars[1], 10) + 1)
+            from dnd_logic import get_initial_stats_intelligent
+            stats = get_initial_stats_intelligent(background, class_name, equipment_choice)
 
         selected_masteries = data.get("selected_masteries", [])
         selected_fighting_style = data.get("selected_fighting_style")
@@ -1420,8 +1465,8 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
                     result = cur.fetchone()
                     background_id = result[0] if result else None
 
-        has_shield = selected_armor == "Щит" if selected_armor else False
-        ac = calc_ac_with_armor(stats.get("DEX", 10), selected_armor, has_shield)
+        # Расчет AC (без щита)
+        ac = calc_ac_with_armor(stats.get("DEX", 10), selected_armor)
         hp = calc_hp(class_id, stats.get("CON", 10), 1) if class_id else 10
 
         race_traits = get_race_traits_list(race, subrace)

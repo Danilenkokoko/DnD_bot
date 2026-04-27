@@ -76,6 +76,42 @@ CLASS_IMAGES_FALLBACK = {
     "Чародей": "images/classes/sorcerer.jpg"
 }
 
+# =========================================================
+# НАЧАЛЬНЫЕ ХАРАКТЕРИСТИКИ КЛАССОВ
+# =========================================================
+
+CLASS_STARTING_STATS = {
+    "Артефактор": {"STR": 10, "DEX": 14, "CON": 13, "INT": 15, "WIS": 12, "CHA": 8},
+    "Бард": {"STR": 8, "DEX": 14, "CON": 12, "INT": 13, "WIS": 10, "CHA": 15},
+    "Варвар": {"STR": 15, "DEX": 13, "CON": 14, "INT": 10, "WIS": 12, "CHA": 8},
+    "Воин": {"STR": 15, "DEX": 14, "CON": 13, "INT": 8, "WIS": 10, "CHA": 12},
+    "Воин_B": {"STR": 12, "DEX": 15, "CON": 13, "INT": 8, "WIS": 10, "CHA": 14},
+    "Волшебник": {"STR": 8, "DEX": 12, "CON": 13, "INT": 15, "WIS": 14, "CHA": 10},
+    "Друид": {"STR": 8, "DEX": 12, "CON": 14, "INT": 13, "WIS": 15, "CHA": 10},
+    "Жрец": {"STR": 14, "DEX": 8, "CON": 13, "INT": 10, "WIS": 15, "CHA": 12},
+    "Колдун": {"STR": 8, "DEX": 14, "CON": 13, "INT": 12, "WIS": 10, "CHA": 15},
+    "Монах": {"STR": 12, "DEX": 15, "CON": 13, "INT": 10, "WIS": 14, "CHA": 8},
+    "Паладин": {"STR": 15, "DEX": 10, "CON": 13, "INT": 8, "WIS": 12, "CHA": 14},
+    "Плут": {"STR": 12, "DEX": 15, "CON": 13, "INT": 14, "WIS": 10, "CHA": 8},
+    "Следопыт": {"STR": 12, "DEX": 15, "CON": 13, "INT": 8, "WIS": 14, "CHA": 10},
+    "Чародей": {"STR": 10, "DEX": 13, "CON": 14, "INT": 8, "WIS": 12, "CHA": 15},
+}
+
+# =========================================================
+# КАТЕГОРИИ ЗАКЛИНАНИЙ С ИКОНКАМИ
+# =========================================================
+
+SPELL_CATEGORY_ICONS = {
+    "Урон": "💥",
+    "Защита": "🛡️",
+    "Лечение": "❤️",
+    "Контроль": "🎭",
+    "Утилита": "🧭",
+    "Иллюзии": "🧠",
+    "Природа": "🌿",
+    "Прочее": "⚙️"
+}
+
 
 # =========================================================
 # 1. БАЗОВЫЕ РАСЧЁТЫ
@@ -84,12 +120,6 @@ CLASS_IMAGES_FALLBACK = {
 def modifier(stat: int) -> int:
     """
     Расчёт модификатора характеристики
-
-    Args:
-        stat: значение характеристики (от 1 до 30)
-
-    Returns:
-        int: модификатор характеристики
     """
     return (stat - 10) // 2
 
@@ -97,16 +127,9 @@ def modifier(stat: int) -> int:
 def calculate_proficiency_bonus(level: int) -> int:
     """
     Расчёт бонуса мастерства в зависимости от уровня
-
-    Args:
-        level: уровень персонажа (1-20)
-
-    Returns:
-        int: бонус мастерства
     """
     if level < 1:
         raise ValueError("Уровень должен быть >= 1")
-
     if level <= 4:
         return 2
     elif level <= 8:
@@ -122,14 +145,6 @@ def calculate_proficiency_bonus(level: int) -> int:
 def calc_hp(class_id: int, constitution: int, level: int = 1) -> int:
     """
     Расчёт HP персонажа
-
-    Args:
-        class_id: ID класса
-        constitution: значение телосложения
-        level: уровень персонажа
-
-    Returns:
-        int: максимальное HP
     """
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -148,17 +163,9 @@ def calc_hp(class_id: int, constitution: int, level: int = 1) -> int:
         return hit_die + max(1, con_mod) + (level - 1) * (avg_roll + max(1, con_mod))
 
 
-def calc_ac_with_armor(dexterity: int, armor_name: Optional[str], has_shield: bool = False) -> int:
+def calc_ac_with_armor(dexterity: int, armor_name: Optional[str]) -> int:
     """
-    Расчёт Класса Брони (AC) с учётом брони
-
-    Args:
-        dexterity: значение ловкости
-        armor_name: название брони
-        has_shield: есть ли щит
-
-    Returns:
-        int: Класс Брони
+    Расчёт Класса Брони (AC) с учётом брони (щит НЕ учитывается)
     """
     dex_mod = modifier(dexterity)
 
@@ -178,25 +185,13 @@ def calc_ac_with_armor(dexterity: int, armor_name: Optional[str], has_shield: bo
         ac_base += dex_mod
     elif ac_modifier == 'dex_max2':
         ac_base += min(2, dex_mod)
-    # 'none' - ничего не добавляем
-
-    if has_shield:
-        ac_base += 2
 
     return ac_base
 
 
-def calc_ac(dexterity: int, armor_type: str = "none", has_shield: bool = False) -> int:
+def calc_ac(dexterity: int, armor_type: str = "none") -> int:
     """
-    Расчёт Класса Брони (AC) - упрощённая версия для совместимости
-
-    Args:
-        dexterity: значение ловкости
-        armor_type: тип брони ("none", "light", "medium", "heavy")
-        has_shield: есть ли щит
-
-    Returns:
-        int: Класс Брони
+    Расчёт Класса Брони (AC) - упрощённая версия (без щита)
     """
     dex_mod = modifier(dexterity)
 
@@ -207,46 +202,33 @@ def calc_ac(dexterity: int, armor_type: str = "none", has_shield: bool = False) 
         "heavy": 16
     }
 
-    base_ac = armor_base.get(armor_type, 10 + dex_mod)
-
-    if has_shield:
-        base_ac += 2
-
-    return base_ac
+    return armor_base.get(armor_type, 10 + dex_mod)
 
 
 # =========================================================
 # 2. ГЕНЕРАЦИЯ ХАРАКТЕРИСТИК (АВТОМАТИЧЕСКАЯ)
 # =========================================================
 
-def get_standard_stats() -> Dict[str, int]:
+def get_class_starting_stats(class_name: str, variant: Optional[str] = None) -> Dict[str, int]:
     """
-    Возвращает стандартный набор характеристик (15, 14, 13, 12, 10, 8)
+    Возвращает начальные характеристики класса из CLASS_STARTING_STATS
     """
-    return {
-        "STR": 15,
-        "DEX": 14,
-        "CON": 13,
-        "INT": 12,
-        "WIS": 10,
-        "CHA": 8
-    }
+    key = f"{class_name}_{variant}" if variant else class_name
+    if key in CLASS_STARTING_STATS:
+        return CLASS_STARTING_STATS[key].copy()
+    if class_name in CLASS_STARTING_STATS:
+        return CLASS_STARTING_STATS[class_name].copy()
+    return {"STR": 10, "DEX": 10, "CON": 10, "INT": 10, "WIS": 10, "CHA": 10}
 
 
 def get_class_primary_stats(class_name: str) -> List[str]:
     """
     Возвращает основные характеристики класса
-
-    Args:
-        class_name: название класса
-
-    Returns:
-        List[str]: список основных характеристик (1-2)
     """
     class_primary_map = {
         "Артефактор": ["INT"],
         "Бард": ["CHA"],
-        "Варвар": ["STR", "CON"],
+        "Варвар": ["STR"],
         "Воин": ["STR", "DEX"],
         "Волшебник": ["INT"],
         "Друид": ["WIS"],
@@ -265,72 +247,41 @@ def apply_intelligent_background_bonuses(stats: Dict[str, int], background_name:
     str, int]:
     """
     Умное распределение бонусов характеристик от предыстории с учётом класса
-
-    Принцип:
-    1. Если есть совпадение между характеристиками предыстории и основными класса → +2 в неё
-    2. +1 в следующую по приоритету
-    3. Если совпадений нет → +1 во все три характеристики предыстории
-
-    Args:
-        stats: базовые характеристики (стандартный набор)
-        background_name: название предыстории
-        class_name: название класса
-
-    Returns:
-        Dict[str, int]: изменённые характеристики
     """
     result = stats.copy()
-
     bg = get_background_by_name(background_name)
     if not bg:
         return result
 
-    # Характеристики предыстории (уже в кодах STR, DEX и т.д.)
     bg_stats_codes = bg['characteristics']
-
-    # Основные характеристики класса
     class_primary = get_class_primary_stats(class_name)
 
-    # Находим совпадения
     matches = [s for s in bg_stats_codes if s in class_primary]
     bg_stats_codes_filtered = [s for s in bg_stats_codes if s not in matches]
 
     if len(matches) >= 2:
-        # Полное совпадение (оба бонуса уходят в основные характеристики класса)
         result[matches[0]] += 2
         result[matches[1]] += 1
     elif len(matches) == 1:
-        # Одно совпадение
         result[matches[0]] += 2
-        # +1 в самую высокую из оставшихся характеристик предыстории
         if bg_stats_codes_filtered:
-            # Выбираем характеристику с наибольшим значением
             best = max(bg_stats_codes_filtered, key=lambda s: result.get(s, 0))
             result[best] += 1
     else:
-        # Нет совпадений → +1 во все три характеристики предыстории
         for stat in bg_stats_codes:
             result[stat] += 1
 
-    # Ограничиваем максимальное значение 20
     for stat in result:
         result[stat] = min(20, result[stat])
 
     return result
 
 
-def get_initial_stats_intelligent(background_name: str, class_name: str) -> Dict[str, int]:
+def get_initial_stats_intelligent(background_name: str, class_name: str, variant: str = None) -> Dict[str, int]:
     """
-    Получает начальные характеристики с учётом предыстории и класса (умное распределение)
-
-    Args:
-        background_name: название предыстории
-        class_name: название класса
-
-    Returns:
-        Dict[str, int]: финальные характеристики
+    Получает начальные характеристики с учётом класса и предыстории
     """
-    base_stats = get_standard_stats()
+    base_stats = get_class_starting_stats(class_name, variant)
     return apply_intelligent_background_bonuses(base_stats, background_name, class_name)
 
 
@@ -421,17 +372,14 @@ def get_race_size(race_name: str) -> str:
 
 def get_race_image_path(race_name: str) -> Optional[str]:
     """Возвращает путь к картинке расы"""
-    # Сначала пробуем получить из БД
     race = get_race_by_name(race_name)
     if race and race.get('image_path') and os.path.exists(race.get('image_path')):
         return race['image_path']
 
-    # Если нет в БД или файл не существует - используем fallback
     fallback_path = RACE_IMAGES_FALLBACK.get(race_name)
     if fallback_path and os.path.exists(fallback_path):
         return fallback_path
 
-    # Если и fallback не подошел - проверяем альтернативные имена файлов
     alt_names = {
         "Драконорожденный": "dragonborn.jpg",
         "Полурослик": "halfling.jpg",
@@ -520,7 +468,16 @@ def _get_fallback_subrace_description(subrace_name: str) -> str:
         "Медвежий": "Медвежьи шифтеры получают временные хиты.",
         "Кошачий": "Кошачьи шифтеры получают бонус к скорости.",
         "Крысиный": "Крысиные шифтеры получают бонус к интеллекту.",
-        "Волчий": "Волчьи шифтеры получают бонус к восприятию."
+        "Волчий": "Волчьи шифтеры получают бонус к восприятию.",
+        "Облачный великан": "Может телепортироваться на короткое расстояние.",
+        "Огненный великан": "Добавляет огненный урон к атакам.",
+        "Ледяной великан": "Наносит холод и замедляет цель.",
+        "Холмовой великан": "Может опрокинуть врага.",
+        "Каменный великан": "Получает сопротивление к урону.",
+        "Штормовой великан": "При попадании возвращает урон молнией/громом.",
+        "Инфернальный": "Усиливает огненные атаки.",
+        "Бездны": "Добавляет ядовитый урон и контроль.",
+        "Хтонический": "Наносит некротический урон и ослабляет."
     }
     return descriptions.get(subrace_name, "Нет описания для этой подрасы.")
 
@@ -618,7 +575,6 @@ def get_class_by_name(class_name: str) -> Optional[Dict[str, Any]]:
             """, (class_name,))
             row = cur.fetchone()
             if row:
-                # Обработка JSON полей
                 primary_stats = row[3]
                 if isinstance(primary_stats, str):
                     primary_stats = json.loads(primary_stats)
@@ -667,17 +623,14 @@ def get_class_description(class_name: str) -> str:
 
 def get_class_image_path(class_name: str) -> Optional[str]:
     """Возвращает путь к картинке класса"""
-    # Сначала пробуем получить из БД
     class_data = get_class_by_name(class_name)
     if class_data and class_data.get('image_path') and os.path.exists(class_data.get('image_path')):
         return class_data['image_path']
 
-    # Если нет в БД или файл не существует - используем fallback
     fallback_path = CLASS_IMAGES_FALLBACK.get(class_name)
     if fallback_path and os.path.exists(fallback_path):
         return fallback_path
 
-    # Альтернативные имена файлов
     alt_names = {
         "Артефактор": "artificer.jpg",
         "Волшебник": "wizard.jpg",
@@ -727,7 +680,7 @@ def get_class_features(class_name: str, level: int = 1) -> List[str]:
         features.append("Заклинания")
 
     class_specific = {
-        "Бард": ["Вдохновление барда"], "Варвар": ["Ярость", "Бездоспешная защита"],
+        "Бард": ["Вдохновение барда"], "Варвар": ["Ярость", "Бездоспешная защита"],
         "Воин": ["Второе дыхание", "Боевой стиль"], "Волшебник": ["Книга заклинаний", "Восстановление магии"],
         "Друид": ["Друидийский язык"], "Жрец": ["Божественное вдохновение"],
         "Колдун": ["Потусторонний покровитель", "Магия договора"],
@@ -746,7 +699,7 @@ def get_class_features(class_name: str, level: int = 1) -> List[str]:
 # =========================================================
 
 def get_subclasses_for_class(class_name: str, level: int = 1) -> List[Dict[str, Any]]:
-    """Возвращает подклассы для указанного класса, доступные на уровне"""
+    """Возвращает подклассы для указанного класса"""
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
@@ -934,12 +887,10 @@ def get_armor_by_name(armor_name: str) -> Optional[Dict[str, Any]]:
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT id, name, ac_base, ac_modifier, has_shield FROM armor WHERE name = %s",
-                            (armor_name,))
+                cur.execute("SELECT id, name, ac_base, ac_modifier FROM armor WHERE name = %s", (armor_name,))
                 row = cur.fetchone()
                 if row:
-                    return {'id': row[0], 'name': row[1], 'ac_base': row[2], 'ac_modifier': row[3],
-                            'has_shield': row[4]}
+                    return {'id': row[0], 'name': row[1], 'ac_base': row[2], 'ac_modifier': row[3]}
                 return None
     except Exception as e:
         logger.warning(f"Не удалось загрузить броню {armor_name}: {e}")
@@ -955,9 +906,11 @@ def get_weapon_by_name(weapon_name: str) -> Optional[Dict[str, Any]]:
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, name, category, damage_dice, damage_type, properties, suitable_masteries, detailed_masteries FROM weapons WHERE name = %s",
-                    (weapon_name,))
+                cur.execute("""
+                    SELECT id, name, category, damage_dice, damage_type, properties, 
+                           suitable_masteries, detailed_masteries 
+                    FROM weapons WHERE name = %s
+                """, (weapon_name,))
                 row = cur.fetchone()
                 if row:
                     return {
@@ -995,7 +948,7 @@ def get_detailed_masteries_for_weapon(weapon_name: str) -> List[Dict[str, Any]]:
 
 def auto_assign_masteries(weapon_name: str, class_name: str) -> List[str]:
     """
-    Автоматически выбирает оружейные приёмы для оружия (без участия игрока)
+    Автоматически выбирает оружейные приёмы для оружия
     """
     masteries = get_detailed_masteries_for_weapon(weapon_name)
 
@@ -1074,6 +1027,46 @@ def get_fighting_styles_for_class(class_name: str) -> List[Dict[str, Any]]:
         return []
 
 
+def get_available_fighting_styles(class_name: str, weapon_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Возвращает доступные боевые стили для класса с учётом типа оружия
+    """
+    styles = get_fighting_styles_for_class(class_name)
+
+    if not weapon_type:
+        return styles
+
+    weapon_type_map = {
+        "melee": ["melee"],
+        "ranged": ["ranged"],
+        "light": ["light", "melee"],
+        "heavy": ["heavy", "two_handed"],
+        "thrown": ["thrown", "ranged"],
+        "unarmed": ["unarmed"]
+    }
+
+    compatible_types = weapon_type_map.get(weapon_type, ["any"])
+
+    style_weapon_map = {
+        "Дуэлянт": ["melee"],
+        "Защита": ["any"],
+        "Оборона": ["any"],
+        "Перехват": ["any"],
+        "Сражение без оружия": ["unarmed"],
+        "Сражение большим оружием": ["heavy", "two_handed"],
+        "Сражение вслепую": ["any"],
+        "Сражение двумя оружиями": ["light"],
+        "Сражение метательным оружием": ["thrown"],
+        "Стрельба": ["ranged"]
+    }
+
+    return [
+        style for style in styles
+        if "any" in style_weapon_map.get(style['name'], ["any"]) or
+           any(t in compatible_types for t in style_weapon_map.get(style['name'], []))
+    ]
+
+
 # =========================================================
 # 10. РАБОТА С ВОЗВАНИЯМИ
 # =========================================================
@@ -1105,9 +1098,11 @@ def get_spells_for_class(class_name: str, level: int = 1, is_cantrip: bool = Non
     with get_connection() as conn:
         with conn.cursor() as cur:
             query = """
-                SELECT s.id, s.name, s.level, s.is_cantrip, s.description, s.school
+                SELECT s.id, s.name, s.level, s.is_cantrip, s.description, s.school,
+                       sc.name as category, sc.icon
                 FROM spells s
                 JOIN class_spells cs ON s.id = cs.spell_id
+                LEFT JOIN spell_categories sc ON s.category_id = sc.id
                 WHERE cs.class_id = %s AND cs.is_available = TRUE
             """
             params = [class_data['id']]
@@ -1123,7 +1118,7 @@ def get_spells_for_class(class_name: str, level: int = 1, is_cantrip: bool = Non
             query += " ORDER BY s.level, s.name"
 
             cur.execute(query, params)
-            columns = ['id', 'name', 'level', 'is_cantrip', 'description', 'school']
+            columns = ['id', 'name', 'level', 'is_cantrip', 'description', 'school', 'category', 'icon']
             return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
@@ -1145,6 +1140,22 @@ def get_cantrips_for_class_with_details(class_name: str) -> List[Dict[str, Any]]
 def get_level1_spells_for_class_with_details(class_name: str) -> List[Dict[str, Any]]:
     """Возвращает все доступные заклинания 1 уровня для класса с деталями"""
     return get_spells_for_class(class_name, level=1, is_cantrip=False)
+
+
+def get_spells_grouped_by_category(class_name: str, is_cantrip: bool = True) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Возвращает заклинания для класса, сгруппированные по категориям
+    """
+    spells = get_spells_for_class(class_name, is_cantrip=is_cantrip)
+
+    result = {}
+    for spell in spells:
+        category = spell.get('category', 'Прочее')
+        if category not in result:
+            result[category] = []
+        result[category].append(spell)
+
+    return result
 
 
 def get_recommended_spells(class_name: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -1279,6 +1290,21 @@ if __name__ == "__main__":
         path = get_class_image_path(cls)
         exists = get_class_image_exists(cls)
         print(f"   • {cls}: {'✅' if exists else '❌'} {path}")
+
+    print("\n2. ТЕСТ НАЧАЛЬНЫХ ХАРАКТЕРИСТИК КЛАССОВ:")
+    for class_name in ["Варвар", "Воин", "Волшебник"]:
+        stats = get_class_starting_stats(class_name)
+        print(f"   • {class_name}: STR={stats['STR']}, DEX={stats['DEX']}, CON={stats['CON']}")
+
+    print("\n3. ТЕСТ УМНОГО РАСПРЕДЕЛЕНИЯ ХАРАКТЕРИСТИК:")
+    test_cases = [
+        ("Воин", "Солдат"),
+        ("Волшебник", "Мудрец"),
+        ("Варвар", "Солдат"),
+    ]
+    for class_name, bg_name in test_cases:
+        stats = get_initial_stats_intelligent(bg_name, class_name)
+        print(f"   • {class_name} + {bg_name}: STR={stats['STR']}, DEX={stats['DEX']}, CON={stats['CON']}")
 
     print("\n✅ МОДУЛЬ DND_LOGIC.PY ГОТОВ К РАБОТЕ!")
     print("=" * 60)

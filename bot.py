@@ -166,9 +166,10 @@ def create_class_equipment_keyboard(class_name: str) -> Optional[InlineKeyboardM
         choice = eq.get('choice', 'A')
         weapon = eq.get('weapon', 'нет оружия')
         armor = eq.get('armor', 'нет брони')
+        # ВАЖНО: ТОЛЬКО choice, НЕ class_name!
         buttons.append([InlineKeyboardButton(
             text=f"📦 Вариант {choice}: {weapon}, {armor}",
-            callback_data=f"class_equip_{choice}"  # Только choice, без class_name!
+            callback_data=f"class_equip_{choice}"
         )])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к классам", callback_data="back_to_classes")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -850,7 +851,7 @@ async def create_char_start(m: Message, state: FSMContext):
 @dp.callback_query(lambda c: c.data.startswith("class_"))
 async def select_class(call: CallbackQuery, state: FSMContext):
     class_name = call.data.replace("class_", "")
-    await state.update_data(class_name=class_name)
+    await state.update_data(class_name=class_name)  # ТОЛЬКО ЗДЕСЬ сохраняем class_name
     logger.info(f"[FLOW] Выбран класс: {class_name}")
 
     class_desc = get_class_description(class_name)
@@ -909,12 +910,20 @@ async def select_class(call: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(lambda c: c.data.startswith("class_equip_"))
 async def select_class_equipment(call: CallbackQuery, state: FSMContext):
+    # Извлекаем choice (A или B)
     choice = call.data.replace("class_equip_", "")
-    await state.update_data(equipment_choice=choice)
-    data = await state.get_data()
-    class_name = data.get("class_name")  # БЕРЁМ class_name из state, НЕ ПЕРЕЗАПИСЫВАЕМ!
-    logger.info(f"[FLOW] Выбрано снаряжение: вариант {choice} для класса {class_name}")
 
+    # Получаем данные из state - НЕ ОБНОВЛЯЕМ class_name!
+    data = await state.get_data()
+    class_name = data.get("class_name")  # Должно быть "Воин"
+
+    # ДИАГНОСТИКА
+    logger.info(f"[FLOW] Выбор снаряжения: class_name='{class_name}', choice='{choice}'")
+
+    # Сохраняем ТОЛЬКО choice - НЕ ТРОГАЕМ class_name!
+    await state.update_data(equipment_choice=choice)
+
+    # Получаем снаряжение для класса с выбранным вариантом
     equipment = get_class_equipment(class_name, choice)
     if equipment:
         eq = equipment[0]
@@ -929,9 +938,12 @@ async def select_class_equipment(call: CallbackQuery, state: FSMContext):
         if weapon_name:
             masteries = auto_assign_masteries(weapon_name, class_name)
             await state.update_data(selected_masteries=masteries)
+            logger.info(f"[FLOW] Приёмы для {weapon_name}: {masteries}")
 
     await call.message.delete()
     await call.message.answer(f"✅ Снаряжение выбрано (вариант {choice})")
+
+    # Переход к следующему шагу
     await go_to_spells(call.message, state)
     await call.answer()
 

@@ -81,11 +81,11 @@ class CreateCharacter(StatesGroup):
     spells_cantrips_category = State()
     spells_cantrips_list = State()
     spells_cantrips_detail = State()
-    spells_cantrips_complete = State()  # НОВОЕ
+    spells_cantrips_complete = State()
     spells_level1_category = State()
     spells_level1_list = State()
     spells_level1_detail = State()
-    spells_level1_complete = State()    # НОВОЕ
+    spells_level1_complete = State()
     fighting_style_select = State()
     invocations_select = State()
     background_select = State()
@@ -128,6 +128,14 @@ def cancel_kb() -> ReplyKeyboardMarkup:
 def skip_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="⏩ Пропустить"), KeyboardButton(text="❌ Отмена")]],
+        resize_keyboard=True
+    )
+
+
+def continue_kb_for_spells() -> ReplyKeyboardMarkup:
+    """Клавиатура для продолжения после выбора заклинаний"""
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="✅ Продолжить")]],
         resize_keyboard=True
     )
 
@@ -185,11 +193,13 @@ def create_category_keyboard(categories: Dict[str, Dict], spell_type: str,
                              selected_count: int, required_count: int) -> InlineKeyboardMarkup:
     buttons = []
     if required_count > 0:
-        buttons.append([InlineKeyboardButton(text=f"📖 Выбрано: {selected_count}/{required_count}", callback_data="progress_info")])
+        buttons.append(
+            [InlineKeyboardButton(text=f"📖 Выбрано: {selected_count}/{required_count}", callback_data="progress_info")])
     for cat_name, cat_data in categories.items():
         icon = cat_data.get('icon', '✨')
         count = len(cat_data.get('spells', []))
-        buttons.append([InlineKeyboardButton(text=f"{icon} {cat_name} ({count})", callback_data=f"{spell_type}_cat_{cat_name}")])
+        buttons.append(
+            [InlineKeyboardButton(text=f"{icon} {cat_name} ({count})", callback_data=f"{spell_type}_cat_{cat_name}")])
     buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -204,10 +214,7 @@ def create_spell_list_keyboard(spells: List[Dict], spell_type: str,
         emoji = "✅" if is_selected else "🔘"
         buttons.append(
             [InlineKeyboardButton(text=f"{emoji} {spell_name}", callback_data=f"{spell_type}_view_{spell_id}")])
-
-    # Кнопка "Назад к категориям"
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к категориям", callback_data=f"{spell_type}_back_categories")])
-
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -218,13 +225,9 @@ def create_spell_detail_keyboard(spell_id: int, spell_name: str, spell_type: str
         buttons.append([InlineKeyboardButton(text="❌ Удалить", callback_data=f"{spell_type}_remove_{spell_id}")])
     else:
         buttons.append([InlineKeyboardButton(text="✅ Выбрать", callback_data=f"{spell_type}_add_{spell_id}")])
-
-    # Кнопка "Назад к списку"
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к списку", callback_data=f"{spell_type}_back_list")])
-
     if remaining > 0:
         buttons.append([InlineKeyboardButton(text=f"Осталось выбрать: {remaining}", callback_data="progress_info")])
-
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -259,7 +262,8 @@ def create_invocations_keyboard(level: int = 1) -> InlineKeyboardMarkup:
     buttons = []
     for inv in invocations[:8]:
         emoji = "🔮" if inv['level_required'] == 1 else "🔷"
-        buttons.append([InlineKeyboardButton(text=f"{emoji} {inv['name']} (ур. {inv['level_required']})", callback_data=f"inv_{inv['id']}")])
+        buttons.append([InlineKeyboardButton(text=f"{emoji} {inv['name']} (ур. {inv['level_required']})",
+                                             callback_data=f"inv_{inv['id']}")])
     buttons.append([InlineKeyboardButton(text="➡️ Пропустить", callback_data="inv_skip")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -281,7 +285,8 @@ def create_background_keyboard() -> InlineKeyboardMarkup:
 def create_background_equipment_keyboard(background: str) -> InlineKeyboardMarkup:
     bg_info = get_background_by_name(background)
     if not bg_info:
-        return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Ошибка", callback_data="cancel_creation")]])
+        return InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="❌ Ошибка", callback_data="cancel_creation")]])
     equip_a = bg_info.get('equipment_a', 'Нет описания')[:60]
     equip_b = bg_info.get('equipment_b', 'Нет описания')[:60]
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -322,14 +327,16 @@ def create_character_list_keyboard(user_id: int) -> Optional[InlineKeyboardMarku
         return None
     buttons = []
     for char in characters:
-        buttons.append([InlineKeyboardButton(text=f"{char['name']} - {char['class_name']} ур.{char['level']}", callback_data=f"view_{char['id']}")])
+        buttons.append([InlineKeyboardButton(text=f"{char['name']} - {char['class_name']} ур.{char['level']}",
+                                             callback_data=f"view_{char['id']}")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def create_delete_keyboard(characters: list) -> InlineKeyboardMarkup:
     buttons = []
     for char in characters:
-        buttons.append([InlineKeyboardButton(text=f"🗑 {char['name']} ({char['class_name']})", callback_data=f"delete_{char['id']}")])
+        buttons.append([InlineKeyboardButton(text=f"🗑 {char['name']} ({char['class_name']})",
+                                             callback_data=f"delete_{char['id']}")])
     buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_delete")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -350,6 +357,7 @@ async def start_cantrips_selection(m: Message, state: FSMContext):
     is_spellcaster = class_info.get("spellcasting", False) and spell_counts.get('cantrips', 0) > 0
 
     if not is_spellcaster:
+        logger.info(f"[FLOW] {class_name} не заклинатель, идём к боевому стилю")
         await go_to_fighting_style(m, state)
         return
 
@@ -405,6 +413,7 @@ async def start_level1_selection(m: Message, state: FSMContext):
     await m.answer(
         f"🔮 **Шаг 4/12: Выбор ЗАКЛИНАНИЙ 1 УРОВНЯ**\n\n"
         f"Класс **{selector.class_name}** может выбрать {required} заклинание(й).\n"
+        f"Осталось выбрать: {required - selected_count}\n\n"
         f"Выберите категорию для просмотра заклинаний:",
         parse_mode=None,
         reply_markup=create_category_keyboard(categories, "level1", selected_count, required)
@@ -420,25 +429,36 @@ async def go_to_spells(m: Message, state: FSMContext):
 
     is_spellcaster = class_info.get("spellcasting", False) and spell_counts.get('cantrips', 0) > 0
 
+    logger.info(f"[FLOW] go_to_spells: class={class_name}, is_spellcaster={is_spellcaster}")
+
     if is_spellcaster:
         selector = SpellSelector(class_name)
         await state.update_data(spell_selector=selector.to_dict())
         await start_cantrips_selection(m, state)
     else:
+        logger.info(f"[FLOW] {class_name} не заклинатель, идём к боевому стилю")
         await go_to_fighting_style(m, state)
 
 
 async def go_to_fighting_style(m: Message, state: FSMContext):
     """Переход к выбору боевого стиля"""
+    logger.info("=" * 50)
+    logger.info("🔧 go_to_fighting_style ВЫЗВАНА!")
+    logger.info("=" * 50)
+
     data = await state.get_data()
     class_name = data.get("class_name")
-    fighting_style_classes = ["Воин", "Паладин", "Следопыт", "Варвар"]  # Добавил Варвара
+    logger.info(f"   class_name = {class_name}")
+
+    fighting_style_classes = ["Воин", "Паладин", "Следопыт", "Варвар"]
+    logger.info(f"   {class_name} in fighting_style_classes = {class_name in fighting_style_classes}")
 
     if class_name in fighting_style_classes:
         styles = get_fighting_styles_for_class(class_name)
+        logger.info(f"   Найдено стилей: {len(styles) if styles else 0}")
 
         if not styles:
-            logger.warning(f"Нет боевых стилей для класса {class_name}")
+            logger.warning(f"⚠️ Нет боевых стилей для класса {class_name}")
             await m.answer(f"⚠️ Для класса {class_name} нет доступных боевых стилей.\n\nПереходим к следующему шагу...")
             await go_to_invocations(m, state)
             return
@@ -453,6 +473,7 @@ async def go_to_fighting_style(m: Message, state: FSMContext):
             reply_markup=create_fighting_style_keyboard(class_name)
         )
     else:
+        logger.info(f"   Класс {class_name} не в списке, идём к invocations")
         await go_to_invocations(m, state)
 
 
@@ -460,6 +481,7 @@ async def go_to_invocations(m: Message, state: FSMContext):
     """Переход к выбору возваний (только для колдуна)"""
     data = await state.get_data()
     class_name = data.get("class_name")
+    logger.info(f"🔧 go_to_invocations вызвана для класса: {class_name}")
 
     if class_name == "Колдун":
         await state.set_state(CreateCharacter.invocations_select)
@@ -476,11 +498,13 @@ async def go_to_invocations(m: Message, state: FSMContext):
             await m.answer("📖 Нет доступных возваний для вашего уровня.")
             await go_to_background(m, state)
     else:
+        logger.info(f"   Переход к выбору предыстории для {class_name}")
         await go_to_background(m, state)
 
 
 async def go_to_background(m: Message, state: FSMContext):
     """Переход к выбору предыстории"""
+    logger.info("🔧 go_to_background вызвана")
     await state.set_state(CreateCharacter.background_select)
     await m.answer(
         f"📜 **Шаг 7/12: Выбор ПРЕДЫСТОРИИ**\n\n"
@@ -493,6 +517,7 @@ async def go_to_background(m: Message, state: FSMContext):
 
 async def go_to_name(m: Message, state: FSMContext):
     """Переход к вводу имени"""
+    logger.info("🔧 go_to_name вызвана")
     await state.set_state(CreateCharacter.name_input)
     await m.answer(
         "📛 **Шаг 11/12: Введите ИМЯ персонажа**\n\n"
@@ -505,6 +530,7 @@ async def go_to_name(m: Message, state: FSMContext):
 
 async def go_to_backstory(m: Message, state: FSMContext):
     """Переход к вводу истории"""
+    logger.info("🔧 go_to_backstory вызвана")
     await state.set_state(CreateCharacter.backstory_input)
     await m.answer(
         "📖 **Шаг 12/12: История персонажа**\n\n"
@@ -582,7 +608,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         if not stats:
             stats = data.get("stats", {})
 
-        # БЕЗОПАСНОЕ получение заклинаний
+        # Безопасное получение заклинаний
         selected_spells = []
         selector_data = data.get("spell_selector")
         if selector_data and isinstance(selector_data, dict) and "class_name" in selector_data:
@@ -605,6 +631,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
             return
 
         logger.info(f"📛 Сохраняем персонажа: {name}")
+
         race_id = subrace_id = class_id = background_id = None
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -624,6 +651,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
                     cur.execute("SELECT id FROM backgrounds WHERE name = %s", (background,))
                     result = cur.fetchone()
                     background_id = result[0] if result else None
+
         ac = calc_ac_with_armor(stats.get("DEX", 10), selected_armor)
         hp = calc_hp(class_id, stats.get("CON", 10), 1) if class_id else 10
         race_traits = get_race_traits_list(race, subrace)
@@ -631,6 +659,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
         bg_info = get_background_by_name(background) if background else None
         bg_skills = bg_info.get('skills', []) if bg_info else []
         bg_trait = bg_info.get('trait', "Нет") if bg_info else "Нет"
+
         equipment_list = []
         if selected_weapon:
             equipment_list.append(selected_weapon)
@@ -645,6 +674,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
                 item = item.strip()
                 if item and item not in equipment_list:
                     equipment_list.append(item)
+
         save_character(
             user_id=m.from_user.id, name=name, race_id=race_id, subrace_id=subrace_id,
             class_id=class_id, subclass_id=None, background_id=background_id, level=1, experience=0,
@@ -655,6 +685,7 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
             selected_equipment_choice=background_equipment_choice, backstory=backstory,
             image_file_id=image_file_id, alignment="Нейтральное"
         )
+
         pdf_data = {
             "name": name, "class_name": class_name if class_name else "Без класса",
             "race": f"{race} ({subrace})" if subrace else (race if race else "Неизвестно"),
@@ -667,32 +698,40 @@ async def finalize_character(m: Message, state: FSMContext, image_file_id: Optio
             "alignment": "Нейтральное", "player_name": m.from_user.full_name,
             "experience": 0, "saving_throws": [], "notes": "", "coins": data.get("selected_coins", 0)
         }
+
         safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{safe_name}.pdf")
         temp_pdf_file = tmp.name
         tmp.close()
+
         pdf_file = generate_pdf(pdf_data, temp_pdf_file)
+
         spells_preview = ""
         if selected_spells:
             spells_preview = f"\n🔮 **Заклинания:** {', '.join(selected_spells[:5])}"
             if len(selected_spells) > 5:
                 spells_preview += f" и ещё {len(selected_spells) - 5}"
+
         caption = (f"✅ **Персонаж создан!**\n\n📛 **{name}**\n⚔️ **Класс:** {class_name}\n"
                    f"📜 **Предыстория:** {background}\n🧝 **Раса:** {race}{f' ({subrace})' if subrace else ''}\n"
                    f"❤️ **HP:** {hp} | 🛡️ **AC:** {ac}\n\n🎯 **Характеристики:**\n{format_stats_display(stats)}{spells_preview}\n\n"
                    f"📄 Лист персонажа в формате PDF прикреплён ниже!")
+
         if image_file_id:
             await m.answer_photo(photo=image_file_id, caption=caption, parse_mode=None)
         else:
             await m.answer(caption, parse_mode=None)
+
         if pdf_file and os.path.exists(pdf_file):
             await m.answer_document(FSInputFile(pdf_file, filename=f"{safe_name}_character_sheet.pdf"),
                                     caption="📄 Лист персонажа в формате PDF")
         else:
             logger.error(f"PDF не создан: {pdf_file}")
             await m.answer("⚠️ Не удалось создать PDF файл, но персонаж сохранён!")
+
         await m.answer("🎮 Главное меню", reply_markup=main_menu())
         await state.clear()
+
     except Exception as e:
         logger.error(f"Ошибка при создании персонажа: {e}", exc_info=True)
         await m.answer(f"❌ Произошла ошибка: {str(e)[:200]}\n\nПерсонаж может быть сохранён, но PDF не создан.",
@@ -751,7 +790,7 @@ async def help_command(m: Message):
         "1️⃣ Выберите КЛАСС\n"
         "2️⃣ Выберите СНАРЯЖЕНИЕ КЛАССА\n"
         "3️⃣ Выберите ЗАКЛИНАНИЯ (если есть)\n"
-        "4️⃣ Выберите БОЕВОЙ СТИЛЬ (для Воина, Паладина, Следопыта)\n"
+        "4️⃣ Выберите БОЕВОЙ СТИЛЬ (для Воина, Паладина, Следопыта, Варвара)\n"
         "5️⃣ Выберите ПРЕДЫСТОРИЮ\n"
         "6️⃣ Выберите РАСУ\n"
         "7️⃣ Введите ИМЯ\n"
@@ -833,11 +872,13 @@ async def select_class(call: CallbackQuery, state: FSMContext):
             text += f"   • {sub['name']} — {sub['description'][:60]}...\n"
         reply_markup = create_subclass_keyboard(class_name)
         next_state = CreateCharacter.subclass_select
+        await state.set_state(next_state)
     else:
         if has_equipment_choice:
             reply_markup = create_class_equipment_keyboard(class_name)
             next_state = CreateCharacter.class_equipment_select
             text += f"\n\nШаг 2/12: Выберите СНАРЯЖЕНИЕ класса"
+            await state.set_state(next_state)
         else:
             if equipment:
                 eq = equipment[0]
@@ -852,7 +893,6 @@ async def select_class(call: CallbackQuery, state: FSMContext):
             await call.answer()
             return
 
-    await state.set_state(next_state)
     img_path = get_class_image_path(class_name)
     try:
         await call.message.delete()
@@ -902,16 +942,8 @@ async def back_to_classes(call: CallbackQuery, state: FSMContext):
 
 
 # ============================================================
-# ШАГ 2: ЗАКЛИНАНИЯ (ПОЛНЫЕ ИСПРАВЛЕННЫЕ ОБРАБОТЧИКИ)
+# ШАГ 2: ЗАКЛИНАНИЯ (ОБРАБОТЧИКИ)
 # ============================================================
-
-def continue_kb_for_spells() -> ReplyKeyboardMarkup:
-    """Клавиатура для продолжения после выбора заклинаний"""
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="✅ Продолжить")]],
-        resize_keyboard=True
-    )
-
 
 @dp.callback_query(lambda c: c.data.startswith("cantrip_cat_"))
 async def show_cantrips_in_category(call: CallbackQuery, state: FSMContext):
@@ -947,10 +979,6 @@ async def view_cantrip_detail(call: CallbackQuery, state: FSMContext):
     remaining = 0
     if selector.cantrip_state:
         remaining = selector.cantrip_state.remaining_count
-
-    # Сохраняем текущую категорию для возврата
-    current_category = data.get("current_category")
-
     await state.update_data(current_spell_id=spell_id, current_spell_name=spell['name'])
     await state.set_state(CreateCharacter.spells_cantrips_detail)
     description = spell.get('description', 'Описание отсутствует')
@@ -982,7 +1010,6 @@ async def add_cantrip(call: CallbackQuery, state: FSMContext):
     if success:
         await state.update_data(spell_selector=selector.to_dict())
 
-        # Проверяем, завершён ли выбор заговоров
         if selector.cantrip_state and selector.cantrip_state.remaining_count == 0:
             await call.message.delete()
             await call.message.answer(
@@ -993,7 +1020,6 @@ async def add_cantrip(call: CallbackQuery, state: FSMContext):
             )
             await state.set_state(CreateCharacter.spells_cantrips_complete)
         else:
-            # Возвращаемся к СПИСКУ, а не к категориям
             await state.set_state(CreateCharacter.spells_cantrips_list)
             spells = selector.get_cantrips_in_category(category)
             selected_spells = selector.get_selected_cantrips()
@@ -1019,7 +1045,6 @@ async def remove_cantrip(call: CallbackQuery, state: FSMContext):
     await call.answer(msg)
     if success:
         await state.update_data(spell_selector=selector.to_dict())
-        # Возвращаемся к СПИСКУ
         await state.set_state(CreateCharacter.spells_cantrips_list)
         spells = selector.get_cantrips_in_category(category)
         selected_spells = selector.get_selected_cantrips()
@@ -1041,10 +1066,7 @@ async def back_to_cantrip_list(call: CallbackQuery, state: FSMContext):
         await call.answer()
         return
 
-    # Восстанавливаем состояние списка
     await state.set_state(CreateCharacter.spells_cantrips_list)
-
-    # Получаем данные для отображения списка
     selector_data = data.get("spell_selector", {})
     selector = SpellSelector.from_dict(selector_data)
     spells = selector.get_cantrips_in_category(category)
@@ -1064,7 +1086,6 @@ async def back_to_cantrip_categories(call: CallbackQuery, state: FSMContext):
     selector_data = data.get("spell_selector", {})
     selector = SpellSelector.from_dict(selector_data)
 
-    # Проверяем, не завершён ли уже выбор
     if selector.cantrip_state and selector.cantrip_state.remaining_count == 0:
         await call.answer("Вы уже выбрали все заговоры! Нажмите «Продолжить».")
         return
@@ -1107,10 +1128,6 @@ async def view_level1_detail(call: CallbackQuery, state: FSMContext):
     remaining = 0
     if selector.level1_state:
         remaining = selector.level1_state.remaining_count
-
-    # Сохраняем текущую категорию для возврата
-    current_category = data.get("current_category")
-
     await state.update_data(current_spell_id=spell_id, current_spell_name=spell['name'])
     await state.set_state(CreateCharacter.spells_level1_detail)
     description = spell.get('description', 'Описание отсутствует')
@@ -1198,10 +1215,7 @@ async def back_to_level1_list(call: CallbackQuery, state: FSMContext):
         await call.answer()
         return
 
-    # Восстанавливаем состояние списка
     await state.set_state(CreateCharacter.spells_level1_list)
-
-    # Получаем данные для отображения списка
     selector_data = data.get("spell_selector", {})
     selector = SpellSelector.from_dict(selector_data)
     spells = selector.get_level1_spells_in_category(category)
@@ -1252,7 +1266,7 @@ async def continue_after_spells(m: Message, state: FSMContext):
 # ШАГ 3: БОЕВОЙ СТИЛЬ И ВОЗВАНИЯ
 # ============================================================
 
-@dp.callback_query(lambda c: c.data.startswith("style_"))
+@dp.callback_query(lambda c: c.data.startswith("style_") and c.data != "style_skip")
 async def select_fighting_style(call: CallbackQuery, state: FSMContext):
     style_id = int(call.data.replace("style_", ""))
     with get_connection() as conn:
@@ -1263,13 +1277,22 @@ async def select_fighting_style(call: CallbackQuery, state: FSMContext):
     if style_name:
         await state.update_data(selected_fighting_style=style_name)
         await call.answer(f"✅ Выбран стиль: {style_name}")
+        logger.info(f"[FLOW] Выбран боевой стиль: {style_name}")
     await go_to_invocations(call.message, state)
     await call.answer()
 
 
 @dp.callback_query(lambda c: c.data == "style_skip")
 async def skip_fighting_style(call: CallbackQuery, state: FSMContext):
+    await call.answer("⏩ Боевой стиль пропущен")
+    logger.info("[FLOW] Боевой стиль пропущен")
     await go_to_invocations(call.message, state)
+    await call.answer()
+
+
+@dp.callback_query(lambda c: c.data == "back_to_fighting")
+async def back_to_fighting(call: CallbackQuery, state: FSMContext):
+    await go_to_fighting_style(call.message, state)
     await call.answer()
 
 
@@ -1303,12 +1326,6 @@ async def select_invocation(call: CallbackQuery, state: FSMContext):
 @dp.callback_query(lambda c: c.data == "inv_skip")
 async def skip_invocations(call: CallbackQuery, state: FSMContext):
     await go_to_background(call.message, state)
-    await call.answer()
-
-
-@dp.callback_query(lambda c: c.data == "back_to_fighting")
-async def back_to_fighting(call: CallbackQuery, state: FSMContext):
-    await go_to_fighting_style(call.message, state)
     await call.answer()
 
 
@@ -1383,12 +1400,15 @@ async def select_race(call: CallbackQuery, state: FSMContext):
     race = call.data.replace("race_", "")
     await state.update_data(race=race)
     logger.info(f"[FLOW] Выбрана раса: {race}")
+
     race_desc = get_race_description(race)
     race_speed = get_race_speed(race)
     race_size = get_race_size(race)
     has_sub = has_subraces(race)
     subraces_list = get_subraces(race) if has_sub else []
+
     text = f"🧝 **Раса: {race}**\n\n📖 {race_desc}\n\n🏃 **Скорость:** {race_speed} футов\n📏 **Размер:** {race_size}\n"
+
     if has_sub and subraces_list:
         text += f"\n🌟 **Доступные подрасы:**\n"
         for sub in subraces_list:
@@ -1396,12 +1416,12 @@ async def select_race(call: CallbackQuery, state: FSMContext):
             text += f"   • **{sub}** — {sub_trait[:50] + '...' if len(sub_trait) > 50 else sub_trait}\n"
         text += f"\n**Шаг 10/12: Выберите ПОДРАСУ**"
         reply_markup = create_subrace_keyboard(race)
-        next_state = CreateCharacter.subrace_select
-        await state.set_state(next_state)
+        await state.set_state(CreateCharacter.subrace_select)
     else:
         await go_to_name(call.message, state)
         await call.answer()
         return
+
     img_path = get_race_image_path(race)
     try:
         await call.message.delete()

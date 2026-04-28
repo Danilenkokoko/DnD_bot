@@ -26,9 +26,6 @@ from keyboards.character_keyboards import (
     create_background_equipment_keyboard,
     create_fighting_style_keyboard,
     create_invocations_keyboard,
-    create_category_keyboard,
-    create_spell_list_keyboard,
-    create_spell_detail_keyboard,
     create_character_list_keyboard,
     create_delete_keyboard,
     cancel_kb,
@@ -36,8 +33,8 @@ from keyboards.character_keyboards import (
     continue_kb_for_spells,
     main_menu
 )
+# Импорты клавиатур заклинаний удалены — они не нужны в этом файле
 
-# Сервисы и репозитории
 from services.character_service import CharacterStatsService, CharacterFinalizationService
 from services.progression_service import ProgressionService
 from services.spell_service import SpellSelectionService
@@ -48,17 +45,12 @@ from repositories.background_repository import BackgroundRepository
 from repositories.equipment_repository import EquipmentRepository, FightingStyleRepository, InvocationRepository
 from repositories.spell_repository import SpellRepository
 
-# Для изображений и PDF
 from pdf_generator import generate_pdf
 from spell_selector import get_category_icon
-
-# Вспомогательные функции (валидация имени и т.п.)
 from engine.validators import validate_name as engine_validate_name
 
-import logging
 logger = logging.getLogger(__name__)
 
-# Создаём роутер
 router = Router()
 
 # Инициализация репозиториев
@@ -210,7 +202,6 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
     await state.update_data(class_name=class_name)
     logger.info(f"[FLOW] Выбран класс: {class_name}")
 
-    # Используем сервис для получения информации
     class_desc = CharacterStatsService.get_class_description(class_name)
     class_info = CharacterStatsService.get_class_info(class_name)
     subclasses = _class_repo.get_subclasses(class_name, level=1)
@@ -267,7 +258,7 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
 # ШАГ 2: ВЫБОР СНАРЯЖЕНИЯ КЛАССА
 # =========================================================
 
-@dp.callback_query(lambda c: c.data.startswith("equip_"))
+@router.callback_query(lambda c: c.data.startswith("equip_"))
 async def select_class_equipment(callback: CallbackQuery, state: FSMContext):
     choice = callback.data.replace("equip_", "")
     data = await state.get_data()
@@ -383,43 +374,6 @@ async def go_to_background(message: Message, state: FSMContext):
     )
 
 
-async def go_to_name(message: Message, state: FSMContext):
-    logger.info("🔧 go_to_name вызвана")
-    await state.set_state(CreateCharacter.name_input)
-    await message.answer(
-        "📛 **Шаг 11/12: Введите ИМЯ персонажа**\n\n"
-        "Имя может быть любым (от 2 до 50 символов).\n\n"
-        "Введите имя:",
-        parse_mode=None,
-        reply_markup=cancel_kb()
-    )
-
-
-async def go_to_backstory(message: Message, state: FSMContext):
-    logger.info("🔧 go_to_backstory вызвана")
-    await state.set_state(CreateCharacter.backstory_input)
-    await message.answer(
-        "📖 **Шаг 12/12: История персонажа**\n\n"
-        "Расскажите историю вашего персонажа:\n"
-        "- Откуда он родом?\n"
-        "- Что привело его к приключениям?\n"
-        "- Какие у него цели?\n\n"
-        "Введите историю (максимум 2000 символов):",
-        parse_mode=None,
-        reply_markup=cancel_kb()
-    )
-
-
-# =========================================================
-# ЗАКЛИНАНИЯ — ВЫНЕСЕНО В SPELL_SELECTION_SERVICE
-# (реализация будет в services/spell_service.py)
-# Здесь оставляем заглушки для импортов
-# =========================================================
-
-# В реальном проекте обработчики заклинаний подключаются через router.include_router()
-# из services/spell_service.py. Для краткости опустим детали.
-
-
 # =========================================================
 # БОЕВОЙ СТИЛЬ И ВОЗВАНИЯ
 # =========================================================
@@ -427,7 +381,7 @@ async def go_to_backstory(message: Message, state: FSMContext):
 @router.callback_query(lambda c: c.data.startswith("style_") and c.data != "style_skip")
 async def select_fighting_style(callback: CallbackQuery, state: FSMContext):
     style_id = int(callback.data.replace("style_", ""))
-    style = _fighting_repo.get_by_id(style_id)  # требует реализации в репозитории
+    style = _fighting_repo.get_by_id(style_id)
     style_name = style.get('name') if style else None
     if style_name:
         await state.update_data(selected_fighting_style=style_name)
@@ -447,7 +401,7 @@ async def skip_fighting_style(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(lambda c: c.data.startswith("inv_"))
 async def select_invocation(callback: CallbackQuery, state: FSMContext):
     inv_id = int(callback.data.replace("inv_", ""))
-    invocation = _inv_repo.get_by_id(inv_id)  # нужно добавить метод в репозиторий
+    invocation = _inv_repo.get_by_id(inv_id)
     inv_name = invocation.get('name') if invocation else None
     if not inv_name:
         await callback.answer("❌ Возвание не найдено")
@@ -523,10 +477,6 @@ async def select_background_equipment(callback: CallbackQuery, state: FSMContext
         await state.clear()
         return
     await state.update_data(background_equipment_choice=equipment_choice)
-    bg_info = _bg_repo.get_by_name(background)
-    if bg_info:
-        chosen_equipment = bg_info['equipment_a'] if equipment_choice == "A" else bg_info['equipment_b']
-        await state.update_data(background_equipment=chosen_equipment)
     await calculate_and_show_stats(callback.message, state)
     await callback.message.delete()
     await callback.answer()
@@ -662,6 +612,33 @@ async def back_to_races(callback: CallbackQuery, state: FSMContext):
 # ИМЯ И ИСТОРИЯ
 # =========================================================
 
+async def go_to_name(message: Message, state: FSMContext):
+    logger.info("🔧 go_to_name вызвана")
+    await state.set_state(CreateCharacter.name_input)
+    await message.answer(
+        "📛 **Шаг 11/12: Введите ИМЯ персонажа**\n\n"
+        "Имя может быть любым (от 2 до 50 символов).\n\n"
+        "Введите имя:",
+        parse_mode=None,
+        reply_markup=cancel_kb()
+    )
+
+
+async def go_to_backstory(message: Message, state: FSMContext):
+    logger.info("🔧 go_to_backstory вызвана")
+    await state.set_state(CreateCharacter.backstory_input)
+    await message.answer(
+        "📖 **Шаг 12/12: История персонажа**\n\n"
+        "Расскажите историю вашего персонажа:\n"
+        "- Откуда он родом?\n"
+        "- Что привело его к приключениям?\n"
+        "- Какие у него цели?\n\n"
+        "Введите историю (максимум 2000 символов):",
+        parse_mode=None,
+        reply_markup=cancel_kb()
+    )
+
+
 @router.message(CreateCharacter.name_input)
 async def set_name(message: Message, state: FSMContext):
     if message.text == "❌ Отмена":
@@ -718,8 +695,8 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         await message.answer("⏳ Создаю персонажа и генерирую PDF...", reply_markup=ReplyKeyboardRemove())
 
         data = await state.get_data()
-        # Используем сервис для подготовки данных
         char_data = CharacterFinalizationService.prepare_character_data(data, message.from_user.id)
+        char_data['image_file_id'] = image_file_id
 
         name = char_data['name']
         if not name:
@@ -727,11 +704,10 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             await state.clear()
             return
 
-        char_data['image_file_id'] = image_file_id
-        # Сохраняем через репозиторий
+        # Сохраняем персонажа
         char_id = CharacterFinalizationService.save_character(char_data)
 
-        # Формируем данные для PDF
+        bg_info = _bg_repo.get_by_name(char_data['background']) if char_data['background'] else None
         pdf_data = {
             "name": name,
             "class_name": char_data['class_name'],
@@ -741,14 +717,14 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             "hp": char_data['hp'],
             "ac": char_data['ac'],
             "speed": 30,
-            "skills": char_data['selected_skills'],
+            "skills": char_data.get('selected_skills', []),
             "equipment": [item for item in [char_data['selected_weapon'], char_data['selected_armor']] if item],
             "spells": char_data['selected_spells'],
             "proficiency_bonus": CharacterStatsService.calculate_proficiency_bonus(1),
             "background": char_data['background'],
-            "background_trait": _bg_repo.get_by_name(char_data['background']).get('trait', '') if char_data['background'] else '',
-            "background_description": _bg_repo.get_by_name(char_data['background']).get('description', '') if char_data['background'] else '',
-            "race_traits": [],  # можно получить отдельно при необходимости
+            "background_trait": bg_info.get('trait', '') if bg_info else '',
+            "background_description": bg_info.get('description', '') if bg_info else '',
+            "race_traits": [],
             "class_features": [],
             "backstory": char_data['backstory'],
             "alignment": "Нейтральное",

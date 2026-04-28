@@ -2,7 +2,7 @@
 """
 Клавиатуры для Telegram бота
 """
-
+from keyboards.spell_keyboards import create_category_keyboard
 from keyboards.character_keyboards import (
     main_menu,
     cancel_kb,

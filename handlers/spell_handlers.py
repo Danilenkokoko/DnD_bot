@@ -86,30 +86,33 @@ async def back_to_level1_categories(callback: CallbackQuery, state: FSMContext):
 
 @router.message(F.text == "✅ Продолжить")
 async def continue_after_spells(message: Message, state: FSMContext):
-    """
-    Обработчик кнопки 'Продолжить' после выбора заклинаний.
-    Проверяет состояние выбора через данные в state (более надёжно).
-    """
+    """Обработчик кнопки 'Продолжить' после выбора заклинаний"""
+    logger.info("🔵 Кнопка 'Продолжить' нажата")
+    current_state = await state.get_state()
+    logger.info(f"Текущее состояние FSM: {current_state}")
+
     data = await state.get_data()
     selector_data = data.get("spell_selector")
 
     if selector_data:
         selector = SpellSelector.from_dict(selector_data)
 
-        # Если выбраны все заговоры и есть заклинания 1 уровня, переходим к ним
-        if selector.cantrip_state and selector.cantrip_state.remaining_count == 0:
-            if selector.level1_state and selector.level1_state.remaining_count > 0:
-                await SpellSelectionService.start_level1_selection(message, state)
-                return
-            else:
-                # Нет заклинаний 1 уровня – переходим к боевому стилю
-                await go_to_fighting_style(message, state)
-                return
-
-        # Если выбраны все заклинания 1 уровня и нет заговоров или они уже выбраны
-        if selector.level1_state and selector.level1_state.remaining_count == 0:
-            await go_to_fighting_style(message, state)
+        # Проверяем, есть ли незавершённые заговоры
+        if selector.cantrip_state and selector.cantrip_state.remaining_count != 0:
+            await message.answer("⚠️ Вы не выбрали все заговоры. Пожалуйста, завершите выбор.")
             return
 
-    # Если ни одно условие не сработало, выводим инструкцию
-    await message.answer("⏳ Пожалуйста, следуйте инструкциям.")
+        # Проверяем, нужно ли выбрать заклинания 1 уровня
+        if selector.level1_state and selector.level1_state.remaining_count != 0:
+            logger.info("Переход к выбору заклинаний 1 уровня")
+            await SpellSelectionService.start_level1_selection(message, state)
+            return
+
+        # Все заклинания выбраны -> переход к боевому стилю
+        logger.info("Все заклинания выбраны, переход к боевому стилю")
+        await go_to_fighting_style(message, state)
+        return
+
+    # Если нет данных о заклинаниях (класс не заклинатель), сразу к боевому стилю
+    logger.info("Нет данных о заклинаниях, переход к боевому стилю")
+    await go_to_fighting_style(message, state)

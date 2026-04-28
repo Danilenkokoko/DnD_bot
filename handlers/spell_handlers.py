@@ -36,28 +36,41 @@ async def remove_cantrip(callback: CallbackQuery, state: FSMContext):
     await SpellSelectionService.remove_cantrip(callback, state)
 
 
-@router.callback_query(lambda c: c.data.startswith("cantrip_back_list"))
+@router.callback_query(lambda c: c.data == "cantrip_back_list")
 async def back_to_cantrip_list(callback: CallbackQuery, state: FSMContext):
-    # Реализуйте при необходимости
-    await callback.answer("Возврат к списку заклинаний (реализуйте)")
-    # Лучше перенести логику из SpellSelectionService
-    # Для простоты можно вызвать соответствующий метод сервиса, но его пока нет.
-    # Рекомендуется дописать метод в SpellSelectionService и вызвать его.
-    # Пока что просто заглушка.
-    await callback.message.answer("Функция в разработке")
+    # Возврат к списку заклинаний в текущей категории (обычно не требуется, но если нужен - реализуйте)
+    # Поскольку у нас есть кнопка "Назад к категориям", этот обработчик может не использоваться.
+    # Оставим заглушку или вызовем переключение состояния.
+    data = await state.get_data()
+    category = data.get("current_category")
+    if category:
+        # Показываем список заклинаний в этой категории заново
+        from services.spell_service import SpellSelectionService
+        # Создаём искусственный callback с правильным форматом
+        # Можно вызвать метод напрямую
+        await SpellSelectionService.show_cantrips_in_category(callback, state)
+    else:
+        await callback.answer("Нет активной категории", show_alert=True)
+
+
+@router.callback_query(lambda c: c.data == "cantrip_back_categories")
+async def back_to_cantrip_categories(callback: CallbackQuery, state: FSMContext):
+    # Возврат к категориям заговоров
+    # Вызываем метод сервиса, который покажет категории заново
+    await SpellSelectionService.start_cantrips_selection(callback.message, state)
+    await callback.answer()
 
 
 @router.callback_query(lambda c: c.data.startswith("cantrip_back_categories"))
-async def back_to_cantrip_categories(callback: CallbackQuery, state: FSMContext):
-    # Вернуться к выбору категорий заговоров
-    from services.spell_service import SpellSelectionService
+async def back_to_cantrip_categories_alt(callback: CallbackQuery, state: FSMContext):
+    # Запасной обработчик на случай, если префикс не совпадает
     await SpellSelectionService.start_cantrips_selection(callback.message, state)
     await callback.answer()
 
 
 @router.callback_query(lambda c: c.data.startswith("level1_cat_"))
 async def show_level1_in_category(callback: CallbackQuery, state: FSMContext):
-    # Аналогично для заклинаний 1 уровня (допишите, если нужно)
+    # Аналогично для заклинаний 1 уровня (можно реализовать позже)
     await callback.answer("Выбор заклинаний 1 уровня (в разработке)")
 
 

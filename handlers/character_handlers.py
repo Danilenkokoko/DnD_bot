@@ -407,6 +407,7 @@ async def select_invocation(callback: CallbackQuery, state: FSMContext):
         return
     data = await state.get_data()
     selected = data.get("selected_invocations", [])
+    old_count = len(selected)
     if inv_name in selected:
         selected.remove(inv_name)
         await callback.answer(f"❌ Возвание '{inv_name}' удалено")
@@ -418,7 +419,9 @@ async def select_invocation(callback: CallbackQuery, state: FSMContext):
         await callback.answer(f"✅ Возвание '{inv_name}' добавлено")
     await state.update_data(selected_invocations=selected)
     new_count = len(selected)
-    await callback.message.edit_reply_markup(reply_markup=create_invocations_keyboard(level=1, selected_count=new_count))
+    # Редактируем клавиатуру только если изменилось количество выбранных
+    if new_count != old_count:
+        await callback.message.edit_reply_markup(reply_markup=create_invocations_keyboard(level=1, selected_count=new_count))
 
 
 @router.callback_query(lambda c: c.data == "inv_skip")

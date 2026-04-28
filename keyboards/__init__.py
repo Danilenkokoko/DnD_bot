@@ -1,8 +1,12 @@
-# keyboards/__init__.py
+# keyboards/__init__.py (исправленный, без дублирования)
 """
 Клавиатуры для Telegram бота
 """
-from keyboards.spell_keyboards import create_category_keyboard
+from keyboards.spell_keyboards import (
+    create_category_keyboard,
+    create_spell_list_keyboard,
+    create_spell_detail_keyboard,
+)
 from keyboards.character_keyboards import (
     main_menu,
     cancel_kb,
@@ -21,13 +25,7 @@ from keyboards.character_keyboards import (
     create_delete_keyboard,
 )
 
-from keyboards.spell_keyboards import (
-    create_category_keyboard,
-    create_spell_list_keyboard,
-    create_spell_detail_keyboard,
-)
-
-__all__ = [    # Явно перечислять не обязательно, но для ясности:
+__all__ = [
     'main_menu', 'cancel_kb', 'skip_kb', 'continue_kb_for_spells',
     'create_class_keyboard', 'create_class_equipment_keyboard', 'create_subclass_keyboard',
     'create_background_keyboard', 'create_background_equipment_keyboard',

@@ -4,7 +4,7 @@
 """
 
 from typing import List, Dict
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
 def create_category_keyboard(categories: Dict[str, Dict], spell_type: str,
@@ -53,11 +53,3 @@ def create_spell_detail_keyboard(spell_id: int, spell_name: str, spell_type: str
     if remaining > 0:
         buttons.append([InlineKeyboardButton(text=f"Осталось выбрать: {remaining}", callback_data="progress_info")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def continue_kb_for_spells() -> ReplyKeyboardMarkup:
-    """Клавиатура для продолжения после выбора заклинаний"""
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="✅ Продолжить")]],
-        resize_keyboard=True
-    )

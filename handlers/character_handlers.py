@@ -33,7 +33,6 @@ from keyboards.character_keyboards import (
     continue_kb_for_spells,
     main_menu
 )
-# Импорты клавиатур заклинаний удалены — они не нужны в этом файле
 
 from services.character_service import CharacterStatsService, CharacterFinalizationService
 from services.progression_service import ProgressionService
@@ -46,14 +45,13 @@ from repositories.equipment_repository import EquipmentRepository, FightingStyle
 from repositories.spell_repository import SpellRepository
 
 from pdf_generator import generate_pdf
-from spell_selector import get_category_icon
 from engine.validators import validate_name as engine_validate_name
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 
-# Инициализация репозиториев
+# Репозитории
 _race_repo = RaceRepository()
 _class_repo = ClassRepository()
 _bg_repo = BackgroundRepository()
@@ -704,7 +702,6 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             await state.clear()
             return
 
-        # Сохраняем персонажа
         char_id = CharacterFinalizationService.save_character(char_data)
 
         bg_info = _bg_repo.get_by_name(char_data['background']) if char_data['background'] else None
@@ -835,6 +832,10 @@ async def cancel_creation_callback(callback: CallbackQuery, state: FSMContext):
 async def progress_info(callback: CallbackQuery):
     await callback.answer("Это информационное сообщение", show_alert=False)
 
+
+# =========================================================
+# НЕИЗВЕСТНЫЕ КОМАНДЫ
+# =========================================================
 
 @router.message()
 async def unknown_command(message: Message, state: FSMContext):

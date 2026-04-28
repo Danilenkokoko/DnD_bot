@@ -396,7 +396,7 @@ async def skip_fighting_style(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(lambda c: c.data.startswith("inv_"))
+@router.callback_query(lambda c: c.data.startswith("inv_") and c.data != "inv_skip")
 async def select_invocation(callback: CallbackQuery, state: FSMContext):
     inv_id = int(callback.data.replace("inv_", ""))
     invocation = _inv_repo.get_by_id(inv_id)

@@ -10,11 +10,14 @@ from aiogram.fsm.context import FSMContext
 
 from states.character_states import CreateCharacter
 from services.spell_service import SpellSelectionService
+from handlers.character_handlers import go_to_fighting_style
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 
+
+# ==================== CANTRIPS ====================
 
 @router.callback_query(lambda c: c.data.startswith("cantrip_cat_"))
 async def show_cantrips_in_category(callback: CallbackQuery, state: FSMContext):
@@ -38,44 +41,47 @@ async def remove_cantrip(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(lambda c: c.data == "cantrip_back_list")
 async def back_to_cantrip_list(callback: CallbackQuery, state: FSMContext):
-    # Возврат к списку заклинаний в текущей категории (обычно не требуется, но если нужен - реализуйте)
-    # Поскольку у нас есть кнопка "Назад к категориям", этот обработчик может не использоваться.
-    # Оставим заглушку или вызовем переключение состояния.
-    data = await state.get_data()
-    category = data.get("current_category")
-    if category:
-        # Показываем список заклинаний в этой категории заново
-        from services.spell_service import SpellSelectionService
-        # Создаём искусственный callback с правильным форматом
-        # Можно вызвать метод напрямую
-        await SpellSelectionService.show_cantrips_in_category(callback, state)
-    else:
-        await callback.answer("Нет активной категории", show_alert=True)
+    await SpellSelectionService.back_to_cantrip_list(callback, state)
 
 
 @router.callback_query(lambda c: c.data == "cantrip_back_categories")
 async def back_to_cantrip_categories(callback: CallbackQuery, state: FSMContext):
-    # Возврат к категориям заговоров
-    # Вызываем метод сервиса, который покажет категории заново
-    await SpellSelectionService.start_cantrips_selection(callback.message, state)
-    await callback.answer()
+    await SpellSelectionService.back_to_cantrip_categories(callback, state)
 
 
-@router.callback_query(lambda c: c.data.startswith("cantrip_back_categories"))
-async def back_to_cantrip_categories_alt(callback: CallbackQuery, state: FSMContext):
-    # Запасной обработчик на случай, если префикс не совпадает
-    await SpellSelectionService.start_cantrips_selection(callback.message, state)
-    await callback.answer()
-
+# ==================== LEVEL 1 SPELLS ====================
 
 @router.callback_query(lambda c: c.data.startswith("level1_cat_"))
 async def show_level1_in_category(callback: CallbackQuery, state: FSMContext):
-    # Аналогично для заклинаний 1 уровня (можно реализовать позже)
-    await callback.answer("Выбор заклинаний 1 уровня (в разработке)")
+    await SpellSelectionService.show_level1_in_category(callback, state)
 
 
-@router.callback_query(lambda c: c.data == "cancel_creation")
-async def cancel_creation_callback(callback: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await callback.message.edit_text("❌ Создание персонажа отменено")
+@router.callback_query(lambda c: c.data.startswith("level1_view_"))
+async def view_level1_detail(callback: CallbackQuery, state: FSMContext):
+    await SpellSelectionService.view_level1_detail(callback, state)
+
+
+@router.callback_query(lambda c: c.data.startswith("level1_add_"))
+async def add_level1_spell(callback: CallbackQuery, state: FSMContext):
+    await SpellSelectionService.add_level1_spell(callback, state)
+
+
+@router.callback_query(lambda c: c.data.startswith("level1_remove_"))
+async def remove_level1_spell(callback: CallbackQuery, state: FSMContext):
+    await SpellSelectionService.remove_level1_spell(callback, state)
+
+
+@router.callback_query(lambda c: c.data == "level1_back_list")
+async def back_to_level1_list(callback: CallbackQuery, state: FSMContext):
+    await SpellSelectionService.back_to_level1_list(callback, state)
+
+
+@router.callback_query(lambda c: c.data == "level1_back_categories")
+async def back_to_level1_categories(callback: CallbackQuery, state: FSMContext):
+    await SpellSelectionService.back_to_level1_categories(callback, state)
+
+
+@router.callback_query(lambda c: c.data == "continue_to_next")
+async def continue_to_next(callback: CallbackQuery, state: FSMContext):
+    await go_to_fighting_style(callback.message, state)
     await callback.answer()

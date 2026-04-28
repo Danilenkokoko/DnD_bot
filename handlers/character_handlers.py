@@ -419,8 +419,9 @@ async def select_invocation(callback: CallbackQuery, state: FSMContext):
         await callback.answer(f"✅ Возвание '{inv_name}' добавлено")
     await state.update_data(selected_invocations=selected)
     new_count = len(selected)
-    # Редактируем клавиатуру только если изменилось количество выбранных
-    if new_count != old_count:
+    # Обновляем клавиатуру только при изменении состояния кнопки "Продолжить":
+    # 0 -> >0 или >0 -> 0
+    if (old_count == 0 and new_count > 0) or (old_count > 0 and new_count == 0):
         await callback.message.edit_reply_markup(reply_markup=create_invocations_keyboard(level=1, selected_count=new_count))
 
 

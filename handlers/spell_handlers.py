@@ -11,6 +11,7 @@ from aiogram.fsm.context import FSMContext
 from states.character_states import CreateCharacter
 from services.spell_service import SpellSelectionService
 from handlers.character_handlers import go_to_fighting_style
+from spell_selector import SpellSelector
 
 logger = logging.getLogger(__name__)
 
@@ -85,10 +86,30 @@ async def back_to_level1_categories(callback: CallbackQuery, state: FSMContext):
 
 @router.message(F.text == "✅ Продолжить")
 async def continue_after_spells(message: Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state == CreateCharacter.spells_cantrips_complete.state:
-        await SpellSelectionService.start_level1_selection(message, state)
-    elif current_state == CreateCharacter.spells_level1_complete.state:
-        await go_to_fighting_style(message, state)
-    else:
-        await message.answer("⏳ Пожалуйста, следуйте инструкциям.")
+    """
+    Обработчик кнопки 'Продолжить' после выбора заклинаний.
+    Проверяет состояние выбора через данные в state (более надёжно).
+    """
+    data = await state.get_data()
+    selector_data = data.get("spell_selector")
+
+    if selector_data:
+        selector = SpellSelector.from_dict(selector_data)
+
+        # Если выбраны все заговоры и есть заклинания 1 уровня, переходим к ним
+        if selector.cantrip_state and selector.cantrip_state.remaining_count == 0:
+            if selector.level1_state and selector.level1_state.remaining_count > 0:
+                await SpellSelectionService.start_level1_selection(message, state)
+                return
+            else:
+                # Нет заклинаний 1 уровня – переходим к боевому стилю
+                await go_to_fighting_style(message, state)
+                return
+
+        # Если выбраны все заклинания 1 уровня и нет заговоров или они уже выбраны
+        if selector.level1_state and selector.level1_state.remaining_count == 0:
+            await go_to_fighting_style(message, state)
+            return
+
+    # Если ни одно условие не сработало, выводим инструкцию
+    await message.answer("⏳ Пожалуйста, следуйте инструкциям.")

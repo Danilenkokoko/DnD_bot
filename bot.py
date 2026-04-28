@@ -50,8 +50,8 @@ async def main():
         logger.info("✅ База данных готова")
 
         # Подключение роутеров
-        dp.include_router(character_router)
         dp.include_router(spell_router)
+        dp.include_router(character_router)
 
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("✅ Webhook удалён")

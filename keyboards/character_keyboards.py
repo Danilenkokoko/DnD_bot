@@ -184,7 +184,6 @@ def create_fighting_style_keyboard(class_name: str) -> InlineKeyboardMarkup:
 
 
 def create_invocations_keyboard(level: int = 1) -> InlineKeyboardMarkup:
-    """Клавиатура выбора таинственных возваний"""
     invocations = get_all_invocations(level)
     if not invocations:
         return InlineKeyboardMarkup(inline_keyboard=[
@@ -197,6 +196,7 @@ def create_invocations_keyboard(level: int = 1) -> InlineKeyboardMarkup:
         buttons.append([InlineKeyboardButton(text=f"{emoji} {inv['name']} (ур. {inv['level_required']})",
                                              callback_data=f"inv_{inv['id']}")])
     buttons.append([InlineKeyboardButton(text="➡️ Пропустить", callback_data="inv_skip")])
+    buttons.append([InlineKeyboardButton(text="✅ Продолжить", callback_data="inv_continue")])  # добавлено
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

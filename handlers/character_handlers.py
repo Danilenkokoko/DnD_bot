@@ -426,6 +426,13 @@ async def skip_invocations(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.callback_query(lambda c: c.data == "inv_continue")
+async def continue_invocations(callback: CallbackQuery, state: FSMContext):
+    """Завершение выбора возваний и переход к предыстории"""
+    await go_to_background(callback.message, state)
+    await callback.answer()
+
+
 # =========================================================
 # ПРЕДЫСТОРИЯ
 # =========================================================
@@ -702,6 +709,7 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             await state.clear()
             return
 
+        # Сохраняем персонажа
         char_id = CharacterFinalizationService.save_character(char_data)
 
         bg_info = _bg_repo.get_by_name(char_data['background']) if char_data['background'] else None

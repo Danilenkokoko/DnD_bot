@@ -1,0 +1,91 @@
+# .coveragerc
+# Конфигурация для coverage.py
+# Настройка измерения покрытия кода тестами
+
+[run]
+# Источники для анализа покрытия
+source =
+    engine/
+    services/
+    handlers/
+
+# Исключаем из отчёта тестовые файлы
+omit =
+    */tests/*
+    */test_*
+    */__pycache__/*
+    */site-packages/*
+    */migrations/*
+    */venv/*
+    */.venv/*
+    */virtualenv/*
+
+# Включаем измерение ветвлений (branch coverage)
+branch = True
+
+# Параллельный режим (для многопроцессного тестирования)
+parallel = True
+
+# Контекстная информация
+context = test
+
+# Динамический контекст
+dynamic_context = test_function
+
+[report]
+# Исключаем строки, которые не нужно учитывать
+exclude_lines =
+    # Пропустить строки с assert, если они не выполнены
+    pragma: no cover
+
+    # Исключить стандартные конструкции
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+    raise NotImplementedError
+    pass
+
+    # Исключить отладочный код
+    if DEBUG:
+    if logging.DEBUG:
+
+    # Исключить обработку импорта ошибок
+    except ImportError:
+    except ImportError as e:
+    if not _HAS_XXX:
+
+# Пропустить строки с комментарием # pragma: no cover
+exclude_lines = pragma: no cover
+
+# Показывать пропущенные строки
+show_missing = True
+
+# Минимальный порог покрытия (в процентах)
+fail_under = 70
+
+# Игнорировать ошибки импорта
+ignore_errors = True
+
+# Формат отчёта
+precision = 2
+
+[html]
+# Директория для HTML отчёта
+directory = htmlcov
+
+# Включить аннотации
+annotate = True
+
+# Показывать контекст
+show_contexts = True
+
+[xml]
+# Выходной файл для XML отчёта
+output = coverage.xml
+
+[json]
+# Выходной файл для JSON отчёта
+output = coverage.json
+
+# Показывать детали
+show_details = True

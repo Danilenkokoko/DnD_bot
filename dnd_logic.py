@@ -1,85 +1,38 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-dnd_logic.py - D&D 5.5e (2024) Character Logic Module
-Модуль с игровой логикой для создания персонажей
-Все данные берутся из PostgreSQL
-Поддерживает автоматическое распределение характеристик, снаряжения и оружейных приёмов
+dnd_logic.py - D&D 5.5e (2024) Character Logic Module (LEGACY FACADE)
+
+ВНИМАНИЕ: Этот модуль устарел и сохранён только для обратной совместимости.
+Вся новая логика должна использовать:
+- engine/          — чистые игровые механики
+- repositories/    — доступ к данным
+- services/        — бизнес-логику
+
+Все функции этого модуля перенаправляют вызовы в новые модули и выдают
+предупреждение DeprecationWarning.
 """
 
-import psycopg2
-import json
-import os
-import random
+import warnings
 import logging
-from typing import Dict, List, Any, Tuple, Optional
-from dotenv import load_dotenv
+from typing import Dict, List, Any, Optional, Tuple
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Импорты новых модулей
+from engine.hp import calculate_hp_at_level, calculate_modifier as engine_modifier
+from engine.ac import calculate_ac_with_armor as engine_ac, calculate_base_ac
+from engine.proficiency import calculate_proficiency_bonus as engine_prof_bonus
+from engine.stats import BackgroundBonusDistributor, AbilityScores
+from engine.validators import validate_name as engine_validate_name
 
-# Загрузка переменных окружения
-load_dotenv()
+# Репозитории
+from repositories.race_repository import RaceRepository
+from repositories.class_repository import ClassRepository
+from repositories.background_repository import BackgroundRepository
+from repositories.equipment_repository import EquipmentRepository, FightingStyleRepository, InvocationRepository
+from repositories.spell_repository import SpellRepository
+from repositories.character_repository import CharacterRepository
 
-# Конфигурация базы данных
-DB_CONFIG = {
-    "dbname": os.getenv("DB_NAME", "DND_DB"),
-    "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", "").strip(),
-    "host": os.getenv("DB_HOST", "localhost"),
-    "port": int(os.getenv("DB_PORT", 5432))
-}
-
-
-def get_connection():
-    """Создаёт подключение к базе данных"""
-    return psycopg2.connect(**DB_CONFIG)
-
-
-# =========================================================
-# СЛОВАРИ ДЛЯ КАРТИНОК (FALLBACK)
-# =========================================================
-
-RACE_IMAGES_FALLBACK = {
-    "Аасимар": "images/races/aasimar.jpg",
-    "Гном": "images/races/gnom.jpg",
-    "Голиаф": "images/races/goliaf.jpg",
-    "Дампир": "images/races/dampir.jpg",
-    "Дварф": "images/races/dwarf.jpg",
-    "Драконорожденный": "images/races/dragonborn.jpg",
-    "Калаштар": "images/races/kalashtar.jpg",
-    "Кованный": "images/races/kowanniy.jpg",
-    "Кхоравар": "images/races/khorawar.jpg",
-    "Орк": "images/races/ork.jpg",
-    "Полурослик": "images/races/halfman.jpg",
-    "Тифлинг": "images/races/tifling.jpg",
-    "Человек": "images/races/man.jpg",
-    "Ченжлинг": "images/races/changaling.jpg",
-    "Шифтер": "images/races/shifter.jpg",
-    "Эльф": "images/races/elf.jpg"
-}
-
-CLASS_IMAGES_FALLBACK = {
-    "Артефактор": "images/classes/artifactor.jpg",
-    "Бард": "images/classes/bard.jpg",
-    "Варвар": "images/classes/barbarian.jpg",
-    "Воин": "images/classes/fighter.jpg",
-    "Волшебник": "images/classes/wizard.jpg",
-    "Друид": "images/classes/druid.jpg",
-    "Жрец": "images/classes/cleric.jpg",
-    "Колдун": "images/classes/warlock.jpg",
-    "Монах": "images/classes/monk.jpg",
-    "Паладин": "images/classes/paladin.jpg",
-    "Плут": "images/classes/rogue.jpg",
-    "Следопыт": "images/classes/ranger.jpg",
-    "Чародей": "images/classes/sorcerer.jpg"
-}
-
-# =========================================================
-# НАЧАЛЬНЫЕ ХАРАКТЕРИСТИКИ КЛАССОВ
-# =========================================================
-
+# Для стартовых статов (пока оставляем статику)
 CLASS_STARTING_STATS = {
     "Артефактор": {"STR": 10, "DEX": 14, "CON": 13, "INT": 15, "WIS": 12, "CHA": 8},
     "Бард": {"STR": 8, "DEX": 14, "CON": 12, "INT": 13, "WIS": 10, "CHA": 15},
@@ -97,122 +50,74 @@ CLASS_STARTING_STATS = {
     "Чародей": {"STR": 10, "DEX": 13, "CON": 14, "INT": 8, "WIS": 12, "CHA": 15},
 }
 
-# =========================================================
-# КАТЕГОРИИ ЗАКЛИНАНИЙ С ИКОНКАМИ
-# =========================================================
-
-SPELL_CATEGORY_ICONS = {
-    "Урон": "💥",
-    "Защита": "🛡️",
-    "Лечение": "❤️",
-    "Контроль": "🎭",
-    "Утилита": "🧭",
-    "Иллюзии": "🧠",
-    "Природа": "🌿",
-    "Прочее": "⚙️"
-}
+# Инициализация репозиториев (синглтоны)
+_race_repo = RaceRepository()
+_class_repo = ClassRepository()
+_bg_repo = BackgroundRepository()
+_equip_repo = EquipmentRepository()
+_fighting_repo = FightingStyleRepository()
+_inv_repo = InvocationRepository()
+_spell_repo = SpellRepository()
+_char_repo = CharacterRepository()
 
 
-# =========================================================
-# 1. БАЗОВЫЕ РАСЧЁТЫ
-# =========================================================
+def _deprecated(msg: str):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            warnings.warn(msg, DeprecationWarning, stacklevel=2)
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
+
+# ------------------------------------------------------------
+# 1. Базовые расчёты (перенаправление в engine)
+# ------------------------------------------------------------
+@_deprecated("modifier() устарела. Используйте engine.hp.calculate_modifier()")
 def modifier(stat: int) -> int:
-    """
-    Расчёт модификатора характеристики
-    """
-    return (stat - 10) // 2
+    return engine_modifier(stat)
 
 
+@_deprecated("calculate_proficiency_bonus() устарела. Используйте engine.proficiency.calculate_proficiency_bonus()")
 def calculate_proficiency_bonus(level: int) -> int:
-    """
-    Расчёт бонуса мастерства в зависимости от уровня
-    """
-    if level < 1:
-        raise ValueError("Уровень должен быть >= 1")
-    if level <= 4:
-        return 2
-    elif level <= 8:
-        return 3
-    elif level <= 12:
-        return 4
-    elif level <= 16:
-        return 5
-    else:
-        return 6
+    return engine_prof_bonus(level)
 
 
+@_deprecated("calc_hp() устарела. Используйте engine.hp.calculate_hp_at_level()")
 def calc_hp(class_id: int, constitution: int, level: int = 1) -> int:
-    """
-    Расчёт HP персонажа
-    """
+    # Для обратной совместимости получаем hit_die из репозитория по class_id
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT hit_die FROM classes WHERE id = %s", (class_id,))
-            result = cur.fetchone()
-            if not result:
-                raise ValueError(f"Класс с ID {class_id} не найден")
-            hit_die = result[0]
-
-    con_mod = modifier(constitution)
-
-    if level == 1:
-        return hit_die + max(1, con_mod)
-    else:
-        avg_roll = (hit_die // 2) + 1
-        return hit_die + max(1, con_mod) + (level - 1) * (avg_roll + max(1, con_mod))
+            row = cur.fetchone()
+            hit_die = row[0] if row else 8
+    return calculate_hp_at_level(hit_die, constitution, level)
 
 
+@_deprecated("calc_ac_with_armor() устарела. Используйте engine.ac.calculate_ac_with_armor()")
 def calc_ac_with_armor(dexterity: int, armor_name: Optional[str]) -> int:
-    """
-    Расчёт Класса Брони (AC) с учётом брони (щит НЕ учитывается)
-    """
-    dex_mod = modifier(dexterity)
-
-    if not armor_name:
-        return 10 + dex_mod
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT ac_base, ac_modifier FROM armor WHERE name = %s", (armor_name,))
-            result = cur.fetchone()
-            if not result:
-                return 10 + dex_mod
-
-            ac_base, ac_modifier = result
-
-    if ac_modifier == 'dex':
-        ac_base += dex_mod
-    elif ac_modifier == 'dex_max2':
-        ac_base += min(2, dex_mod)
-
-    return ac_base
+    return engine_ac(dexterity, armor_name)
 
 
+@_deprecated("calc_ac() устарела. Используйте engine.ac.calculate_base_ac() или calculate_ac_with_armor()")
 def calc_ac(dexterity: int, armor_type: str = "none") -> int:
-    """
-    Расчёт Класса Брони (AC) - упрощённая версия (без щита)
-    """
+    if armor_type == "none":
+        return calculate_base_ac(dexterity)
+    # fallback – старая логика
     dex_mod = modifier(dexterity)
-
     armor_base = {
-        "none": 10 + dex_mod,
         "light": 11 + dex_mod,
         "medium": 14 + min(2, dex_mod),
         "heavy": 16
-    }
+    }.get(armor_type, 10 + dex_mod)
+    return armor_base
 
-    return armor_base.get(armor_type, 10 + dex_mod)
 
-
-# =========================================================
-# 2. ГЕНЕРАЦИЯ ХАРАКТЕРИСТИК (АВТОМАТИЧЕСКАЯ)
-# =========================================================
-
+# ------------------------------------------------------------
+# 2. Характеристики и бонусы предыстории (перенаправление в engine)
+# ------------------------------------------------------------
 def get_class_starting_stats(class_name: str, variant: Optional[str] = None) -> Dict[str, int]:
-    """
-    Возвращает начальные характеристики класса из CLASS_STARTING_STATS
-    """
+    """Оставлено без изменений – статические данные."""
     key = f"{class_name}_{variant}" if variant else class_name
     if key in CLASS_STARTING_STATS:
         return CLASS_STARTING_STATS[key].copy()
@@ -222,436 +127,106 @@ def get_class_starting_stats(class_name: str, variant: Optional[str] = None) -> 
 
 
 def get_class_primary_stats(class_name: str) -> List[str]:
-    """
-    Возвращает основные характеристики класса
-    """
-    class_primary_map = {
-        "Артефактор": ["INT"],
-        "Бард": ["CHA"],
-        "Варвар": ["STR"],
-        "Воин": ["STR", "DEX"],
-        "Волшебник": ["INT"],
-        "Друид": ["WIS"],
-        "Жрец": ["WIS"],
-        "Колдун": ["CHA"],
-        "Монах": ["DEX", "WIS"],
-        "Паладин": ["STR", "CHA"],
-        "Плут": ["DEX"],
-        "Следопыт": ["DEX", "WIS"],
-        "Чародей": ["CHA"]
-    }
-    return class_primary_map.get(class_name, ["STR"])
+    """Перенаправление в ClassRepository"""
+    return _class_repo.get_primary_stats(class_name)
 
 
+def get_background_characteristics(background_name: str) -> List[str]:
+    """Перенаправление в BackgroundRepository"""
+    return _bg_repo.get_characteristics(background_name)
+
+
+@_deprecated("calculate_final_stats_with_background() устарела. Используйте engine.stats.BackgroundBonusDistributor")
 def calculate_final_stats_with_background(
-    class_name: str, 
-    background_name: str, 
+    class_name: str,
+    background_name: str,
     class_starting_stats: Dict[str, int]
 ) -> Dict[str, int]:
-    """
-    Распределяет бонусы предыстории строго по правилам:
-    
-    Случай 1: primary_stats содержит 1 характеристику
-        - Если primary в background_stats: primary +2, случайная из оставшихся +1, третья +0
-        - Если primary НЕ в background_stats: все три характеристики background +1
-    
-    Случай 2: primary_stats содержит 2 характеристики
-        - Случай A (обе primary в background): все три характеристики background +1
-        - Случай B (ровно одна primary в background): 
-            совпавшая +2, 
-            если вторая primary в background то ей +1, иначе случайной из оставшихся +1
-        - Случай C (ни одной primary в background): все три характеристики background +1
-    
-    Args:
-        class_name: название класса
-        background_name: название предыстории
-        class_starting_stats: начальные характеристики класса
-    
-    Returns:
-        Dict[str, int]: финальные характеристики
-    """
-    import random
-    
-    # Получаем primary характеристики класса
-    primary_stats = get_class_primary_stats(class_name)
-    
-    # Получаем тройку характеристик предыстории
-    bg = get_background_by_name(background_name)
-    if not bg:
-        logger.warning(f"Предыстория {background_name} не найдена, возвращаем начальные статы")
-        return class_starting_stats.copy()
-    
-    background_stats = bg['characteristics']  # List[str] из 3 характеристик
-    
-    # Копируем начальные статы
-    result = class_starting_stats.copy()
-    
-    # Словарь для хранения бонусов (ключ: характеристика, значение: бонус)
-    bonuses = {stat: 0 for stat in background_stats}
-    
-    # =========================================================
-    # СЛУЧАЙ 1: ОДНА primary характеристика
-    # =========================================================
-    if len(primary_stats) == 1:
-        primary = primary_stats[0]
-        
-        if primary in background_stats:
-            # Правило А: primary +2, одна случайная из оставшихся +1
-            bonuses[primary] = 2
-            
-            # Оставшиеся две характеристики
-            remaining = [s for s in background_stats if s != primary]
-            # Случайная из них получает +1
-            chosen = random.choice(remaining)
-            bonuses[chosen] = 1
-            # Третья остаётся 0
-            
-            logger.info(f"[Stats] Правило (1 primary, входит): +2 к {primary}, +1 к {chosen}, 0 к {[s for s in remaining if s != chosen][0]}")
-        else:
-            # Правило Б: все три характеристики background получают +1
-            for stat in background_stats:
-                bonuses[stat] = 1
-            logger.info(f"[Stats] Правило (1 primary, не входит): +1 ко всем {background_stats}")
-    
-    # =========================================================
-    # СЛУЧАЙ 2: ДВЕ primary характеристики
-    # =========================================================
-    elif len(primary_stats) == 2:
-        p1, p2 = primary_stats[0], primary_stats[1]
-        
-        # Проверяем, сколько primary входят в background_stats
-        p1_in = p1 in background_stats
-        p2_in = p2 in background_stats
-        
-        if p1_in and p2_in:
-            # Случай A: обе primary в background → все +1
-            for stat in background_stats:
-                bonuses[stat] = 1
-            logger.info(f"[Stats] Правило (2 primary, обе входят): +1 ко всем {background_stats}")
-        
-        elif p1_in or p2_in:
-            # Случай B: ровно одна primary в background
-            # Определяем, какая совпала
-            matched = p1 if p1_in else p2
-            other_primary = p2 if p1_in else p1
-            
-            bonuses[matched] = 2
-            
-            # Проверяем, входит ли вторая primary в background
-            if other_primary in background_stats:
-                bonuses[other_primary] = 1
-                logger.info(f"[Stats] Правило (2 primary, одна входит): +2 к {matched}, +1 к {other_primary}, 0 к {[s for s in background_stats if s != matched and s != other_primary][0]}")
-            else:
-                # Вторая primary НЕ входит → +1 случайной из оставшихся
-                # Оставшиеся: все background_stats, кроме matched
-                remaining = [s for s in background_stats if s != matched]
-                chosen = random.choice(remaining)
-                bonuses[chosen] = 1
-                logger.info(f"[Stats] Правило (2 primary, одна входит, вторая не входит): +2 к {matched}, +1 к {chosen}, 0 к {[s for s in remaining if s != chosen][0]}")
-        else:
-            # Случай C: ни одной primary в background → все +1
-            for stat in background_stats:
-                bonuses[stat] = 1
-            logger.info(f"[Stats] Правило (2 primary, ни одна не входит): +1 ко всем {background_stats}")
-    
-    else:
-        # На всякий случай (если primary_stats не 1 и не 2)
-        logger.warning(f"[Stats] Нестандартное количество primary_stats: {len(primary_stats)}. Применяем +1 ко всем background_stats")
-        for stat in background_stats:
-            bonuses[stat] = 1
-    
-    # Применяем бонусы к результату
-    for stat, bonus in bonuses.items():
-        result[stat] = result.get(stat, 10) + bonus
-        # Ограничиваем максимум 20
-        result[stat] = min(20, result[stat])
-    
-    # Проверка: сумма бонусов должна быть 3
-    total_bonus = sum(bonuses.values())
-    if total_bonus != 3:
-        logger.warning(f"[Stats] ВНИМАНИЕ: сумма бонусов = {total_bonus}, ожидалось 3. bonuses={bonuses}")
-    
-    logger.info(f"[Stats] Финальные бонусы: {bonuses}")
-    
-    return result
+    primary = get_class_primary_stats(class_name)
+    bg_stats = get_background_characteristics(background_name)
+    base = AbilityScores.from_dict(class_starting_stats)
+    dist = BackgroundBonusDistributor()
+    bonuses = dist.distribute(primary, bg_stats)
+    final = bonuses.apply_to(base)
+    return final.to_str_dict()
 
 
-def get_initial_stats_intelligent(background_name: str, class_name: str, variant: str = None) -> Dict[str, int]:
-    """
-    Получает начальные характеристики с учётом класса и предыстории (упрощённая версия)
-    Используется как fallback, если нет возможности использовать calculate_final_stats_with_background
-    """
-    base_stats = get_class_starting_stats(class_name, variant)
-    return apply_intelligent_background_bonuses(base_stats, background_name, class_name)
-
-
-def apply_intelligent_background_bonuses(stats: Dict[str, int], background_name: str, class_name: str) -> Dict[
-    str, int]:
-    """
-    Умное распределение бонусов характеристик от предыстории с учётом класса
-    (старая версия, оставлена для совместимости)
-    """
-    result = stats.copy()
-    bg = get_background_by_name(background_name)
-    if not bg:
-        return result
-
-    bg_stats_codes = bg['characteristics']
-    class_primary = get_class_primary_stats(class_name)
-
-    matches = [s for s in bg_stats_codes if s in class_primary]
-    bg_stats_codes_filtered = [s for s in bg_stats_codes if s not in matches]
-
-    if len(matches) >= 2:
-        result[matches[0]] += 2
-        result[matches[1]] += 1
-    elif len(matches) == 1:
-        result[matches[0]] += 2
-        if bg_stats_codes_filtered:
-            best = max(bg_stats_codes_filtered, key=lambda s: result.get(s, 0))
-            result[best] += 1
-    else:
-        for stat in bg_stats_codes:
-            result[stat] += 1
-
-    for stat in result:
-        result[stat] = min(20, result[stat])
-
-    return result
-
-
-# =========================================================
-# 3. РАБОТА С РАСАМИ (из БД)
-# =========================================================
-
+# ------------------------------------------------------------
+# 3. Работа с расами (перенаправление в RaceRepository)
+# ------------------------------------------------------------
 def get_all_races() -> List[Dict[str, Any]]:
-    """Возвращает список всех рас"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, name, speed, size, description, image_path FROM races ORDER BY name")
-            columns = ['id', 'name', 'speed', 'size', 'description', 'image_path']
-            return [dict(zip(columns, row)) for row in cur.fetchall()]
+    return _race_repo.get_all()
 
 
 def get_race_list() -> List[str]:
-    """Возвращает список названий рас"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT name FROM races ORDER BY name")
-            return [row[0] for row in cur.fetchall()]
+    return _race_repo.get_all_names()
 
 
 def get_race_by_name(race_name: str) -> Optional[Dict[str, Any]]:
-    """Получает полную информацию о расе по названию"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, name, speed, size, description, image_path
-                FROM races WHERE name = %s
-            """, (race_name,))
-            row = cur.fetchone()
-            if row:
-                return {
-                    'id': row[0],
-                    'name': row[1],
-                    'speed': row[2],
-                    'size': row[3],
-                    'description': row[4] if row[4] else _get_fallback_race_description(race_name),
-                    'image_path': row[5]
-                }
-    return None
-
-
-def _get_fallback_race_description(race_name: str) -> str:
-    """Возвращает fallback описание для расы"""
-    descriptions = {
-        "Аасимар": "Аасимары — это смертные, которые несут в своих душах искру Верхних Планов.",
-        "Гном": "Гномы — миниатюрный народец с большими глазами и заострёнными ушами.",
-        "Голиаф": "Возвышающиеся над большинством народов голиафы — отдалённые потомки великанов.",
-        "Дварф": "Дварфы устойчивы, как горы; они живут около 350 лет.",
-        "Драконорожденный": "Драконорождённые выглядят как бескрылые двуногие драконы.",
-        "Полурослик": "Общины полуросликов бывают самых разных видов.",
-        "Тифлинг": "Тифлинги связаны кровными узами с дьяволом или демоном.",
-        "Человек": "Люди столь же разнообразны, сколь и многочисленны.",
-        "Эльф": "Созданные богом Кореллоном, первые эльфы могли неограниченно менять свой облик.",
-        "Орк": "Орки выносливы, решительны и способны видеть в темноте.",
-        "Калаштар": "Калаштары происходят от союза человечества и духов с плана снов.",
-        "Кованный": "Кованые — механические существа, созданные из дерева и металла.",
-        "Кхоравар": "Кхоравары — потомки союзов людей и эльфов.",
-        "Ченжлинг": "Ченжлинги могут сверхъестественным образом принять любой облик.",
-        "Шифтер": "Шифтеры — гуманоиды с явно заметными животными чертами.",
-        "Дампир": "Дампиры живы, но обладают способностями вампиров."
-    }
-    return descriptions.get(race_name, "Нет описания для этой расы.")
+    return _race_repo.get_by_name(race_name)
 
 
 def get_race_description(race_name: str) -> str:
-    """Возвращает описание расы"""
-    race = get_race_by_name(race_name)
-    if race:
-        return race.get('description', "Нет описания")
-    return _get_fallback_race_description(race_name)
+    race = _race_repo.get_by_name(race_name)
+    return race.get('description', '') if race else ''
 
 
 def get_race_speed(race_name: str) -> int:
-    """Возвращает скорость расы"""
-    race = get_race_by_name(race_name)
-    return race['speed'] if race else 30
+    race = _race_repo.get_by_name(race_name)
+    return race.get('speed', 30) if race else 30
 
 
 def get_race_size(race_name: str) -> str:
-    """Возвращает размер расы"""
-    race = get_race_by_name(race_name)
-    return race['size'] if race else "Средний"
+    race = _race_repo.get_by_name(race_name)
+    return race.get('size', 'Средний') if race else 'Средний'
 
 
 def get_race_image_path(race_name: str) -> Optional[str]:
-    """Возвращает путь к картинке расы"""
-    race = get_race_by_name(race_name)
-    if race and race.get('image_path') and os.path.exists(race.get('image_path')):
-        return race['image_path']
-
-    fallback_path = RACE_IMAGES_FALLBACK.get(race_name)
-    if fallback_path and os.path.exists(fallback_path):
-        return fallback_path
-
-    alt_names = {
-        "Драконорожденный": "dragonborn.jpg",
-        "Полурослик": "halfling.jpg",
-        "Человек": "human.jpg",
-        "Эльф": "elf.jpg",
-        "Дварф": "dwarf.jpg",
-        "Тифлинг": "tiefling.jpg"
-    }
-    if race_name in alt_names:
-        alt_path = f"images/races/{alt_names[race_name]}"
-        if os.path.exists(alt_path):
-            return alt_path
-
-    logger.warning(f"Картинка для расы '{race_name}' не найдена")
-    return None
+    race = _race_repo.get_by_name(race_name)
+    return race.get('image_path') if race else None
 
 
 def get_race_image_exists(race_name: str) -> bool:
-    """Проверяет, существует ли файл картинки расы"""
-    image_path = get_race_image_path(race_name)
-    return image_path is not None and os.path.exists(image_path)
+    path = get_race_image_path(race_name)
+    return path is not None and os.path.exists(path)
 
 
 def has_subraces(race_name: str) -> bool:
-    """Проверяет, есть ли у расы подрасы"""
-    race = get_race_by_name(race_name)
-    if not race:
-        return False
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM subraces WHERE race_id = %s", (race['id'],))
-            return cur.fetchone()[0] > 0
+    return _race_repo.has_subraces(race_name)
 
 
 def get_subraces(race_name: str) -> List[str]:
-    """Возвращает список подрас для указанной расы"""
-    race = get_race_by_name(race_name)
-    if not race:
-        return []
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT name FROM subraces WHERE race_id = %s ORDER BY name", (race['id'],))
-            return [row[0] for row in cur.fetchall()]
-
-
-def get_subrace_info(race_name: str, subrace_name: str) -> Optional[Dict[str, Any]]:
-    """Возвращает полную информацию о подрасе"""
-    race = get_race_by_name(race_name)
-    if not race:
-        return None
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, name, trait, description, extra_speed, extra_traits
-                FROM subraces 
-                WHERE race_id = %s AND name = %s
-            """, (race['id'], subrace_name))
-            row = cur.fetchone()
-            if row:
-                return {
-                    'id': row[0], 'name': row[1], 'trait': row[2] if row[2] else "",
-                    ' description': row[3] if row[3] else _get_fallback_subrace_description(subrace_name),
-                    'extra_speed': row[4] if row[4] else 0, 'extra_traits': row[5] if row[5] else []
-                }
-    return None
-
-
-def _get_fallback_subrace_description(subrace_name: str) -> str:
-    """Возвращает fallback описание для подрасы"""
-    descriptions = {
-        "Протектор": "Протекторы используют силу света для защиты союзников.",
-        "Разоритель": "Разорители черпают силу из разрушения и несут возмездие.",
-        "Несущий скорбь": "Несущие скорбь связаны с некротической энергией.",
-        "Лесной гном": "Лесные гномы умеют общаться с животными.",
-        "Скальный гном": "Скальные гномы искусны в работе с механизмами.",
-        "Горный дварф": "Горные дварфы сильны и выносливы.",
-        "Холмовой дварф": "Холмовые дварфы мудры и жизнерадостны.",
-        "Высший эльф": "Высшие эльфы искусны в магии.",
-        "Лесной эльф": "Лесные эльфы быстры и скрытны.",
-        "Тёмный эльф (Дроу)": "Дроу живут в подземельях, чувствительны к свету.",
-        "Легконогий": "Легконогие полурослики умеют прятаться.",
-        "Крепкостоп": "Крепкостопы выносливы и стойки к ядам.",
-        "Медвежий": "Медвежьи шифтеры получают временные хиты.",
-        "Кошачий": "Кошачьи шифтеры получают бонус к скорости.",
-        "Крысиный": "Крысиные шифтеры получают бонус к интеллекту.",
-        "Волчий": "Волчьи шифтеры получают бонус к восприятию.",
-        "Облачный великан": "Может телепортироваться на короткое расстояние.",
-        "Огненный великан": "Добавляет огненный урон к атакам.",
-        "Ледяной великан": "Наносит холод и замедляет цель.",
-        "Холмовой великан": "Может опрокинуть врага.",
-        "Каменный великан": "Получает сопротивление к урону.",
-        "Штормовой великан": "При попадании возвращает урон молнией/громом.",
-        "Инфернальный": "Усиливает огненные атаки.",
-        "Бездны": "Добавляет ядовитый урон и контроль.",
-        "Хтонический": "Наносит некротический урон и ослабляет."
-    }
-    return descriptions.get(subrace_name, "Нет описания для этой подрасы.")
+    return _race_repo.get_subrace_names(race_name)
 
 
 def get_subrace_description(race_name: str, subrace_name: str) -> str:
-    """Возвращает описание подрасы"""
-    subrace = get_subrace_info(race_name, subrace_name)
-    if subrace:
-        if subrace.get('description'):
-            return subrace['description']
-        elif subrace.get('trait'):
-            return f"Особенность: {subrace['trait']}"
-    return "Нет описания для этой подрасы."
+    sub = _race_repo.get_subrace_by_name(race_name, subrace_name)
+    return sub.get('description', '') if sub else ''
 
 
 def get_subrace_trait(race_name: str, subrace_name: str) -> str:
-    """Возвращает особенность подрасы"""
-    subrace = get_subrace_info(race_name, subrace_name)
-    return subrace['trait'] if subrace else ""
+    sub = _race_repo.get_subrace_by_name(race_name, subrace_name)
+    return sub.get('trait', '') if sub else ''
 
 
 def get_race_info(race_name: str) -> Dict[str, Any]:
-    """Возвращает полную информацию о расе (для совместимости)"""
-    race = get_race_by_name(race_name)
+    race = _race_repo.get_by_name(race_name)
     if not race:
         return {}
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT name, trait, description FROM subraces WHERE race_id = %s", (race['id'],))
-            subraces = {row[0]: {'trait': row[1], 'description': row[2]} for row in cur.fetchall()}
-
-    return {'name': race_name, 'speed': race['speed'], 'size': race['size'],
-            'description': race['description'], 'traits': [], 'subraces': subraces}
+    subraces = _race_repo.get_subraces(race_name)
+    return {
+        'name': race_name,
+        'speed': race.get('speed', 30),
+        'size': race.get('size', 'Средний'),
+        'description': race.get('description', ''),
+        'traits': [],
+        'subraces': {s['name']: {'trait': s.get('trait', ''), 'description': s.get('description', '')} for s in subraces}
+    }
 
 
 def get_race_traits_list(race: str, subrace: Optional[str] = None) -> List[str]:
-    """Возвращает особенности расы"""
     traits = []
+    # fallback для совместимости (точные данные лучше брать из БД)
     race_traits_map = {
         "Аасимар": ["Тёмное зрение", "Небесное наследие", "Исцеляющие руки", "Светоносный"],
         "Гном": ["Тёмное зрение", "Гномья хитрость", "Искусный ремесленник"],
@@ -664,179 +239,72 @@ def get_race_traits_list(race: str, subrace: Optional[str] = None) -> List[str]:
         "Человек": ["Универсальность человечества"],
     }
     traits.extend(race_traits_map.get(race, []))
-
     if subrace:
         sub_trait = get_subrace_trait(race, subrace)
         if sub_trait:
             traits.append(sub_trait)
-
     return traits
 
 
-# =========================================================
-# 4. РАБОТА С КЛАССАМИ (из БД)
-# =========================================================
-
+# ------------------------------------------------------------
+# 4. Работа с классами (перенаправление в ClassRepository)
+# ------------------------------------------------------------
 def get_all_classes() -> List[Dict[str, Any]]:
-    """Возвращает список всех классов"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, name, hit_die, primary_stats, saving_throws, 
-                       skill_choices, description, image_path, is_spellcaster, spellcasting_ability,
-                       cantrips_count, spells_count_level1, masteries_count
-                FROM classes ORDER BY name
-            """)
-            columns = ['id', 'name', 'hit_die', 'primary_stats', 'saving_throws',
-                       'skill_choices', 'description', 'image_path', 'is_spellcaster', 'spellcasting_ability',
-                       'cantrips_count', 'spells_count_level1', 'masteries_count']
-            return [dict(zip(columns, row)) for row in cur.fetchall()]
+    return _class_repo.get_all()
 
 
 def get_class_list() -> List[str]:
-    """Возвращает список названий классов"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT name FROM classes ORDER BY name")
-            return [row[0] for row in cur.fetchall()]
+    return _class_repo.get_all_names()
 
 
 def get_class_by_name(class_name: str) -> Optional[Dict[str, Any]]:
-    """Получает полную информацию о классе по названию"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, name, hit_die, primary_stats, saving_throws, 
-                       skill_choices, description, image_path, is_spellcaster, spellcasting_ability,
-                       cantrips_count, spells_count_level1, masteries_count
-                FROM classes WHERE name = %s
-            """, (class_name,))
-            row = cur.fetchone()
-            if row:
-                primary_stats = row[3]
-                if isinstance(primary_stats, str):
-                    primary_stats = json.loads(primary_stats)
-                saving_throws = row[4]
-                if isinstance(saving_throws, str):
-                    saving_throws = json.loads(saving_throws)
-
-                return {
-                    'id': row[0], 'name': row[1], 'hit_die': row[2],
-                    'primary_stats': primary_stats,
-                    'saving_throws': saving_throws,
-                    'skill_choices': row[5],
-                    'description': row[6] if row[6] else _get_fallback_class_description(class_name),
-                    'image_path': row[7], 'is_spellcaster': row[8], 'spellcasting_ability': row[9],
-                    'cantrips_count': row[10] if row[10] else 0,
-                    'spells_count_level1': row[11] if row[11] else 0,
-                    'masteries_count': row[12] if row[12] else 0
-                }
-    return None
+    return _class_repo.get_by_name(class_name)
 
 
 def get_class_spell_counts(class_name: str) -> Dict[str, int]:
-    """Возвращает количество заговоров и заклинаний для класса"""
-    class_data = get_class_by_name(class_name)
-    if class_data:
-        return {
-            'cantrips': class_data.get('cantrips_count', 0),
-            'level1': class_data.get('spells_count_level1', 0)
-        }
-    return {'cantrips': 0, 'level1': 0}
+    return _class_repo.get_spell_counts(class_name)
 
 
 def get_class_masteries_count(class_name: str) -> int:
-    """Возвращает количество оружейных приёмов для класса"""
-    class_data = get_class_by_name(class_name)
-    return class_data.get('masteries_count', 0) if class_data else 0
-
-
-def _get_fallback_class_description(class_name: str) -> str:
-    """Возвращает fallback описание для класса"""
-    descriptions = {
-        "Артефактор": "Мастера раскрытия магии в обычных вещах, величайшие выдумщики.",
-        "Бард": "Бард плетёт магию из слов и музыки, вдохновляя союзников.",
-        "Варвар": "Варваров объединяет их ярость — необузданный и бездумный гнев.",
-        "Воин": "Воины мастерски владеют оружием, доспехами и приёмами боя.",
-        "Волшебник": "Волшебники — адепты высшей магии, способные создавать заклинания.",
-        "Друид": "Друиды воплощают незыблемость, приспособляемость и гнев природы.",
-        "Жрец": "Жрецы являются посредниками между миром смертных и богами.",
-        "Колдун": "Колдуны — искатели знаний, через договор открывающие магию.",
-        "Монах": "Монахи управляют энергией, текущей в их телах.",
-        "Паладин": "Паладинов объединяет их клятва противостоять силам зла.",
-        "Плут": "Плуты полагаются на мастерство, скрытность и уязвимые места врагов.",
-        "Следопыт": "Следопыты несут свой бесконечный дозор вдали от городов.",
-        "Чародей": "Чародеи являются носителями магии, дарованной им при рождении."
-    }
-    return descriptions.get(class_name, "Нет описания для этого класса.")
+    return _class_repo.get_masteries_count(class_name)
 
 
 def get_class_description(class_name: str) -> str:
-    """Возвращает описание класса"""
-    class_data = get_class_by_name(class_name)
-    if class_data:
-        return class_data.get('description', "Нет описания")
-    return _get_fallback_class_description(class_name)
+    data = _class_repo.get_by_name(class_name)
+    return data.get('description', '') if data else ''
 
 
 def get_class_image_path(class_name: str) -> Optional[str]:
-    """Возвращает путь к картинке класса"""
-    class_data = get_class_by_name(class_name)
-    if class_data and class_data.get('image_path') and os.path.exists(class_data.get('image_path')):
-        return class_data['image_path']
-
-    fallback_path = CLASS_IMAGES_FALLBACK.get(class_name)
-    if fallback_path and os.path.exists(fallback_path):
-        return fallback_path
-
-    alt_names = {
-        "Артефактор": "artificer.jpg",
-        "Волшебник": "wizard.jpg",
-        "Чародей": "sorcerer.jpg",
-        "Следопыт": "ranger.jpg"
-    }
-    if class_name in alt_names:
-        alt_path = f"images/classes/{alt_names[class_name]}"
-        if os.path.exists(alt_path):
-            return alt_path
-
-    logger.warning(f"Картинка для класса '{class_name}' не найдена")
-    return None
+    data = _class_repo.get_by_name(class_name)
+    return data.get('image_path') if data else None
 
 
 def get_class_image_exists(class_name: str) -> bool:
-    """Проверяет, существует ли файл картинки класса"""
-    image_path = get_class_image_path(class_name)
-    return image_path is not None and os.path.exists(image_path)
+    path = get_class_image_path(class_name)
+    return path is not None and os.path.exists(path)
 
 
 def get_class_info(class_name: str) -> Dict[str, Any]:
-    """Возвращает информацию о классе (для совместимости)"""
-    class_data = get_class_by_name(class_name)
-    if not class_data:
+    data = _class_repo.get_by_name(class_name)
+    if not data:
         return {}
-
     return {
-        'hit_die': class_data['hit_die'],
-        'primary_stats': class_data['primary_stats'],
-        'saving_throws': class_data['saving_throws'],
-        'skill_choices': class_data['skill_choices'],
-        'description': class_data['description'],
-        'spellcasting': class_data['is_spellcaster'],
-        'spellcasting_ability': class_data['spellcasting_ability']
+        'hit_die': data.get('hit_die', 8),
+        'primary_stats': data.get('primary_stats', []),
+        'saving_throws': data.get('saving_throws', []),
+        'skill_choices': data.get('skill_choices', 2),
+        'description': data.get('description', ''),
+        'spellcasting': data.get('is_spellcaster', False),
+        'spellcasting_ability': data.get('spellcasting_ability')
     }
 
 
 def get_class_features(class_name: str, level: int = 1) -> List[str]:
-    """Возвращает особенности класса на уровне"""
-    class_data = get_class_by_name(class_name)
-    if not class_data:
-        return []
-
+    # fallback – простые особенности
     features = []
-    if class_data['is_spellcaster']:
+    data = _class_repo.get_by_name(class_name)
+    if data and data.get('is_spellcaster'):
         features.append("Заклинания")
-
     class_specific = {
         "Бард": ["Вдохновение барда"], "Варвар": ["Ярость", "Бездоспешная защита"],
         "Воин": ["Второе дыхание", "Боевой стиль"], "Волшебник": ["Книга заклинаний", "Восстановление магии"],
@@ -848,543 +316,142 @@ def get_class_features(class_name: str, level: int = 1) -> List[str]:
         "Следопыт": ["Избранный враг", "Следопыт"],
         "Чародей": ["Магия крови"], "Артефактор": ["Магия артефактов", "Владение инструментами"]
     }
+    features.extend(class_specific.get(class_name, []))
+    return features
 
-    return features + class_specific.get(class_name, [])
-
-
-# =========================================================
-# 5. РАБОТА С ПОДКЛАССАМИ
-# =========================================================
 
 def get_subclasses_for_class(class_name: str, level: int = 1) -> List[Dict[str, Any]]:
-    """Возвращает подклассы для указанного класса"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
-            result = cur.fetchone()
-            if not result:
-                return []
-            class_id = result[0]
-
-            cur.execute("""
-                SELECT id, name, level_acquired, description, features
-                FROM subclasses 
-                WHERE class_id = %s AND level_acquired <= %s
-                ORDER BY level_acquired, name
-            """, (class_id, level))
-            columns = ['id', 'name', 'level_acquired', 'description', 'features']
-            return [dict(zip(columns, row)) for row in cur.fetchall()]
+    return _class_repo.get_subclasses(class_name, level)
 
 
-# =========================================================
-# 6. РАБОТА С ПРЕДЫСТОРИЯМИ
-# =========================================================
-
+# ------------------------------------------------------------
+# 5. Работа с предысториями (перенаправление в BackgroundRepository)
+# ------------------------------------------------------------
 def get_all_backgrounds() -> List[Dict[str, Any]]:
-    """Возвращает список всех предысторий"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, name, characteristic1, characteristic2, characteristic3,
-                       trait, skills, tools, equipment_a, equipment_b, description
-                FROM backgrounds ORDER BY name
-            """)
-            columns = ['id', 'name', 'characteristic1', 'characteristic2', 'characteristic3',
-                       'trait', 'skills', 'tools', 'equipment_a', 'equipment_b', 'description']
-            return [dict(zip(columns, row)) for row in cur.fetchall()]
+    return _bg_repo.get_all()
 
 
 def get_background_list() -> List[str]:
-    """Возвращает список названий предысторий"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT name FROM backgrounds ORDER BY name")
-            return [row[0] for row in cur.fetchall()]
+    return _bg_repo.get_all_names()
 
 
 def get_background_by_name(background_name: str) -> Optional[Dict[str, Any]]:
-    """Получает информацию о предыстории по названию"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, name, characteristic1, characteristic2, characteristic3,
-                       trait, skills, tools, equipment_a, equipment_b, description
-                FROM backgrounds WHERE name = %s
-            """, (background_name,))
-            row = cur.fetchone()
-            if row:
-                skills = row[6]
-                if isinstance(skills, str):
-                    try:
-                        skills = json.loads(skills)
-                    except:
-                        skills = []
-                elif skills is None:
-                    skills = []
-
-                char1 = row[2] if row[2] else "Ловкость"
-                char2 = row[3] if row[3] else "Ловкость"
-                char3 = row[4] if row[4] else "Ловкость"
-
-                return {
-                    'id': row[0],
-                    'name': row[1],
-                    'characteristics': [char1, char2, char3],
-                    'trait': row[5] if row[5] else "Нет",
-                    'skills': skills,
-                    'tools': row[7] if row[7] else "Нет",
-                    'equipment_a': row[8] if row[8] else "Нет описания",
-                    'equipment_b': row[9] if row[9] else "Нет описания",
-                    'description': row[10] if row[10] else f"Предыстория {background_name}"
-                }
-    return None
+    return _bg_repo.get_by_name(background_name)
 
 
 def get_background_data(background_name: str) -> Dict[str, Any]:
-    """Возвращает данные предыстории (для совместимости)"""
-    bg = get_background_by_name(background_name)
-    if not bg:
-        return {
-            'characteristics': ["Ловкость", "Ловкость", "Ловкость"],
-            'trait': "Нет",
-            'skills': [],
-            'tools': "Нет",
-            'equipment_a': "Нет описания",
-            'equipment_b': "Нет описания",
-            'description': f"Предыстория {background_name} не найдена"
-        }
-
-    return {
-        'characteristics': bg['characteristics'],
-        'trait': bg['trait'],
-        'skills': bg['skills'],
-        'tools': bg['tools'],
-        'equipment_a': bg['equipment_a'],
-        'equipment_b': bg['equipment_b'],
-        'description': bg['description']
-    }
-
-
-def get_background_characteristics(background_name: str) -> List[str]:
-    """Возвращает бонусы к характеристикам от предыстории"""
-    bg = get_background_by_name(background_name)
-    if bg:
-        return bg['characteristics']
-    return ["Ловкость", "Ловкость", "Ловкость"]
+    bg = _bg_repo.get_by_name(background_name)
+    return bg if bg else {}
 
 
 def get_background_trait(background_name: str) -> str:
-    """Возвращает черту предыстории"""
-    bg = get_background_by_name(background_name)
-    return bg['trait'] if bg else "Нет"
+    return _bg_repo.get_trait(background_name)
 
 
 def get_background_skills(background_name: str) -> List[str]:
-    """Возвращает навыки от предыстории"""
-    bg = get_background_by_name(background_name)
-    return bg['skills'] if bg else []
+    return _bg_repo.get_skills(background_name)
 
 
 def get_background_tools(background_name: str) -> str:
-    """Возвращает инструменты от предыстории"""
-    bg = get_background_by_name(background_name)
-    return bg['tools'] if bg else "Нет"
+    return _bg_repo.get_tools(background_name)
 
 
 def get_background_description(background_name: str) -> str:
-    """Возвращает описание предыстории"""
-    bg = get_background_by_name(background_name)
-    return bg['description'] if bg else ""
+    return _bg_repo.get_description(background_name)
 
 
 def get_equipment_choice(background_name: str, choice: str = "A") -> str:
-    """Возвращает снаряжение предыстории по выбору А или Б"""
-    bg = get_background_by_name(background_name)
-    if not bg:
-        return ""
-    return bg['equipment_a'] if choice.upper() == "A" else bg['equipment_b']
+    return _bg_repo.get_equipment_choice(background_name, choice)
 
 
-# =========================================================
-# 7. РАБОТА СО СНАРЯЖЕНИЕМ КЛАССОВ И БРОНЁЙ
-# =========================================================
-
+# ------------------------------------------------------------
+# 6. Снаряжение, оружие, броня (перенаправление в EquipmentRepository)
+# ------------------------------------------------------------
 def get_class_equipment(class_name: str, choice: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Получает снаряжение для класса"""
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
-                class_result = cur.fetchone()
-                if not class_result:
-                    return []
-                class_id = class_result[0]
-
-                if choice:
-                    cur.execute("""
-                        SELECT class_id, choice, armor, weapon, secondary_weapon, other_items, coins
-                        FROM class_equipment 
-                        WHERE class_id = %s AND choice = %s
-                    """, (class_id, choice))
-                else:
-                    cur.execute("""
-                        SELECT class_id, choice, armor, weapon, secondary_weapon, other_items, coins
-                        FROM class_equipment 
-                        WHERE class_id = %s
-                        ORDER BY choice
-                    """, (class_id,))
-                columns = ['class_id', 'choice', 'armor', 'weapon', 'secondary_weapon', 'other_items', 'coins']
-                return [dict(zip(columns, row)) for row in cur.fetchall()]
-    except Exception as e:
-        logger.warning(f"Не удалось загрузить снаряжение для класса {class_name}: {e}")
-        return []
+    return _equip_repo.get_class_equipment(class_name, choice)
 
 
 def get_armor_by_name(armor_name: str) -> Optional[Dict[str, Any]]:
-    """Получает броню по названию"""
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT id, name, ac_base, ac_modifier FROM armor WHERE name = %s", (armor_name,))
-                row = cur.fetchone()
-                if row:
-                    return {'id': row[0], 'name': row[1], 'ac_base': row[2], 'ac_modifier': row[3]}
-                return None
-    except Exception as e:
-        logger.warning(f"Не удалось загрузить броню {armor_name}: {e}")
-        return None
+    return _equip_repo.get_armor_by_name(armor_name)
 
-
-# =========================================================
-# 8. РАБОТА С ОРУЖИЕМ И ПРИЁМАМИ (ОБНОВЛЕНА)
-# =========================================================
 
 def get_weapon_by_name(weapon_name: str) -> Optional[Dict[str, Any]]:
-    """Получает оружие по названию"""
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT id, name, category, damage_dice, damage_type, properties, 
-                           suitable_masteries, detailed_masteries 
-                    FROM weapons WHERE name = %s
-                """, (weapon_name,))
-                row = cur.fetchone()
-                if row:
-                    return {
-                        'id': row[0], 'name': row[1], 'category': row[2],
-                        'damage_dice': row[3], 'damage_type': row[4],
-                        'properties': row[5] if isinstance(row[5], list) else json.loads(row[5]),
-                        'suitable_masteries': row[6] if isinstance(row[6], list) else json.loads(row[6]),
-                        'detailed_masteries': row[7] if isinstance(row[7], list) else json.loads(row[7])
-                    }
-                return None
-    except Exception as e:
-        logger.warning(f"Не удалось загрузить оружие {weapon_name}: {e}")
-        return None
+    return _equip_repo.get_weapon_by_name(weapon_name)
 
 
 def get_detailed_masteries_for_weapon(weapon_name: str) -> List[Dict[str, Any]]:
-    """Возвращает детальные оружейные приёмы для указанного оружия"""
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT detailed_masteries FROM weapons WHERE name = %s", (weapon_name,))
-                result = cur.fetchone()
-                if result and result[0]:
-                    if isinstance(result[0], list):
-                        return result[0]
-                    try:
-                        return json.loads(result[0])
-                    except:
-                        return []
-                return []
-    except Exception as e:
-        logger.warning(f"Не удалось загрузить детальные приёмы для оружия {weapon_name}: {e}")
-        return []
+    return _equip_repo.get_detailed_masteries_for_weapon(weapon_name)
 
 
 def auto_assign_masteries(weapon_name: str, class_name: str) -> List[str]:
-    """
-    Автоматически выбирает оружейные приёмы для оружия
-    Количество зависит от класса (берётся из БД):
-    - Воин: 3
-    - Варвар, Паладин, Следопыт: 2
-    - Плут: 1
-    - Остальные: 0
-    """
-    # Получаем количество приёмов из БД
-    masteries_count = get_class_masteries_count(class_name)
-
-    if masteries_count == 0:
-        return []
-
-    # Получаем детальные приёмы для оружия
-    masteries = get_detailed_masteries_for_weapon(weapon_name)
-
-    if not masteries:
-        return []
-
-    # Возвращаем нужное количество
-    if len(masteries) <= masteries_count:
-        return [m['name'] for m in masteries]
-
-    # Иначе выбираем оптимальные (помеченные как optimal)
-    optimal = [m for m in masteries if m.get('optimal', False)]
-
-    if len(optimal) >= masteries_count:
-        selected = [m['name'] for m in optimal[:masteries_count]]
-    else:
-        selected = [m['name'] for m in optimal]
-        remaining = [m for m in masteries if m not in optimal]
-        needed = masteries_count - len(selected)
-        if remaining and needed > 0:
-            random.shuffle(remaining)
-            selected += [m['name'] for m in remaining[:needed]]
-
-    logger.info(f"[Masteries] {class_name} выбрал {len(selected)} приём(ов) для {weapon_name}: {selected}")
-    return selected
+    return _equip_repo.auto_assign_masteries(weapon_name, class_name)
 
 
 def get_all_weapon_masteries() -> List[Dict[str, Any]]:
-    """Возвращает список всех базовых оружейных приёмов"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, name, trigger_condition, effect, weapons FROM weapon_masteries ORDER BY name")
-            columns = ['id', 'name', 'trigger_condition', 'effect', 'weapons']
-            return [dict(zip(columns, row)) for row in cur.fetchall()]
+    return _equip_repo.get_all_weapon_masteries()
 
 
-# =========================================================
-# 9. РАБОТА С БОЕВЫМИ СТИЛЯМИ
-# =========================================================
-
+# ------------------------------------------------------------
+# 7. Боевые стили
+# ------------------------------------------------------------
 def get_all_fighting_styles() -> List[Dict[str, Any]]:
-    """Возвращает список всех боевых стилей"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, name, description FROM fighting_styles ORDER BY name")
-            columns = ['id', 'name', 'description']
-            return [dict(zip(columns, row)) for row in cur.fetchall()]
+    return _fighting_repo.get_all()
 
 
 def get_fighting_styles_for_class(class_name: str) -> List[Dict[str, Any]]:
-    """Возвращает боевые стили, доступные для класса"""
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
-                class_result = cur.fetchone()
-                if not class_result:
-                    return []
-                class_id = class_result[0]
-
-                cur.execute("""
-                    SELECT fs.id, fs.name, fs.description
-                    FROM fighting_styles fs
-                    JOIN class_fighting_styles cfs ON fs.id = cfs.style_id
-                    WHERE cfs.class_id = %s
-                    ORDER BY fs.name
-                """, (class_id,))
-                columns = ['id', 'name', 'description']
-                return [dict(zip(columns, row)) for row in cur.fetchall()]
-    except Exception as e:
-        logger.warning(f"Не удалось загрузить боевые стили для класса {class_name}: {e}")
-        return []
+    return _fighting_repo.get_for_class(class_name)
 
 
 def get_available_fighting_styles(class_name: str, weapon_type: Optional[str] = None) -> List[Dict[str, Any]]:
-    """
-    Возвращает доступные боевые стили для класса с учётом типа оружия
-    """
-    styles = get_fighting_styles_for_class(class_name)
-
-    if not weapon_type:
-        return styles
-
-    weapon_type_map = {
-        "melee": ["melee"],
-        "ranged": ["ranged"],
-        "light": ["light", "melee"],
-        "heavy": ["heavy", "two_handed"],
-        "thrown": ["thrown", "ranged"],
-        "unarmed": ["unarmed"]
-    }
-
-    compatible_types = weapon_type_map.get(weapon_type, ["any"])
-
-    style_weapon_map = {
-        "Дуэлянт": ["melee"],
-        "Защита": ["any"],
-        "Оборона": ["any"],
-        "Перехват": ["any"],
-        "Сражение без оружия": ["unarmed"],
-        "Сражение большим оружием": ["heavy", "two_handed"],
-        "Сражение вслепую": ["any"],
-        "Сражение двумя оружиями": ["light"],
-        "Сражение метательным оружием": ["thrown"],
-        "Стрельба": ["ranged"]
-    }
-
-    return [
-        style for style in styles
-        if "any" in style_weapon_map.get(style['name'], ["any"]) or
-           any(t in compatible_types for t in style_weapon_map.get(style['name'], []))
-    ]
+    return _fighting_repo.get_available_for_class_with_weapon(class_name, weapon_type)
 
 
-# =========================================================
-# 10. РАБОТА С ВОЗВАНИЯМИ
-# =========================================================
-
+# ------------------------------------------------------------
+# 8. Возвания
+# ------------------------------------------------------------
 def get_all_invocations(level: int = 1) -> List[Dict[str, Any]]:
-    """Возвращает список доступных возваний для колдуна"""
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, name, level_required, effect, requires_pact_boon, pact_boon_type
-                FROM invocations 
-                WHERE level_required <= %s
-                ORDER BY level_required, name
-            """, (level,))
-            columns = ['id', 'name', 'level_required', 'effect', 'requires_pact_boon', 'pact_boon_type']
-            return [dict(zip(columns, row)) for row in cur.fetchall()]
+    return _inv_repo.get_all(level)
 
 
-# =========================================================
-# 11. РАБОТА С ЗАКЛИНАНИЯМИ
-# =========================================================
-
+# ------------------------------------------------------------
+# 9. Заклинания
+# ------------------------------------------------------------
 def get_spells_for_class(class_name: str, level: int = 1, is_cantrip: bool = None) -> List[Dict[str, Any]]:
-    """Возвращает заклинания для указанного класса"""
-    class_data = get_class_by_name(class_name)
-    if not class_data:
-        return []
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            query = """
-                SELECT s.id, s.name, s.level, s.is_cantrip, s.description, s.school, s.category
-                FROM spells s
-                JOIN class_spells cs ON s.id = cs.spell_id
-                WHERE cs.class_id = %s AND cs.is_available = TRUE
-            """
-            params = [class_data['id']]
-
-            if is_cantrip is not None:
-                query += " AND s.is_cantrip = %s"
-                params.append(is_cantrip)
-
-            if not is_cantrip:
-                query += " AND s.level <= %s"
-                params.append(level)
-
-            query += " ORDER BY s.level, s.name"
-
-            cur.execute(query, params)
-            columns = ['id', 'name', 'level', 'is_cantrip', 'description', 'school', 'category']
-            return [dict(zip(columns, row)) for row in cur.fetchall()]
+    return _spell_repo.get_for_class(class_name, level, is_cantrip)
 
 
 def get_spells_grouped_by_category(class_name: str, is_cantrip: bool = True) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    Возвращает заклинания для класса, сгруппированные по категориям
-    """
-    spells = get_spells_for_class(class_name, is_cantrip=is_cantrip)
-
-    result = {}
-    for spell in spells:
-        category = spell.get('category', 'Прочее')
-        if category not in result:
-            result[category] = []
-        result[category].append(spell)
-
-    # Сортируем категории в нужном порядке
-    category_order = ["Урон", "Защита", "Лечение", "Контроль", "Утилита", "Иллюзии", "Природа", "Прочее"]
-    sorted_result = {}
-    for cat in category_order:
-        if cat in result:
-            sorted_result[cat] = result[cat]
-    for cat in result:
-        if cat not in sorted_result:
-            sorted_result[cat] = result[cat]
-
-    return sorted_result
+    return _spell_repo.get_categories_for_class(class_name, is_cantrip)
 
 
 def get_cantrips_for_class(class_name: str) -> List[Dict[str, Any]]:
-    """Возвращает заговоры для указанного класса"""
-    return get_spells_for_class(class_name, is_cantrip=True)
+    return _spell_repo.get_cantrips_for_class(class_name)
 
 
 def get_level1_spells_for_class(class_name: str) -> List[Dict[str, Any]]:
-    """Возвращает заклинания 1 уровня для указанного класса"""
-    return get_spells_for_class(class_name, level=1, is_cantrip=False)
+    return _spell_repo.get_level1_spells_for_class(class_name)
 
 
 def get_cantrips_for_class_with_details(class_name: str) -> List[Dict[str, Any]]:
-    """Возвращает все доступные заговоры для класса с деталями"""
-    return get_spells_for_class(class_name, is_cantrip=True)
+    return get_cantrips_for_class(class_name)
 
 
 def get_level1_spells_for_class_with_details(class_name: str) -> List[Dict[str, Any]]:
-    """Возвращает все доступные заклинания 1 уровня для класса с деталями"""
-    return get_spells_for_class(class_name, level=1, is_cantrip=False)
+    return get_level1_spells_for_class(class_name)
 
 
 def get_recommended_spells(class_name: str) -> Dict[str, List[Dict[str, Any]]]:
-    """Возвращает рекомендованные заклинания для класса"""
-    result = {"cantrips": [], "level1": []}
-
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT id FROM classes WHERE name = %s", (class_name,))
-                class_result = cur.fetchone()
-                if not class_result:
-                    return result
-                class_id = class_result[0]
-
-                cur.execute("""
-                    SELECT s.id, s.name, s.level, s.is_cantrip, s.description
-                    FROM spells s
-                    JOIN recommended_spells rs ON s.id = rs.spell_id
-                    WHERE rs.class_id = %s
-                    ORDER BY rs.priority, s.name
-                """, (class_id,))
-
-                spells = cur.fetchall()
-                for spell in spells:
-                    if spell[3]:
-                        result["cantrips"].append({'id': spell[0], 'name': spell[1], 'level': spell[2],
-                                                   'is_cantrip': spell[3], 'description': spell[4]})
-                    else:
-                        result["level1"].append({'id': spell[0], 'name': spell[1], 'level': spell[2],
-                                                 'is_cantrip': spell[3], 'description': spell[4]})
-
-                return result
-    except Exception as e:
-        logger.warning(f"Не удалось загрузить рекомендованные заклинания для {class_name}: {e}")
-        return result
+    return _spell_repo.get_recommended_for_class(class_name)
 
 
-# =========================================================
-# 12. ВАЛИДАЦИЯ
-# =========================================================
-
+# ------------------------------------------------------------
+# 10. Валидация
+# ------------------------------------------------------------
 def validate_name(name: str) -> Tuple[bool, str]:
-    """Проверяет имя персонажа"""
-    if not name or len(name.strip()) == 0:
-        return False, "❌ Имя не может быть пустым"
-    if len(name) > 50:
-        return False, "❌ Имя слишком длинное (максимум 50 символов)"
-    if len(name) < 2:
-        return False, "❌ Имя слишком короткое (минимум 2 символа)"
-    return True, "✅ Имя корректно"
+    return engine_validate_name(name)
 
 
 def validate_race(race: str) -> Tuple[bool, str]:
-    """Проверяет расу"""
     races = get_race_list()
     if race not in races:
         return False, f"❌ Раса '{race}' не существует"
@@ -1392,7 +459,6 @@ def validate_race(race: str) -> Tuple[bool, str]:
 
 
 def validate_class(class_name: str) -> Tuple[bool, str]:
-    """Проверяет класс"""
     classes = get_class_list()
     if class_name not in classes:
         return False, f"❌ Класс '{class_name}' не существует"
@@ -1400,7 +466,6 @@ def validate_class(class_name: str) -> Tuple[bool, str]:
 
 
 def validate_background(background: str) -> Tuple[bool, str]:
-    """Проверяет предысторию"""
     backgrounds = get_background_list()
     if background not in backgrounds:
         return False, f"❌ Предыстория '{background}' не существует"
@@ -1408,25 +473,19 @@ def validate_background(background: str) -> Tuple[bool, str]:
 
 
 def validate_stats(stats: Dict[str, int]) -> Tuple[bool, str]:
-    """Проверяет характеристики"""
-    required_stats = ["STR", "DEX", "CON", "INT", "WIS", "CHA"]
-
-    for stat in required_stats:
+    required = ["STR", "DEX", "CON", "INT", "WIS", "CHA"]
+    for stat in required:
         if stat not in stats:
             return False, f"❌ Характеристика {stat} отсутствует"
         if not (1 <= stats[stat] <= 30):
             return False, f"❌ {stat} должно быть от 1 до 30"
-
     total = sum(stats.values())
     if total > 90:
         return False, f"⚠️ Сумма характеристик ({total}) очень высокая"
-
     return True, "✅ Характеристики корректны"
 
 
-def validate_character(name: str, class_name: str, race: str, background: str, stats: Dict[str, int]) -> Tuple[
-    bool, str]:
-    """Полная валидация персонажа"""
+def validate_character(name: str, class_name: str, race: str, background: str, stats: Dict[str, int]) -> Tuple[bool, str]:
     valid, msg = validate_name(name)
     if not valid:
         return False, msg
@@ -1444,167 +503,16 @@ def validate_character(name: str, class_name: str, race: str, background: str, s
         return False, msg
     return True, "✅ Персонаж валиден"
 
-# =========================================================
-# ТЕСТИРОВАНИЕ НОВОЙ ЛОГИКИ РАСПРЕДЕЛЕНИЯ
-# =========================================================
 
-def test_stats_distribution():
-    """Тестирует новую логику распределения характеристик"""
-    print("\n" + "=" * 60)
-    print("ТЕСТ НОВОЙ ЛОГИКИ РАСПРЕДЕЛЕНИЯ ХАРАКТЕРИСТИК")
-    print("=" * 60)
-    
-    # Мок-данные для тестирования
-    class PrimaryOne:
-        name = "ТестовыйКласс1"
-        primary_stats = ["STR"]
-    
-    class PrimaryTwo:
-        name = "ТестовыйКласс2"
-        primary_stats = ["STR", "DEX"]
-    
-    # Мок-функции для тестирования
-    def mock_get_class_primary_stats(class_name):
-        if class_name == "ТестовыйКласс1":
-            return ["STR"]
-        else:
-            return ["STR", "DEX"]
-    
-    def mock_get_background_by_name(bg_name):
-        backgrounds = {
-            "Боец": {
-                'characteristics': ["STR", "DEX", "CON"],
-                'name': "Боец"
-            },
-            "Маг": {
-                'characteristics': ["INT", "WIS", "CHA"],
-                'name': "Маг"
-            },
-            "Смешанный": {
-                'characteristics': ["STR", "DEX", "INT"],
-                'name': "Смешанный"
-            },
-            "Выносливый": {
-                'characteristics': ["CON", "STR", "WIS"],
-                'name': "Выносливый"
-            }
-        }
-        return backgrounds.get(bg_name)
-    
-    # Временно подменяем функции для теста
-    original_get_primary = get_class_primary_stats
-    original_get_background = get_background_by_name
-    
-    globals()['get_class_primary_stats'] = mock_get_class_primary_stats
-    globals()['get_background_by_name'] = mock_get_background_by_name
-    
-    base_stats = {"STR": 10, "DEX": 10, "CON": 10, "INT": 10, "WIS": 10, "CHA": 10}
-    
-    test_cases = [
-        # Случай 1: одна primary, входит в background
-        ("ТестовыйКласс1", "Боец", "1 primary, входит → +2 к STR, +1 к случайной из DEX/CON"),
-        
-        # Случай 1: одна primary, НЕ входит в background
-        ("ТестовыйКласс1", "Маг", "1 primary, не входит → +1 ко всем INT/WIS/CHA"),
-        
-        # Случай 2A: две primary, обе входят
-        ("ТестовыйКласс2", "Боец", "2 primary, обе входят → +1 ко всем STR/DEX/CON"),
-        
-        # Случай 2B: две primary, одна входит
-        ("ТестовыйКласс2", "Маг", "2 primary, ни одна не входит → +1 ко всем INT/WIS/CHA (случай C)"),
-        
-        # Случай 2B: две primary, одна входит (вторая не входит)
-        ("ТестовыйКласс2", "Смешанный", "2 primary, STR входит, DEX входит? да → +1 ко всем"),
-        
-        # Случай 2B: две primary, ровно одна входит
-        ("ТестовыйКласс2", "Выносливый", "2 primary, STR входит, DEX нет → +2 к STR, +1 к случайной из CON/WIS"),
-    ]
-    
-    for class_name, bg_name, description in test_cases:
-        print(f"\n📋 {description}")
-        print(f"   Класс: {class_name}, primary={mock_get_class_primary_stats(class_name)}")
-        print(f"   Предыстория: {bg_name}, characteristics={mock_get_background_by_name(bg_name)['characteristics']}")
-        
-        # Запускаем 3 раза для проверки random
-        for i in range(3):
-            result = calculate_final_stats_with_background(class_name, bg_name, base_stats.copy())
-            # Вычисляем бонусы
-            bonuses = {s: result[s] - base_stats[s] for s in mock_get_background_by_name(bg_name)['characteristics']}
-            print(f"   Попытка {i+1}: бонусы = {bonuses}")
-        
-        print("   " + "-" * 40)
-    
-    # Восстанавливаем оригинальные функции
-    globals()['get_class_primary_stats'] = original_get_primary
-    globals()['get_background_by_name'] = original_get_background
-    
-    print("\n" + "=" * 60)
-    print("✅ ТЕСТ ЗАВЕРШЁН")
-    print("=" * 60)
+# ------------------------------------------------------------
+# 11. Подклассы (уже есть в ClassRepository, но оставим для API)
+# ------------------------------------------------------------
+def get_subclasses_for_class(class_name: str, level: int = 1) -> List[Dict[str, Any]]:
+    return _class_repo.get_subclasses(class_name, level)
 
 
-if __name__ == "__main__":
-    test_stats_distribution()
-
-
-# =========================================================
-# ТЕСТИРОВАНИЕ
-# =========================================================
-
-if __name__ == "__main__":
-    print("=" * 60)
-    print("ТЕСТ D&D LOGIC MODULE (PostgreSQL версия 2)")
-    print("=" * 60)
-
-    print("\n1. ТЕСТ КАРТИНОК:")
-    for race in get_race_list()[:5]:
-        path = get_race_image_path(race)
-        exists = get_race_image_exists(race)
-        print(f"   • {race}: {'✅' if exists else '❌'} {path}")
-
-    for cls in get_class_list()[:5]:
-        path = get_class_image_path(cls)
-        exists = get_class_image_exists(cls)
-        print(f"   • {cls}: {'✅' if exists else '❌'} {path}")
-
-    print("\n2. ТЕСТ НАЧАЛЬНЫХ ХАРАКТЕРИСТИК КЛАССОВ:")
-    for class_name in ["Варвар", "Воин", "Волшебник"]:
-        stats = get_class_starting_stats(class_name)
-        print(f"   • {class_name}: STR={stats['STR']}, DEX={stats['DEX']}, CON={stats['CON']}")
-
-    print("\n3. ТЕСТ НОВОГО РАСПРЕДЕЛЕНИЯ ХАРАКТЕРИСТИК (ПО ПРАВИЛАМ):")
-    test_cases = [
-        ("Воин", "Солдат"),  # Основная характеристика входит в тройку
-        ("Волшебник", "Мудрец"),  # Основная характеристика входит в тройку
-        ("Варвар", "Стражник"),  # Основная характеристика НЕ входит в тройку
-    ]
-    for class_name, bg_name in test_cases:
-        starting = get_class_starting_stats(class_name)
-        final = calculate_final_stats_with_background(class_name, bg_name, starting)
-        print(f"   • {class_name} + {bg_name}:")
-        print(f"     Старт: STR={starting['STR']}, DEX={starting['DEX']}, CON={starting['CON']}")
-        print(f"     Финал: STR={final['STR']}, DEX={final['DEX']}, CON={final['CON']}")
-
-    print("\n4. ТЕСТ КОЛИЧЕСТВА ЗАКЛИНАНИЙ ПО КЛАССАМ:")
-    for class_name in ["Волшебник", "Жрец", "Варвар"]:
-        counts = get_class_spell_counts(class_name)
-        masteries = get_class_masteries_count(class_name)
-        print(f"   • {class_name}: заговоров={counts['cantrips']}, заклинаний={counts['level1']}, приёмов={masteries}")
-
-    print("\n5. ТЕСТ ОРУЖЕЙНЫХ ПРИЁМОВ (НОВОЕ КОЛИЧЕСТВО):")
-    test_weapons = [
-        ("Двуручный меч", "Воин"),
-        ("Двуручный меч", "Варвар"),
-        ("Двуручный меч", "Плут"),
-    ]
-    for weapon, class_name in test_weapons:
-        masteries = auto_assign_masteries(weapon, class_name)
-        print(f"   • {class_name} + {weapon}: {len(masteries)} приём(ов) - {masteries}")
-
-    print("\n6. ТЕСТ КАТЕГОРИЙ ЗАКЛИНАНИЙ:")
-    for class_name in ["Волшебник", "Жрец"]:
-        categories = get_spells_grouped_by_category(class_name, is_cantrip=True)
-        print(f"   • {class_name} - категории заговоров: {list(categories.keys())}")
-
-    print("\n✅ МОДУЛЬ DND_LOGIC.PY ВЕРСИИ 2 ГОТОВ К РАБОТЕ!")
-    print("=" * 60)
+# ------------------------------------------------------------
+# Вспомогательное для обратной совместимости (get_connection)
+# ------------------------------------------------------------
+from db import get_connection  # noqa
+import os  # noqa

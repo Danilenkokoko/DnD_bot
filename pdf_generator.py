@@ -6,7 +6,7 @@ PDF Generator Module for D&D Character Sheets
 
 import os
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader, TemplateError
 from weasyprint import HTML, CSS
@@ -470,7 +470,15 @@ def ensure_template_exists() -> bool:
 
 
 def get_skill_ability(skill_name: str) -> str:
-    """Определяет, какая характеристика отвечает за навык"""
+    """
+    Определяет, какая характеристика отвечает за навык
+
+    Args:
+        skill_name: название навыка на русском
+
+    Returns:
+        str: название характеристики (STR, DEX, CON, INT, WIS, CHA)
+    """
     skill_map = {
         "Акробатика": "DEX",
         "Атлетика": "STR",
@@ -493,6 +501,84 @@ def get_skill_ability(skill_name: str) -> str:
         "Убеждение": "CHA"
     }
     return skill_map.get(skill_name, "WIS")
+
+
+def calculate_modifier(stat_value: int) -> int:
+    """
+    Рассчитывает модификатор характеристики
+
+    Args:
+        stat_value: значение характеристики (например, 15)
+
+    Returns:
+        int: модификатор (например, 2)
+    """
+    return (stat_value - 10) // 2
+
+
+def prepare_pdf_data(character_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Подготавливает данные для PDF шаблона с значениями по умолчанию
+
+    Args:
+        character_data: сырые данные персонажа
+
+    Returns:
+        Dict[str, Any]: подготовленные данные для шаблона
+    """
+    # Полный список навыков для отображения
+    all_skills = [
+        "Акробатика", "Атлетика", "Аркана", "Восприятие", "Выживание",
+        "Выступление", "Запугивание", "История", "Ловкость рук", "Медицина",
+        "Обман", "Обращение с животными", "Природа", "Проницательность",
+        "Расследование", "Религия", "Скрытность", "Тайная магия", "Убеждение"
+    ]
+
+    def calculate_skill_mod(skill: str, stats: Dict[str, int], prof_bonus: int) -> int:
+        """Вспомогательная функция для расчёта модификатора навыка"""
+        ability = get_skill_ability(skill)
+        mod = calculate_modifier(stats.get(ability, 10))
+        if prof_bonus > 0:
+            mod += prof_bonus
+        return mod
+
+    # Подготавливаем данные с значениями по умолчанию
+    stats = character_data.get('stats', {})
+    if not stats:
+        stats = {"STR": 10, "DEX": 10, "CON": 10, "INT": 10, "WIS": 10, "CHA": 10}
+
+    return {
+        'name': character_data.get('name', 'Безымянный'),
+        'class_name': character_data.get('class_name', 'Без класса'),
+        'race': character_data.get('race', 'Неизвестно'),
+        'level': character_data.get('level', 1),
+        'background': character_data.get('background', 'Нет'),
+        'background_trait': character_data.get('background_trait', 'Нет'),
+        'background_description': character_data.get('background_description', ''),
+        'backstory': character_data.get('backstory', 'Нет истории'),
+        'stats': stats,
+        'hp': character_data.get('hp', 0),
+        'ac': character_data.get('ac', 10),
+        'speed': character_data.get('speed', 30),
+        'alignment': character_data.get('alignment', 'Нейтральное'),
+        'player_name': character_data.get('player_name', ''),
+        'appearance': character_data.get('appearance', ''),
+        'experience': character_data.get('experience', 0),
+        'proficiency_bonus': character_data.get('proficiency_bonus', 2),
+        'saving_throws': character_data.get('saving_throws', []),
+        'skills': character_data.get('skills', []),
+        'all_skills': all_skills,
+        'calculate_skill_mod': calculate_skill_mod,
+        'race_traits': character_data.get('race_traits', []),
+        'class_features': character_data.get('class_features', []),
+        'equipment': character_data.get('equipment', []),
+        'coins': character_data.get('coins', ''),
+        'spells': character_data.get('spells', []),
+        'spell_slots_1': character_data.get('spell_slots_1', 0),
+        'spell_slots_2': character_data.get('spell_slots_2', 0),
+        'notes': character_data.get('notes', ''),
+        'created_date': datetime.now().strftime("%d.%m.%Y")
+    }
 
 
 def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
@@ -527,55 +613,8 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
         env = get_jinja_env()
         template = env.get_template("character.html")
 
-        # Создаём полный список навыков для отображения
-        all_skills = [
-            "Акробатика", "Атлетика", "Аркана", "Восприятие", "Выживание",
-            "Выступление", "Запугивание", "История", "Ловкость рук", "Медицина",
-            "Обман", "Обращение с животными", "Природа", "Проницательность",
-            "Расследование", "Религия", "Скрытность", "Тайная магия", "Убеждение"
-        ]
-
-        def calculate_skill_mod(skill, stats, prof_bonus):
-            """Вспомогательная функция для расчёта модификатора навыка"""
-            ability = get_skill_ability(skill)
-            mod = (stats.get(ability, 10) - 10) // 2
-            if prof_bonus > 0:
-                mod += prof_bonus
-            return mod
-
-        # Подготавливаем данные для шаблона с значениями по умолчанию
-        template_data = {
-            'name': data.get('name', 'Безымянный'),
-            'class_name': data.get('class_name', 'Без класса'),
-            'race': data.get('race', 'Неизвестно'),
-            'level': data.get('level', 1),
-            'background': data.get('background', 'Нет'),
-            'background_trait': data.get('background_trait', 'Нет'),
-            'background_description': data.get('background_description', ''),
-            'backstory': data.get('backstory', 'Нет истории'),
-            'stats': data['stats'],
-            'hp': data.get('hp', 0),
-            'ac': data.get('ac', 10),
-            'speed': data.get('speed', 30),
-            'alignment': data.get('alignment', 'Нейтральное'),
-            'player_name': data.get('player_name', ''),
-            'appearance': data.get('appearance', ''),
-            'experience': data.get('experience', 0),
-            'proficiency_bonus': data.get('proficiency_bonus', 2),
-            'saving_throws': data.get('saving_throws', []),
-            'skills': data.get('skills', []),
-            'all_skills': all_skills,
-            'calculate_skill_mod': calculate_skill_mod,
-            'race_traits': data.get('race_traits', []),
-            'class_features': data.get('class_features', []),
-            'equipment': data.get('equipment', []),
-            'coins': data.get('coins', ''),
-            'spells': data.get('spells', []),
-            'spell_slots_1': data.get('spell_slots_1', 0),
-            'spell_slots_2': data.get('spell_slots_2', 0),
-            'notes': data.get('notes', ''),
-            'created_date': datetime.now().strftime("%d.%m.%Y")
-        }
+        # Подготавливаем данные для шаблона
+        template_data = prepare_pdf_data(data)
 
         try:
             html_content = template.render(**template_data)
@@ -650,7 +689,13 @@ def generate_pdf_from_template(template_name: str, data: Dict[str, Any], filenam
 
 
 def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
-    """Очищает старые PDF файлы"""
+    """
+    Очищает старые PDF файлы
+
+    Args:
+        directory: директория для очистки
+        max_age_hours: максимальный возраст файла в часах
+    """
     import time
 
     try:
@@ -658,7 +703,8 @@ def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
         max_age_seconds = max_age_hours * 3600
 
         for filename in os.listdir(directory):
-            if (filename.startswith("temp_") or filename.endswith("_character_sheet.pdf")) and filename.endswith(".pdf"):
+            if (filename.startswith("temp_") or filename.endswith("_character_sheet.pdf")) and filename.endswith(
+                    ".pdf"):
                 filepath = os.path.join(directory, filename)
                 file_age = current_time - os.path.getmtime(filepath)
 
@@ -670,7 +716,10 @@ def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
         logger.error(f"❌ Ошибка при очистке PDF: {e}")
 
 
-# Тестирование модуля
+# =========================================================
+# ТЕСТИРОВАНИЕ
+# =========================================================
+
 if __name__ == "__main__":
     print("=== Тестирование PDF Generator ===\n")
 

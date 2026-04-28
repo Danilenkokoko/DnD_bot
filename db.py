@@ -115,6 +115,9 @@ def init_database():
                         image_path VARCHAR(255),
                         is_spellcaster BOOLEAN DEFAULT FALSE,
                         spellcasting_ability VARCHAR(3),
+                        cantrips_count INTEGER DEFAULT 0,
+                        spells_count_level1 INTEGER DEFAULT 0,
+                        masteries_count INTEGER DEFAULT 0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
@@ -153,7 +156,7 @@ def init_database():
                 """)
                 logger.info("✅ Таблица backgrounds готова")
 
-                # ===== 6. ТАБЛИЦА ЗАКЛИНАНИЙ (БЕЗ КАТЕГОРИИ ПОКА) =====
+                # ===== 6. ТАБЛИЦА ЗАКЛИНАНИЙ =====
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS spells (
                         id SERIAL PRIMARY KEY,
@@ -168,6 +171,7 @@ def init_database():
                         is_cantrip BOOLEAN DEFAULT FALSE,
                         is_ritual BOOLEAN DEFAULT FALSE,
                         requires_concentration BOOLEAN DEFAULT FALSE,
+                        category VARCHAR(50),
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
@@ -343,7 +347,7 @@ def init_database():
                 """)
                 logger.info("✅ Таблица characters готова")
 
-                # ===== ИНДЕКСЫ (без индекса на category пока) =====
+                # ===== ИНДЕКСЫ =====
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_characters_user_id ON characters(user_id)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_characters_class_id ON characters(class_id)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_characters_race_id ON characters(race_id)")
@@ -352,14 +356,13 @@ def init_database():
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_class_spells_spell_id ON class_spells(spell_id)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_subraces_race_id ON subraces(race_id)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_subclasses_class_id ON subclasses(class_id)")
-                cur.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_recommended_spells_class_id ON recommended_spells(class_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_recommended_spells_class_id ON recommended_spells(class_id)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_weapons_name ON weapons(name)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_class_weapons_class_id ON class_weapons(class_id)")
-                cur.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_class_fighting_styles_class_id ON class_fighting_styles(class_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_class_fighting_styles_class_id ON class_fighting_styles(class_id)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_armor_name ON armor(name)")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_class_equipment_class_id ON class_equipment(class_id)")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_spells_category ON spells(category)")
                 logger.info("✅ Все индексы созданы")
 
                 conn.commit()
@@ -370,7 +373,7 @@ def init_database():
 
 
 # =========================================================
-# ФУНКЦИИ ДЛЯ РАБОТЫ С ДАННЫМИ
+# ФУНКЦИИ ДЛЯ РАБОТЫ С ПЕРСОНАЖАМИ
 # =========================================================
 
 def save_character(
@@ -561,11 +564,11 @@ def get_background_names() -> List[str]:
 
 
 # =========================================================
-# ФУНКЦИИ ДЛЯ МИГРАЦИИ (ДОБАВЛЯЕМ НОВЫЕ ПОЛЯ)
+# ФУНКЦИИ ДЛЯ МИГРАЦИИ
 # =========================================================
 
 def migrate_database_v2():
-    """Миграция существующей базы данных до версии 2 (добавление новых полей)"""
+    """Миграция существующей базы данных до версии 2"""
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -578,7 +581,6 @@ def migrate_database_v2():
 
                 for col_name, col_type in new_columns:
                     try:
-                        # Проверяем, существует ли колонка
                         cur.execute("""
                             SELECT column_name FROM information_schema.columns 
                             WHERE table_name = 'classes' AND column_name = %s
@@ -586,8 +588,6 @@ def migrate_database_v2():
                         if not cur.fetchone():
                             cur.execute(f"ALTER TABLE classes ADD COLUMN {col_name} {col_type}")
                             logger.info(f"✅ Добавлена колонка: {col_name} в classes")
-                        else:
-                            logger.info(f"⏭️ Колонка {col_name} уже существует")
                     except Exception as e:
                         logger.warning(f"⚠️ Не удалось добавить {col_name}: {e}")
 
@@ -600,29 +600,13 @@ def migrate_database_v2():
                     if not cur.fetchone():
                         cur.execute("ALTER TABLE spells ADD COLUMN category VARCHAR(50)")
                         logger.info("✅ Добавлена колонка: category в spells")
-                    else:
-                        logger.info("⏭️ Колонка category уже существует")
                 except Exception as e:
                     logger.warning(f"⚠️ Не удалось добавить category: {e}")
-
-                # 3. Добавляем индекс для category (только если колонка существует)
-                try:
-                    cur.execute("""
-                        SELECT 1 FROM pg_indexes 
-                        WHERE indexname = 'idx_spells_category'
-                    """)
-                    if not cur.fetchone():
-                        cur.execute("CREATE INDEX IF NOT EXISTS idx_spells_category ON spells(category)")
-                        logger.info("✅ Добавлен индекс: idx_spells_category")
-                    else:
-                        logger.info("⏭️ Индекс idx_spells_category уже существует")
-                except Exception as e:
-                    logger.warning(f"⚠️ Не удалось добавить индекс: {e}")
 
                 conn.commit()
                 logger.info("✅ Миграция структуры таблиц завершена")
 
-                # 4. Заполняем данные (отдельным коммитом)
+                # 4. Заполняем данные
                 migrate_data_v2()
 
     except Exception as e:
@@ -658,8 +642,6 @@ def migrate_data_v2():
                         SET cantrips_count = %s, spells_count_level1 = %s, masteries_count = %s
                         WHERE name = %s
                     """, (cantrips, spells, masteries, class_name))
-                    logger.info(
-                        f"✅ Обновлён класс {class_name}: заговоров={cantrips}, заклинаний={spells}, приёмов={masteries}")
 
                 # 2. Категории заклинаний
                 cantrip_categories = {
@@ -704,7 +686,7 @@ def migrate_data_v2():
 
 
 # =========================================================
-# НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ЗАКЛИНАНИЯМИ (V2)
+# ФУНКЦИИ ДЛЯ РАБОТЫ С ЗАКЛИНАНИЯМИ (V2)
 # =========================================================
 
 def get_class_spell_counts(class_name: str) -> Dict[str, int]:
@@ -786,7 +768,7 @@ def get_spell_by_id(spell_id: int) -> Optional[Dict[str, Any]]:
 
 
 # =========================================================
-# ОСТАЛЬНЫЕ ФУНКЦИИ (ДЛЯ СОВМЕСТИМОСТИ)
+# ФУНКЦИИ ДЛЯ РАБОТЫ С БРОНЁЙ
 # =========================================================
 
 def get_armor_by_name(armor_name: str) -> Optional[Dict[str, Any]]:
@@ -801,6 +783,10 @@ def get_armor_by_name(armor_name: str) -> Optional[Dict[str, Any]]:
         logger.warning(f"Не удалось загрузить броню {armor_name}: {e}")
         return None
 
+
+# =========================================================
+# ФУНКЦИИ ДЛЯ РАБОТЫ СО СНАРЯЖЕНИЕМ КЛАССОВ
+# =========================================================
 
 def get_class_equipment_from_db(class_name: str, choice: Optional[str] = None) -> List[Dict[str, Any]]:
     """Получает снаряжение для класса"""
@@ -832,6 +818,10 @@ def get_class_equipment_from_db(class_name: str, choice: Optional[str] = None) -
         return []
 
 
+# =========================================================
+# ФУНКЦИИ ДЛЯ РАБОТЫ С БОЕВЫМИ СТИЛЯМИ
+# =========================================================
+
 def get_fighting_styles_for_class(class_name: str) -> List[Dict[str, Any]]:
     """Возвращает боевые стили, доступные для класса"""
     try:
@@ -856,6 +846,10 @@ def get_fighting_styles_for_class(class_name: str) -> List[Dict[str, Any]]:
         return []
 
 
+# =========================================================
+# ФУНКЦИИ ДЛЯ РАБОТЫ С ВОЗВАНИЯМИ
+# =========================================================
+
 def get_all_invocations_from_db(level: int = 1) -> List[Dict[str, Any]]:
     """Получает доступные возвания для колдуна из БД"""
     try:
@@ -872,6 +866,10 @@ def get_all_invocations_from_db(level: int = 1) -> List[Dict[str, Any]]:
         logger.warning(f"Не удалось загрузить возвания: {e}")
         return []
 
+
+# =========================================================
+# ФУНКЦИИ ДЛЯ РАБОТЫ С ПОДКЛАССАМИ
+# =========================================================
 
 def get_subclasses_for_class_from_db(class_name: str, level: int = 1) -> List[Dict[str, Any]]:
     """Возвращает подклассы для указанного класса"""

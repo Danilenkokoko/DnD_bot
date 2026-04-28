@@ -18,11 +18,7 @@ from db import init_database, migrate_database_v2
 
 # Импортируем роутеры обработчиков
 from handlers.character_handlers import router as character_router
-
-# Импортируем сервис заклинаний (его обработчики могут быть подключены отдельно)
-# Для упрощения, обработчики заклинаний временно не вынесены в отдельный файл,
-# так как они описаны в services/spell_service.py. В production следует создать
-# отдельный роутер spell_router и подключить его.
+from handlers.spell_handlers import router as spell_router
 
 # Настройка логирования
 logging.basicConfig(
@@ -55,8 +51,7 @@ async def main():
 
         # Подключение роутеров
         dp.include_router(character_router)
-        # TODO: Подключить роутер для заклинаний, когда он будет создан
-        # dp.include_router(spell_router)
+        dp.include_router(spell_router)
 
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("✅ Webhook удалён")

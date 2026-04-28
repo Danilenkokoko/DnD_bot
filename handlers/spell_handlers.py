@@ -4,8 +4,8 @@
 """
 
 import logging
-from aiogram import Router
-from aiogram.types import CallbackQuery
+from aiogram import Router, F
+from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 
 from states.character_states import CreateCharacter
@@ -81,7 +81,15 @@ async def back_to_level1_categories(callback: CallbackQuery, state: FSMContext):
     await SpellSelectionService.back_to_level1_categories(callback, state)
 
 
-@router.callback_query(lambda c: c.data == "continue_to_next")
-async def continue_to_next(callback: CallbackQuery, state: FSMContext):
-    await go_to_fighting_style(callback.message, state)
-    await callback.answer()
+# ==================== CONTINUE BUTTON ====================
+
+@router.message(F.text == "✅ Продолжить")
+async def continue_after_spells(message: Message, state: FSMContext):
+    """Обработчик кнопки 'Продолжить' после выбора заклинаний"""
+    current_state = await state.get_state()
+    if current_state == CreateCharacter.spells_cantrips_complete.state:
+        await SpellSelectionService.start_level1_selection(message, state)
+    elif current_state == CreateCharacter.spells_level1_complete.state:
+        await go_to_fighting_style(message, state)
+    else:
+        await message.answer("⏳ Пожалуйста, следуйте инструкциям.")

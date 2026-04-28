@@ -243,61 +243,136 @@ def get_class_primary_stats(class_name: str) -> List[str]:
     return class_primary_map.get(class_name, ["STR"])
 
 
-def calculate_final_stats_with_background(class_name: str, background_name: str,
-                                          class_starting_stats: Dict[str, int]) -> Dict[str, int]:
+def calculate_final_stats_with_background(
+    class_name: str, 
+    background_name: str, 
+    class_starting_stats: Dict[str, int]
+) -> Dict[str, int]:
     """
-    Распределяет бонусы предыстории по правилам:
-    - Если основная характеристика класса входит в тройку предыстории → +2 к ней, +1 к случайной из оставшихся
-    - Иначе → +1 к двум случайным характеристикам из тройки
-
+    Распределяет бонусы предыстории строго по правилам:
+    
+    Случай 1: primary_stats содержит 1 характеристику
+        - Если primary в background_stats: primary +2, случайная из оставшихся +1, третья +0
+        - Если primary НЕ в background_stats: все три характеристики background +1
+    
+    Случай 2: primary_stats содержит 2 характеристики
+        - Случай A (обе primary в background): все три характеристики background +1
+        - Случай B (ровно одна primary в background): 
+            совпавшая +2, 
+            если вторая primary в background то ей +1, иначе случайной из оставшихся +1
+        - Случай C (ни одной primary в background): все три характеристики background +1
+    
     Args:
         class_name: название класса
         background_name: название предыстории
         class_starting_stats: начальные характеристики класса
-
+    
     Returns:
         Dict[str, int]: финальные характеристики
     """
-    # Получаем основную характеристику класса (берём первую)
-    class_primary = get_class_primary_stats(class_name)
-    primary_stat = class_primary[0] if class_primary else "STR"
-
+    import random
+    
+    # Получаем primary характеристики класса
+    primary_stats = get_class_primary_stats(class_name)
+    
     # Получаем тройку характеристик предыстории
     bg = get_background_by_name(background_name)
     if not bg:
         logger.warning(f"Предыстория {background_name} не найдена, возвращаем начальные статы")
         return class_starting_stats.copy()
-
-    bg_stats = bg['characteristics']  # ['STR', 'DEX', 'CON'] например
-
+    
+    background_stats = bg['characteristics']  # List[str] из 3 характеристик
+    
+    # Копируем начальные статы
     result = class_starting_stats.copy()
-
-    # Правило А: основная характеристика класса входит в тройку
-    if primary_stat in bg_stats:
-        # +2 к основной характеристике
-        result[primary_stat] += 2
-
-        # +1 к случайной из двух оставшихся
-        remaining = [s for s in bg_stats if s != primary_stat]
-        if remaining:
-            random_stat = random.choice(remaining)
-            result[random_stat] += 1
-            logger.info(f"[Stats] Правило А: +2 к {primary_stat}, +1 к {random_stat}")
+    
+    # Словарь для хранения бонусов (ключ: характеристика, значение: бонус)
+    bonuses = {stat: 0 for stat in background_stats}
+    
+    # =========================================================
+    # СЛУЧАЙ 1: ОДНА primary характеристика
+    # =========================================================
+    if len(primary_stats) == 1:
+        primary = primary_stats[0]
+        
+        if primary in background_stats:
+            # Правило А: primary +2, одна случайная из оставшихся +1
+            bonuses[primary] = 2
+            
+            # Оставшиеся две характеристики
+            remaining = [s for s in background_stats if s != primary]
+            # Случайная из них получает +1
+            chosen = random.choice(remaining)
+            bonuses[chosen] = 1
+            # Третья остаётся 0
+            
+            logger.info(f"[Stats] Правило (1 primary, входит): +2 к {primary}, +1 к {chosen}, 0 к {[s for s in remaining if s != chosen][0]}")
         else:
-            # Если нет оставшихся (не бывает, но на всякий случай)
-            result[bg_stats[0]] += 1
-            logger.info(f"[Stats] Правило А: +2 к {primary_stat}, +1 к {bg_stats[0]}")
+            # Правило Б: все три характеристики background получают +1
+            for stat in background_stats:
+                bonuses[stat] = 1
+            logger.info(f"[Stats] Правило (1 primary, не входит): +1 ко всем {background_stats}")
+    
+    # =========================================================
+    # СЛУЧАЙ 2: ДВЕ primary характеристики
+    # =========================================================
+    elif len(primary_stats) == 2:
+        p1, p2 = primary_stats[0], primary_stats[1]
+        
+        # Проверяем, сколько primary входят в background_stats
+        p1_in = p1 in background_stats
+        p2_in = p2 in background_stats
+        
+        if p1_in and p2_in:
+            # Случай A: обе primary в background → все +1
+            for stat in background_stats:
+                bonuses[stat] = 1
+            logger.info(f"[Stats] Правило (2 primary, обе входят): +1 ко всем {background_stats}")
+        
+        elif p1_in or p2_in:
+            # Случай B: ровно одна primary в background
+            # Определяем, какая совпала
+            matched = p1 if p1_in else p2
+            other_primary = p2 if p1_in else p1
+            
+            bonuses[matched] = 2
+            
+            # Проверяем, входит ли вторая primary в background
+            if other_primary in background_stats:
+                bonuses[other_primary] = 1
+                logger.info(f"[Stats] Правило (2 primary, одна входит): +2 к {matched}, +1 к {other_primary}, 0 к {[s for s in background_stats if s != matched and s != other_primary][0]}")
+            else:
+                # Вторая primary НЕ входит → +1 случайной из оставшихся
+                # Оставшиеся: все background_stats, кроме matched
+                remaining = [s for s in background_stats if s != matched]
+                chosen = random.choice(remaining)
+                bonuses[chosen] = 1
+                logger.info(f"[Stats] Правило (2 primary, одна входит, вторая не входит): +2 к {matched}, +1 к {chosen}, 0 к {[s for s in remaining if s != chosen][0]}")
+        else:
+            # Случай C: ни одной primary в background → все +1
+            for stat in background_stats:
+                bonuses[stat] = 1
+            logger.info(f"[Stats] Правило (2 primary, ни одна не входит): +1 ко всем {background_stats}")
+    
     else:
-        # Правило Б: +1 к двум случайным характеристикам из тройки
-        random.shuffle(bg_stats)
-        result[bg_stats[0]] += 1
-        result[bg_stats[1]] += 1
-        logger.info(f"[Stats] Правило Б: +1 к {bg_stats[0]}, +1 к {bg_stats[1]}")
-
-    # Ограничиваем максимум 20
-    for stat in result:
+        # На всякий случай (если primary_stats не 1 и не 2)
+        logger.warning(f"[Stats] Нестандартное количество primary_stats: {len(primary_stats)}. Применяем +1 ко всем background_stats")
+        for stat in background_stats:
+            bonuses[stat] = 1
+    
+    # Применяем бонусы к результату
+    for stat, bonus in bonuses.items():
+        result[stat] = result.get(stat, 10) + bonus
+        # Ограничиваем максимум 20
         result[stat] = min(20, result[stat])
-
+    
+    # Проверка: сумма бонусов должна быть 3
+    total_bonus = sum(bonuses.values())
+    if total_bonus != 3:
+        logger.warning(f"[Stats] ВНИМАНИЕ: сумма бонусов = {total_bonus}, ожидалось 3. bonuses={bonuses}")
+    
+    logger.info(f"[Stats] Финальные бонусы: {bonuses}")
+    
     return result
 
 
@@ -1368,6 +1443,108 @@ def validate_character(name: str, class_name: str, race: str, background: str, s
     if not valid:
         return False, msg
     return True, "✅ Персонаж валиден"
+
+# =========================================================
+# ТЕСТИРОВАНИЕ НОВОЙ ЛОГИКИ РАСПРЕДЕЛЕНИЯ
+# =========================================================
+
+def test_stats_distribution():
+    """Тестирует новую логику распределения характеристик"""
+    print("\n" + "=" * 60)
+    print("ТЕСТ НОВОЙ ЛОГИКИ РАСПРЕДЕЛЕНИЯ ХАРАКТЕРИСТИК")
+    print("=" * 60)
+    
+    # Мок-данные для тестирования
+    class PrimaryOne:
+        name = "ТестовыйКласс1"
+        primary_stats = ["STR"]
+    
+    class PrimaryTwo:
+        name = "ТестовыйКласс2"
+        primary_stats = ["STR", "DEX"]
+    
+    # Мок-функции для тестирования
+    def mock_get_class_primary_stats(class_name):
+        if class_name == "ТестовыйКласс1":
+            return ["STR"]
+        else:
+            return ["STR", "DEX"]
+    
+    def mock_get_background_by_name(bg_name):
+        backgrounds = {
+            "Боец": {
+                'characteristics': ["STR", "DEX", "CON"],
+                'name': "Боец"
+            },
+            "Маг": {
+                'characteristics': ["INT", "WIS", "CHA"],
+                'name': "Маг"
+            },
+            "Смешанный": {
+                'characteristics': ["STR", "DEX", "INT"],
+                'name': "Смешанный"
+            },
+            "Выносливый": {
+                'characteristics': ["CON", "STR", "WIS"],
+                'name': "Выносливый"
+            }
+        }
+        return backgrounds.get(bg_name)
+    
+    # Временно подменяем функции для теста
+    original_get_primary = get_class_primary_stats
+    original_get_background = get_background_by_name
+    
+    globals()['get_class_primary_stats'] = mock_get_class_primary_stats
+    globals()['get_background_by_name'] = mock_get_background_by_name
+    
+    base_stats = {"STR": 10, "DEX": 10, "CON": 10, "INT": 10, "WIS": 10, "CHA": 10}
+    
+    test_cases = [
+        # Случай 1: одна primary, входит в background
+        ("ТестовыйКласс1", "Боец", "1 primary, входит → +2 к STR, +1 к случайной из DEX/CON"),
+        
+        # Случай 1: одна primary, НЕ входит в background
+        ("ТестовыйКласс1", "Маг", "1 primary, не входит → +1 ко всем INT/WIS/CHA"),
+        
+        # Случай 2A: две primary, обе входят
+        ("ТестовыйКласс2", "Боец", "2 primary, обе входят → +1 ко всем STR/DEX/CON"),
+        
+        # Случай 2B: две primary, одна входит
+        ("ТестовыйКласс2", "Маг", "2 primary, ни одна не входит → +1 ко всем INT/WIS/CHA (случай C)"),
+        
+        # Случай 2B: две primary, одна входит (вторая не входит)
+        ("ТестовыйКласс2", "Смешанный", "2 primary, STR входит, DEX входит? да → +1 ко всем"),
+        
+        # Случай 2B: две primary, ровно одна входит
+        ("ТестовыйКласс2", "Выносливый", "2 primary, STR входит, DEX нет → +2 к STR, +1 к случайной из CON/WIS"),
+    ]
+    
+    for class_name, bg_name, description in test_cases:
+        print(f"\n📋 {description}")
+        print(f"   Класс: {class_name}, primary={mock_get_class_primary_stats(class_name)}")
+        print(f"   Предыстория: {bg_name}, characteristics={mock_get_background_by_name(bg_name)['characteristics']}")
+        
+        # Запускаем 3 раза для проверки random
+        for i in range(3):
+            result = calculate_final_stats_with_background(class_name, bg_name, base_stats.copy())
+            # Вычисляем бонусы
+            bonuses = {s: result[s] - base_stats[s] for s in mock_get_background_by_name(bg_name)['characteristics']}
+            print(f"   Попытка {i+1}: бонусы = {bonuses}")
+        
+        print("   " + "-" * 40)
+    
+    # Восстанавливаем оригинальные функции
+    globals()['get_class_primary_stats'] = original_get_primary
+    globals()['get_background_by_name'] = original_get_background
+    
+    print("\n" + "=" * 60)
+    print("✅ ТЕСТ ЗАВЕРШЁН")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    test_stats_distribution()
 
 
 # =========================================================

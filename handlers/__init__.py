@@ -5,7 +5,7 @@
 
 from handlers.character_handlers import router as character_router
 
-# Если в будущем появится роутер для заклинаний, можно добавить:
+# Если позже добавите отдельный роутер для заклинаний, подключите его здесь
 # from handlers.spell_handlers import router as spell_router
 
 __all__ = ['character_router']

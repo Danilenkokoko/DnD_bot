@@ -16,8 +16,10 @@ from keyboards.spell_keyboards import (
     create_category_keyboard,
     create_spell_list_keyboard,
     create_spell_detail_keyboard,
-    continue_kb_for_spells
 )
+# Импортируем continue_kb_for_spells из character_keyboards, так как она там определена
+from keyboards.character_keyboards import continue_kb_for_spells
+
 from states.character_states import CreateCharacter
 
 logger = logging.getLogger(__name__)
@@ -36,7 +38,6 @@ class SpellSelectionService:
         selector_data = data.get("spell_selector")
         class_name = data.get("class_name")
 
-        # Проверка, является ли класс заклинателем
         class_info = _class_repo.get_by_name(class_name)
         is_spellcaster = class_info.get('is_spellcaster', False) if class_info else False
         spell_counts = _class_repo.get_spell_counts(class_name)

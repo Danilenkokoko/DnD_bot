@@ -45,14 +45,13 @@ from repositories.equipment_repository import EquipmentRepository, FightingStyle
 from repositories.spell_repository import SpellRepository
 
 from pdf_generator import generate_pdf
-from spell_selector import get_category_icon
 from engine.validators import validate_name as engine_validate_name
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 
-# Инициализация репозиториев
+# Репозитории
 _race_repo = RaceRepository()
 _class_repo = ClassRepository()
 _bg_repo = BackgroundRepository()
@@ -833,6 +832,10 @@ async def cancel_creation_callback(callback: CallbackQuery, state: FSMContext):
 async def progress_info(callback: CallbackQuery):
     await callback.answer("Это информационное сообщение", show_alert=False)
 
+
+# =========================================================
+# НЕИЗВЕСТНЫЕ КОМАНДЫ
+# =========================================================
 
 @router.message()
 async def unknown_command(message: Message, state: FSMContext):

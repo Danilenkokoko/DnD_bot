@@ -345,12 +345,13 @@ async def go_to_invocations(message: Message, state: FSMContext):
         await state.set_state(CreateCharacter.invocations_select)
         invocations = CharacterStatsService.get_all_invocations(level=1)
         if invocations:
+            selected_count = len(data.get("selected_invocations", []))
             await message.answer(
                 f"🔮 **Шаг 6/12: Выбор ТАИНСТВЕННЫХ ВОЗВАНИЙ**\n\n"
                 f"Колдун может выбрать таинственные возвания.\n"
                 f"Вы можете выбрать до 2 возваний на 1 уровне.",
                 parse_mode=None,
-                reply_markup=create_invocations_keyboard(level=1)
+                reply_markup=create_invocations_keyboard(level=1, selected_count=selected_count)
             )
         else:
             await message.answer("📖 Нет доступных возваний для вашего уровня.")
@@ -396,7 +397,7 @@ async def skip_fighting_style(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(lambda c: c.data.startswith("inv_") and c.data != "inv_skip")
+@router.callback_query(lambda c: c.data.startswith("inv_") and c.data not in ("inv_skip", "inv_continue"))
 async def select_invocation(callback: CallbackQuery, state: FSMContext):
     inv_id = int(callback.data.replace("inv_", ""))
     invocation = _inv_repo.get_by_id(inv_id)
@@ -416,8 +417,8 @@ async def select_invocation(callback: CallbackQuery, state: FSMContext):
         selected.append(inv_name)
         await callback.answer(f"✅ Возвание '{inv_name}' добавлено")
     await state.update_data(selected_invocations=selected)
-    await callback.message.edit_reply_markup(reply_markup=create_invocations_keyboard(level=1))
-    await callback.answer()
+    new_count = len(selected)
+    await callback.message.edit_reply_markup(reply_markup=create_invocations_keyboard(level=1, selected_count=new_count))
 
 
 @router.callback_query(lambda c: c.data == "inv_skip")
@@ -428,9 +429,9 @@ async def skip_invocations(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(lambda c: c.data == "inv_continue")
 async def continue_invocations(callback: CallbackQuery, state: FSMContext):
-    """Завершение выбора возваний и переход к предыстории"""
     await go_to_background(callback.message, state)
     await callback.answer()
+
 
 
 # =========================================================

@@ -14,14 +14,14 @@ DB_CONFIG = {
     "port": int(os.getenv("DB_PORT", 5432))
 }
 
-# Данные о навыках классов (из вашего файла Навыки.txt)
+# Данные о навыках классов
 skills_data = {
     "Артефактор": {
         "skills": ["Восприятие", "История", "Ловкость рук", "Медицина", "Природа", "Расследование", "Тайная магия"],
         "choices": 2
     },
     "Бард": {
-        "skills": None,  # бард может выбирать любые навыки, оставим пустым
+        "skills": None,
         "choices": 3
     },
     "Варвар": {
@@ -70,20 +70,59 @@ skills_data = {
     },
 }
 
+def add_columns_if_not_exists(conn):
+    """Добавляет колонки skills и skill_choices, если их нет"""
+    with conn.cursor() as cur:
+        # Проверяем колонку skills
+        cur.execute("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name = 'classes' AND column_name = 'skills'
+        """)
+        if not cur.fetchone():
+            cur.execute("ALTER TABLE classes ADD COLUMN skills JSONB DEFAULT '[]'")
+            print("✅ Добавлена колонка skills")
+        else:
+            print("ℹ️ Колонка skills уже существует")
+        
+        # Проверяем колонку skill_choices
+        cur.execute("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name = 'classes' AND column_name = 'skill_choices'
+        """)
+        if not cur.fetchone():
+            cur.execute("ALTER TABLE classes ADD COLUMN skill_choices INTEGER DEFAULT 2")
+            print("✅ Добавлена колонка skill_choices")
+        else:
+            print("ℹ️ Колонка skill_choices уже существует")
+        conn.commit()
+
 def update_class_skills():
-    conn = psycopg2.connect(**DB_CONFIG)
-    cur = conn.cursor()
-    for class_name, data in skills_data.items():
-        skills_json = json.dumps(data["skills"]) if data["skills"] else '[]'
-        cur.execute(
-            "UPDATE classes SET skills = %s, skill_choices = %s WHERE name = %s",
-            (skills_json, data["choices"], class_name)
-        )
-        print(f"Обновлён {class_name}: навыки={data['skills']}, выборов={data['choices']}")
-    conn.commit()
-    cur.close()
-    conn.close()
-    print("✅ Готово!")
+    conn = None
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        conn.autocommit = False
+        
+        # Добавляем колонки
+        add_columns_if_not_exists(conn)
+        
+        # Заполняем данные
+        with conn.cursor() as cur:
+            for class_name, data in skills_data.items():
+                skills_json = json.dumps(data["skills"]) if data["skills"] else '[]'
+                cur.execute(
+                    "UPDATE classes SET skills = %s, skill_choices = %s WHERE name = %s",
+                    (skills_json, data["choices"], class_name)
+                )
+                print(f"Обновлён {class_name}: выборов={data['choices']}")
+            conn.commit()
+        print("✅ Данные успешно загружены!")
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
+        if conn:
+            conn.rollback()
+    finally:
+        if conn:
+            conn.close()
 
 if __name__ == "__main__":
     update_class_skills()

@@ -11,24 +11,22 @@ import tempfile
 from typing import Optional
 
 from aiogram import F, Router
-from aiogram.types import Message, CallbackQuery, FSInputFile, ReplyKeyboardRemove
+from aiogram.types import Message, CallbackQuery, FSInputFile, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 
 from states.character_states import CreateCharacter
+# Импортируем только те клавиатуры, которые не требуют изменений
 from keyboards.character_keyboards import (
     create_class_keyboard,
     create_class_equipment_keyboard,
-    create_subclass_keyboard,
     create_race_keyboard,
-    create_subrace_keyboard,
     create_background_keyboard,
     create_background_equipment_keyboard,
     create_fighting_style_keyboard,
-    create_invocations_keyboard,
     create_character_list_keyboard,
     create_delete_keyboard,
-    create_skills_keyboard,   # ✅ добавлен импорт
+    create_skills_keyboard,
     cancel_kb,
     skip_kb,
     continue_kb_for_spells,
@@ -61,6 +59,58 @@ _fighting_repo = FightingStyleRepository()
 _inv_repo = InvocationRepository()
 _spell_repo = SpellRepository()
 _char_repo = CharacterRepository()
+
+
+# =========================================================
+# СОБСТВЕННЫЕ КЛАВИАТУРЫ (БЕЗ КНОПОК "ПРОПУСТИТЬ")
+# =========================================================
+
+def _create_subclass_keyboard(class_name: str) -> Optional[InlineKeyboardMarkup]:
+    """Клавиатура выбора подкласса (без кнопки пропуска)"""
+    from services.character_service import CharacterStatsService
+    subclasses = CharacterStatsService.get_subclasses_for_class(class_name, level=1)
+    if not subclasses:
+        return None
+    buttons = []
+    for sub in subclasses:
+        buttons.append([InlineKeyboardButton(
+            text=f"📖 {sub['name']} — {sub['description'][:40]}...",
+            callback_data=f"subclass_{sub['id']}"
+        )])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад к классам", callback_data="back_to_classes")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def _create_subrace_keyboard(race: str) -> Optional[InlineKeyboardMarkup]:
+    """Клавиатура выбора подрасы (без кнопки пропуска)"""
+    from services.character_service import CharacterStatsService
+    subraces = CharacterStatsService.get_subraces(race)
+    if not subraces:
+        return None
+    buttons = []
+    for subrace in subraces:
+        buttons.append([InlineKeyboardButton(text=subrace, callback_data=f"subrace_{subrace}")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад к расам", callback_data="back_to_races")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def _create_invocations_keyboard(level: int = 1, selected_count: int = 0) -> Optional[InlineKeyboardMarkup]:
+    """Клавиатура выбора возваний (без кнопки пропуска)"""
+    from services.character_service import CharacterStatsService
+    invocations = CharacterStatsService.get_all_invocations(level)
+    if not invocations:
+        return None
+    buttons = []
+    for inv in invocations[:12]:
+        emoji = "🔮" if inv['level_required'] == 1 else "🔷"
+        # Можно показывать галочку, если уже выбрано (но selected_count не даёт имён, поэтому упростим)
+        buttons.append([InlineKeyboardButton(
+            text=f"{emoji} {inv['name']} (ур. {inv['level_required']})",
+            callback_data=f"inv_{inv['id']}"
+        )])
+    # Кнопка "Назад" (без пропуска)
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 # =========================================================
@@ -218,7 +268,7 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
         text += f"\n📖 **На 1 уровне вы можете выбрать подкласс:**\n"
         for sub in subclasses:
             text += f"   • {sub['name']} — {sub['description'][:60]}...\n"
-        reply_markup = create_subclass_keyboard(class_name)
+        reply_markup = _create_subclass_keyboard(class_name)   # изменено
         await state.set_state(CreateCharacter.subclass_select)
         img_path = CharacterStatsService.get_class_image_path(class_name)
         try:
@@ -239,7 +289,6 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
     available_skills = class_data.get('skills', []) if class_data else []
     skill_choices = class_data.get('skill_choices', 2) if class_data else 2
 
-    # Если список навыков пуст (например, для Барда), используем общий список всех навыков
     if not available_skills:
         available_skills = [
             "Акробатика", "Атлетика", "Восприятие", "Выживание", "Выступление",
@@ -271,13 +320,49 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
 
 
 # =========================================================
+# ВЫБОР ПОДКЛАССА (НОВЫЙ ОБРАБОТЧИК)
+# =========================================================
+
+@router.callback_query(lambda c: c.data.startswith("subclass_"))
+async def select_subclass(callback: CallbackQuery, state: FSMContext):
+    subclass_id = int(callback.data.replace("subclass_", ""))
+    await state.update_data(subclass_id=subclass_id)
+    logger.info(f"[FLOW] Выбран подкласс ID: {subclass_id}")
+
+    # Переходим к выбору навыков (как в случае без подкласса)
+    data = await state.get_data()
+    class_name = data.get("class_name")
+    class_data = _class_repo.get_by_name(class_name)
+    available_skills = class_data.get('skills', []) if class_data else []
+    skill_choices = class_data.get('skill_choices', 2) if class_data else 2
+
+    if not available_skills:
+        available_skills = [
+            "Акробатика", "Атлетика", "Восприятие", "Выживание", "Выступление",
+            "Запугивание", "История", "Ловкость рук", "Медицина", "Обман",
+            "Обращение с животными", "Природа", "Проницательность", "Расследование",
+            "Религия", "Скрытность", "Тайная магия", "Убеждение"
+        ]
+
+    await state.set_state(CreateCharacter.skills_select)
+    selected_skills = []
+    await state.update_data(selected_class_skills=selected_skills)
+    keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
+    text_skills = (f"📚 **Шаг 2/12: Выбор НАВЫКОВ класса {class_name}**\n\n"
+                   f"Выберите {skill_choices} навык(а) из списка ниже.\n\n"
+                   f"После выбора нажмите «✅ Готово».")
+    await callback.message.delete()
+    await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
+    await callback.answer()
+
+
+# =========================================================
 # ШАГ 2: ВЫБОР НАВЫКОВ КЛАССА
 # =========================================================
 
 @router.callback_query(lambda c: c.data.startswith(
     "class_skill_toggle_") or c.data == "class_skills_ready" or c.data == "class_skills_info")
 async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
-    """Обрабатывает выбор навыков класса"""
     logger.info(f"🟢 Обработчик навыков вызван, data={callback.data}")
     data = callback.data
     user_data = await state.get_data()
@@ -288,7 +373,6 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Ошибка: класс не найден")
         return
 
-    # Если класс — Бард, используем общий список навыков
     available_skills = class_info.get('skills', [])
     if not available_skills:
         available_skills = [
@@ -305,7 +389,7 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
             await state.update_data(selected_class_skills=selected_skills)
             await state.set_state(CreateCharacter.class_equipment_select)
             await callback.message.delete()
-            await show_class_equipment(callback.message, state)  # Переход к снаряжению
+            await show_class_equipment(callback.message, state)
             await callback.answer("✅ Навыки класса выбраны!")
         else:
             await callback.answer(f"❌ Нужно выбрать ровно {skill_choices} навыков. Выбрано: {len(selected_skills)}",
@@ -326,8 +410,6 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
                 return
             selected_skills.append(skill_name)
         await state.update_data(selected_class_skills=selected_skills)
-
-        # Обновляем клавиатуру
         keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
         try:
             await callback.message.edit_reply_markup(reply_markup=keyboard)
@@ -340,7 +422,6 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
 
 
 async def show_class_equipment(message: Message, state: FSMContext, class_name: str = None):
-    """Показывает выбор снаряжения класса"""
     if class_name is None:
         data = await state.get_data()
         class_name = data.get("class_name")
@@ -371,6 +452,7 @@ async def show_class_equipment(message: Message, state: FSMContext, class_name: 
                 selected_coins=eq.get('coins', 0)
             )
         await go_to_spells(message, state)
+
 
 # =========================================================
 # ШАГ 3: ВЫБОР СНАРЯЖЕНИЯ КЛАССА
@@ -466,13 +548,19 @@ async def go_to_invocations(message: Message, state: FSMContext):
         invocations = CharacterStatsService.get_all_invocations(level=1)
         if invocations:
             selected_count = len(data.get("selected_invocations", []))
-            await message.answer(
-                f"🔮 **Шаг 6/12: Выбор ТАИНСТВЕННЫХ ВОЗВАНИЙ**\n\n"
-                f"Колдун может выбрать таинственные возвания.\n"
-                f"Вы можете выбрать до 2 возваний на 1 уровне.",
-                parse_mode=None,
-                reply_markup=create_invocations_keyboard(level=1, selected_count=selected_count)
-            )
+            # Используем изменённую клавиатуру без пропуска
+            keyboard = _create_invocations_keyboard(level=1, selected_count=selected_count)
+            if keyboard:
+                await message.answer(
+                    f"🔮 **Шаг 6/12: Выбор ТАИНСТВЕННЫХ ВОЗВАНИЙ**\n\n"
+                    f"Колдун может выбрать таинственные возвания.\n"
+                    f"Вы можете выбрать до 2 возваний на 1 уровне.",
+                    parse_mode=None,
+                    reply_markup=keyboard
+                )
+            else:
+                await message.answer("📖 Нет доступных возваний для вашего уровня.")
+                await go_to_background(message, state)
         else:
             await message.answer("📖 Нет доступных возваний для вашего уровня.")
             await go_to_background(message, state)
@@ -539,14 +627,22 @@ async def select_invocation(callback: CallbackQuery, state: FSMContext):
         await callback.answer(f"✅ Возвание '{inv_name}' добавлено")
     await state.update_data(selected_invocations=selected)
     new_count = len(selected)
+    # Обновляем клавиатуру
     if (old_count == 0 and new_count > 0) or (old_count > 0 and new_count == 0):
-        await callback.message.edit_reply_markup(reply_markup=create_invocations_keyboard(level=1, selected_count=new_count))
-
-
-@router.callback_query(lambda c: c.data == "inv_skip")
-async def skip_invocations(callback: CallbackQuery, state: FSMContext):
-    await go_to_background(callback.message, state)
+        keyboard = _create_invocations_keyboard(level=1, selected_count=new_count)
+        if keyboard:
+            await callback.message.edit_reply_markup(reply_markup=keyboard)
+    # Если выбрано 2 возвания, автоматически переходим к предыстории
+    if new_count == 2:
+        logger.info("[FLOW] Выбрано 2 возвания, переходим к предыстории")
+        await go_to_background(callback.message, state)
     await callback.answer()
+
+
+# Удаляем обработчики skip_invocations — они больше не нужны
+# @router.callback_query(lambda c: c.data == "inv_skip")
+# async def skip_invocations(callback: CallbackQuery, state: FSMContext):
+#     ...
 
 
 @router.callback_query(lambda c: c.data == "inv_continue")
@@ -692,7 +788,7 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
             sub_trait = CharacterStatsService.get_subrace_trait(race, sub)
             text += f"   • **{sub}** — {sub_trait[:50] + '...' if len(sub_trait) > 50 else sub_trait}\n"
         text += f"\n**Шаг 10/12: Выберите ПОДРАСУ**"
-        reply_markup = create_subrace_keyboard(race)
+        reply_markup = _create_subrace_keyboard(race)   # изменено
         await state.set_state(CreateCharacter.subrace_select)
     else:
         await go_to_name(callback.message, state)
@@ -713,7 +809,7 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(lambda c: c.data.startswith("subrace_") and c.data != "subrace_skip")
+@router.callback_query(lambda c: c.data.startswith("subrace_"))
 async def select_subrace(callback: CallbackQuery, state: FSMContext):
     subrace = callback.data.replace("subrace_", "")
     await state.update_data(subrace=subrace)
@@ -728,12 +824,9 @@ async def select_subrace(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(lambda c: c.data == "subrace_skip")
-async def skip_subrace(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(subrace=None)
-    await callback.message.delete()
-    await go_to_name(callback.message, state)
-    await callback.answer()
+# Удаляем обработчик skip_subrace — он больше не нужен
+# @router.callback_query(lambda c: c.data == "subrace_skip")
+# async def skip_subrace(...): ...
 
 
 @router.callback_query(lambda c: c.data == "back_to_races")
@@ -840,16 +933,12 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             await state.clear()
             return
 
-        # Объединяем навыки класса и предыстории, убирая дубликаты
         class_skills = data.get("selected_class_skills", [])
         bg_skills = data.get("selected_skills_bg", [])
         all_skills = list(set(class_skills + bg_skills))
         char_data['selected_skills'] = all_skills
-
-        # Добавляем черту происхождения
         char_data['origin_feat'] = data.get("background_origin_feat", "")
 
-        # Сохраняем персонажа
         char_id = CharacterFinalizationService.save_character(char_data)
 
         bg_info = _bg_repo.get_by_name(char_data['background']) if char_data['background'] else None
@@ -940,7 +1029,7 @@ async def view_character(callback: CallbackQuery):
             f"📜 **Предыстория:** {character.get('background_name', 'Нет')}\n"
             f"📊 **Уровень:** {character['level']}\n"
             f"❤️ **HP:** {character['hp']} | 🛡️ **AC:** {character['ac']}\n\n"
-            f"**Характеристики:\n"
+            f"**Характеристики:**\n"
             f"STR {character['str']} | DEX {character['dex']} | CON {character['con']} | "
             f"INT {character['int']} | WIS {character['wis']} | CHA {character['cha']}")
     if character.get('image_file_id'):

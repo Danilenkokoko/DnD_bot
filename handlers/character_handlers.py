@@ -267,7 +267,7 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
 # НОВЫЙ ШАГ: ВЫБОР НАВЫКОВ КЛАССА
 # =========================================================
 
-@router.callback_query(lambda c: c.data.startswith("skills_"))
+@router.callback_query(lambda c: c.data.startswith("class_skills_") or c.data.startswith("class_skill_toggle_"))
 async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
     """Обработчик callback-запросов для выбора навыков класса"""
     logger.info(f"🟢 Обработчик навыков вызван, data={callback.data}")
@@ -284,7 +284,7 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
     skill_choices = class_info.get('skill_choices', 2)
     selected_skills = user_data.get("selected_class_skills", [])
     
-    if data == "skills_ready":
+    if data == "class_skills_ready":
         if len(selected_skills) == skill_choices:
             await state.update_data(selected_class_skills=selected_skills)
             await state.set_state(CreateCharacter.class_equipment_select)
@@ -295,16 +295,16 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
             await callback.answer(f"❌ Нужно выбрать ровно {skill_choices} навыков. Выбрано: {len(selected_skills)}", show_alert=True)
         return
     
-    if data == "skills_ready_disabled":
+    if data == "class_skills_ready_disabled":
         await callback.answer(f"❌ Сначала выберите {skill_choices} навыков. Выбрано: {len(selected_skills)}", show_alert=True)
         return
     
-    if data == "skills_info":
+    if data == "class_skills_info":
         await callback.answer(f"Выбрано {len(selected_skills)} из {skill_choices} навыков", show_alert=False)
         return
     
-    if data.startswith("skill_toggle_"):
-        skill_name = data.replace("skill_toggle_", "")
+    if data.startswith("class_skill_toggle_"):
+        skill_name = data.replace("class_skill_toggle_", "")
         if skill_name in selected_skills:
             selected_skills.remove(skill_name)
         else:

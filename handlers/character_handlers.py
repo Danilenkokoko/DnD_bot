@@ -16,14 +16,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 
 from states.character_states import CreateCharacter
-# Импортируем только те клавиатуры, которые не требуют изменений
 from keyboards.character_keyboards import (
     create_class_keyboard,
-    create_class_equipment_keyboard,
     create_race_keyboard,
     create_background_keyboard,
     create_background_equipment_keyboard,
-    create_fighting_style_keyboard,
     create_character_list_keyboard,
     create_delete_keyboard,
     create_skills_keyboard,
@@ -94,6 +91,21 @@ def _create_subrace_keyboard(race: str) -> Optional[InlineKeyboardMarkup]:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def _create_fighting_style_keyboard(class_name: str) -> Optional[InlineKeyboardMarkup]:
+    """Клавиатура выбора боевого стиля (без кнопки пропуска)"""
+    styles = CharacterStatsService.get_fighting_styles_for_class(class_name)
+    if not styles:
+        return None
+    buttons = []
+    for s in styles:
+        buttons.append([InlineKeyboardButton(
+            text=f"⚔️ {s['name']}",
+            callback_data=f"style_{s['id']}"
+        )])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_spells")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def _create_invocations_keyboard(level: int = 1, selected_names: list = None) -> Optional[InlineKeyboardMarkup]:
     """Клавиатура выбора возваний с отображением выбранных (без кнопки пропуска)"""
     from services.character_service import CharacterStatsService
@@ -111,54 +123,6 @@ def _create_invocations_keyboard(level: int = 1, selected_names: list = None) ->
         )])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-def _create_fighting_style_keyboard(class_name: str) -> Optional[InlineKeyboardMarkup]:
-    """Клавиатура выбора боевого стиля (без кнопки пропуска)"""
-    styles = CharacterStatsService.get_fighting_styles_for_class(class_name)
-    if not styles:
-        return None
-    buttons = []
-    for s in styles:
-        buttons.append([InlineKeyboardButton(
-            text=f"⚔️ {s['name']}",
-            callback_data=f"style_{s['id']}"
-        )])
-    # Кнопка "Назад" (без пропуска)
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_spells")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-# Заменить существующую функцию go_to_fighting_style
-async def go_to_fighting_style(message: Message, state: FSMContext):
-    logger.info("=" * 50)
-    logger.info("🔧 go_to_fighting_style ВЫЗВАНА!")
-    logger.info("=" * 50)
-    data = await state.get_data()
-    class_name = data.get("class_name")
-    logger.info(f"   class_name = {class_name}")
-
-    if ProgressionService.should_select_fighting_style(class_name):
-        styles = CharacterStatsService.get_fighting_styles_for_class(class_name)
-        logger.info(f"   Найдено стилей: {len(styles) if styles else 0}")
-        if not styles:
-            logger.warning(f"⚠️ Нет боевых стилей для класса {class_name}")
-            await message.answer(f"⚠️ Для класса {class_name} нет доступных боевых стилей.\n\nПереходим к следующему шагу...")
-            await go_to_invocations(message, state)
-            return
-
-        # Формируем текстовое описание стилей
-        text = f"⚔️ **Шаг 5/12: Выбор БОЕВОГО СТИЛЯ**\n\n"
-        text += f"Класс **{class_name}** может выбрать один боевой стиль.\n\n"
-        text += "**Доступные стили:**\n"
-        for s in styles:
-            text += f"• **{s['name']}** – {s['description']}\n"
-        text += "\nНажмите на кнопку с названием стиля, чтобы выбрать его."
-
-        await state.set_state(CreateCharacter.fighting_style_select)
-        await message.answer(text, parse_mode=None, reply_markup=_create_fighting_style_keyboard(class_name))
-    else:
-        logger.info(f"   Класс {class_name} не в списке, идём к invocations")
-        await go_to_invocations(message, state)
 
 
 # =========================================================
@@ -313,13 +277,11 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
             f"• 🔮 Заклинания: {'Да' if class_info.get('spellcasting', False) else 'Нет'}\n")
 
     img_path = CharacterStatsService.get_class_image_path(class_name)
-    # Удаляем исходное сообщение с кнопками выбора класса
     try:
         await callback.message.delete()
     except Exception:
         pass
 
-    # Общие данные для навыков (используются в обеих ветках)
     class_data = _class_repo.get_by_name(class_name)
     available_skills = class_data.get('skills', []) if class_data else []
     skill_choices = class_data.get('skill_choices', 2) if class_data else 2
@@ -331,33 +293,28 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
             "Религия", "Скрытность", "Тайная магия", "Убеждение"
         ]
 
-    # ------------------ ЕСТЬ ПОДКЛАСС ------------------
     if subclasses and class_name in ["Жрец", "Друид", "Колдун"]:
         text += f"\n📖 **На 1 уровне вы можете выбрать подкласс:**\n"
         for sub in subclasses:
             text += f"   • {sub['name']} — {sub['description'][:60]}...\n"
-        # Отправляем информационное сообщение с картинкой (без кнопок)
         if img_path and os.path.exists(img_path):
             photo = FSInputFile(img_path)
             await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
         else:
             await callback.message.answer(text, parse_mode=None)
-        # Отправляем отдельное сообщение с клавиатурой выбора подкласса
         reply_markup = _create_subclass_keyboard(class_name)
         await callback.message.answer("Выберите подкласс:", reply_markup=reply_markup)
         await state.set_state(CreateCharacter.subclass_select)
         await callback.answer()
         return
 
-    # ------------------ НЕТ ПОДКЛАССА ------------------
-    # Отправляем информационное сообщение (без кнопок)
+    # НЕТ ПОДКЛАССА
     if img_path and os.path.exists(img_path):
         photo = FSInputFile(img_path)
         await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
     else:
         await callback.message.answer(text, parse_mode=None)
 
-    # Переход к выбору навыков
     await state.set_state(CreateCharacter.skills_select)
     selected_skills = []
     await state.update_data(selected_class_skills=selected_skills)
@@ -379,10 +336,8 @@ async def select_subclass(callback: CallbackQuery, state: FSMContext):
     subclass_id = int(callback.data.replace("subclass_", ""))
     await state.update_data(subclass_id=subclass_id)
     logger.info(f"[FLOW] Выбран подкласс ID: {subclass_id}")
-    # Удаляем сообщение с клавиатурой подкласса
     await callback.message.delete()
 
-    # Переходим к выбору навыков (без повторной отправки картинки)
     data = await state.get_data()
     class_name = data.get("class_name")
     class_data = _class_repo.get_by_name(class_name)
@@ -471,6 +426,10 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
         return
 
 
+# =========================================================
+# ШАГ 3: ВЫБОР СНАРЯЖЕНИЯ КЛАССА
+# =========================================================
+
 async def show_class_equipment(message: Message, state: FSMContext, class_name: str = None):
     if class_name is None:
         data = await state.get_data()
@@ -488,8 +447,32 @@ async def show_class_equipment(message: Message, state: FSMContext, class_name: 
 
     has_equipment_choice = len(equipment) > 1
     if has_equipment_choice:
-        reply_markup = create_class_equipment_keyboard(class_name)
-        text = f"⚔️ **Шаг 3/12: СНАРЯЖЕНИЕ класса {class_name}**\n\nВыберите один из вариантов снаряжения:"
+        # Формируем текстовое описание вариантов
+        text = f"⚔️ **Шаг 3/12: СНАРЯЖЕНИЕ класса {class_name}**\n\n"
+        text += "Выберите один из вариантов:\n"
+        for eq in equipment:
+            choice = eq.get('choice', 'A')
+            weapon = eq.get('weapon', 'нет оружия')
+            armor = eq.get('armor', 'нет брони')
+            secondary = eq.get('secondary_weapon', '')
+            other = eq.get('other_items', '')
+            coins = eq.get('coins', 0)
+            text += f"\n📦 **Вариант {choice}:** {weapon}, {armor}"
+            if secondary:
+                text += f", {secondary}"
+            if other:
+                text += f", {other}"
+            if coins:
+                text += f", {coins} зм"
+        text += "\n\nНажмите на кнопку с нужным вариантом."
+
+        # Простая клавиатура: только кнопки выбора варианта
+        buttons = []
+        for eq in equipment:
+            choice = eq.get('choice', 'A')
+            buttons.append([InlineKeyboardButton(text=f"📦 Вариант {choice}", callback_data=f"equip_{choice}")])
+        buttons.append([InlineKeyboardButton(text="⬅️ Назад к классам", callback_data="back_to_classes")])
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
         await message.answer(text, parse_mode=None, reply_markup=reply_markup)
     else:
         if equipment:
@@ -503,10 +486,6 @@ async def show_class_equipment(message: Message, state: FSMContext, class_name: 
             )
         await go_to_spells(message, state)
 
-
-# =========================================================
-# ШАГ 3: ВЫБОР СНАРЯЖЕНИЯ КЛАССА
-# =========================================================
 
 @router.callback_query(lambda c: c.data.startswith("equip_"))
 async def select_class_equipment(callback: CallbackQuery, state: FSMContext):
@@ -567,6 +546,7 @@ async def go_to_fighting_style(message: Message, state: FSMContext):
     data = await state.get_data()
     class_name = data.get("class_name")
     logger.info(f"   class_name = {class_name}")
+
     if ProgressionService.should_select_fighting_style(class_name):
         styles = CharacterStatsService.get_fighting_styles_for_class(class_name)
         logger.info(f"   Найдено стилей: {len(styles) if styles else 0}")
@@ -575,15 +555,17 @@ async def go_to_fighting_style(message: Message, state: FSMContext):
             await message.answer(f"⚠️ Для класса {class_name} нет доступных боевых стилей.\n\nПереходим к следующему шагу...")
             await go_to_invocations(message, state)
             return
+
+        # Формируем текстовое описание
+        text = f"⚔️ **Шаг 5/12: Выбор БОЕВОГО СТИЛЯ**\n\n"
+        text += f"Класс **{class_name}** может выбрать один боевой стиль.\n\n"
+        text += "**Доступные стили:**\n"
+        for s in styles:
+            text += f"• **{s['name']}** – {s['description']}\n"
+        text += "\nНажмите на кнопку с названием стиля, чтобы выбрать его."
+
         await state.set_state(CreateCharacter.fighting_style_select)
-        await message.answer(
-            f"⚔️ **Шаг 5/12: Выбор БОЕВОГО СТИЛЯ**\n\n"
-            f"Класс **{class_name}** может выбрать один боевой стиль.\n\n"
-            f"Боевой стиль даёт постоянный бонус в бою.\n\n"
-            f"Доступные стили ({len(styles)}):",
-            parse_mode=None,
-            reply_markup=create_fighting_style_keyboard(class_name)
-        )
+        await message.answer(text, parse_mode=None, reply_markup=_create_fighting_style_keyboard(class_name))
     else:
         logger.info(f"   Класс {class_name} не в списке, идём к invocations")
         await go_to_invocations(message, state)
@@ -599,7 +581,7 @@ async def go_to_invocations(message: Message, state: FSMContext):
         invocations = CharacterStatsService.get_all_invocations(level=1)
         if invocations:
             selected_names = data.get("selected_invocations", [])
-            # Формируем текстовое описание
+            # Текстовое описание
             text = f"🔮 **Шаг 6/12: Выбор ТАИНСТВЕННЫХ ВОЗВАНИЙ**\n\n"
             text += "Колдун может выбрать таинственные возвания.\n"
             text += "Вы можете выбрать до 2 возваний на 1 уровне.\n\n"
@@ -637,10 +619,10 @@ async def go_to_background(message: Message, state: FSMContext):
 
 
 # =========================================================
-# БОЕВОЙ СТИЛЬ И ВОЗВАНИЯ
+# БОЕВОЙ СТИЛЬ И ВОЗВАНИЯ (ОБРАБОТЧИКИ)
 # =========================================================
 
-@router.callback_query(lambda c: c.data.startswith("style_") and c.data != "style_skip")
+@router.callback_query(lambda c: c.data.startswith("style_"))
 async def select_fighting_style(callback: CallbackQuery, state: FSMContext):
     style_id = int(callback.data.replace("style_", ""))
     style = _fighting_repo.get_by_id(style_id)
@@ -649,17 +631,9 @@ async def select_fighting_style(callback: CallbackQuery, state: FSMContext):
         await state.update_data(selected_fighting_style=style_name)
         await callback.answer(f"✅ Выбран стиль: {style_name}")
         logger.info(f"[FLOW] Выбран боевой стиль: {style_name}")
-    # Удаляем текущее сообщение
     await callback.message.delete()
     await go_to_invocations(callback.message, state)
     await callback.answer()
-
-
-#@router.callback_query(lambda c: c.data == "style_skip")
-#async def skip_fighting_style(callback: CallbackQuery, state: FSMContext):
-#   await callback.answer("⏩ Боевой стиль пропущен")
-#  await go_to_invocations(callback.message, state)
-# await callback.answer()
 
 
 @router.callback_query(lambda c: c.data.startswith("inv_") and c.data not in ("inv_skip", "inv_continue"))
@@ -683,17 +657,14 @@ async def select_invocation(callback: CallbackQuery, state: FSMContext):
         await callback.answer(f"✅ Возвание '{inv_name}' добавлено")
     await state.update_data(selected_invocations=selected)
 
-    # Обновляем клавиатуру с новым списком выбранных
     keyboard = _create_invocations_keyboard(level=1, selected_names=selected)
     if keyboard:
         try:
             await callback.message.edit_reply_markup(reply_markup=keyboard)
         except Exception as e:
-            # Игнорируем ошибку "message is not modified" (она не критична)
             if "message is not modified" not in str(e):
                 logger.warning(f"Ошибка обновления клавиатуры: {e}")
 
-    # Если выбрано 2 возвания, удаляем сообщение и переходим к предыстории
     if len(selected) == 2:
         await callback.message.delete()
         logger.info("[FLOW] Выбрано 2 возвания, переходим к предыстории")
@@ -840,7 +811,6 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
     text = f"🧝 **Раса: {race}**\n\n📖 {race_desc}\n\n🏃 **Скорость:** {race_speed} футов\n📏 **Размер:** {race_size}\n"
     img_path = CharacterStatsService.get_race_image_path(race)
 
-    # Удаляем исходное сообщение с кнопками выбора расы
     try:
         await callback.message.delete()
     except Exception:
@@ -851,18 +821,15 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
         for sub in subraces_list:
             sub_trait = CharacterStatsService.get_subrace_trait(race, sub)
             text += f"   • **{sub}** — {sub_trait[:50] + '...' if len(sub_trait) > 50 else sub_trait}\n"
-        # Отправляем информационное сообщение с картинкой
         if img_path and os.path.exists(img_path):
             photo = FSInputFile(img_path)
             await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
         else:
             await callback.message.answer(text, parse_mode=None)
-        # Отправляем отдельное сообщение с клавиатурой выбора подрасы
         reply_markup = _create_subrace_keyboard(race)
         await callback.message.answer("Выберите подрасу:", reply_markup=reply_markup)
         await state.set_state(CreateCharacter.subrace_select)
     else:
-        # Нет подрас – отправляем информационное сообщение и переходим к имени
         if img_path and os.path.exists(img_path):
             photo = FSInputFile(img_path)
             await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
@@ -881,10 +848,7 @@ async def select_subrace(callback: CallbackQuery, state: FSMContext):
     sub_desc = CharacterStatsService.get_subrace_description(race, subrace)
     sub_trait = CharacterStatsService.get_subrace_trait(race, subrace)
     text = f"🧝 **{race} — {subrace}**\n\n📖 {sub_desc}\n\n✨ **Особенность:** {sub_trait}\n\nПереходим к вводу имени..."
-    # Удаляем сообщение с клавиатурой подрасы
     await callback.message.delete()
-    # Отправляем информационное сообщение о выборе подрасы (можно отправить новое, но можно и не отправлять, так как основное сообщение с расой уже есть)
-    # Просто переходим к имени
     await go_to_name(callback.message, state)
     await callback.answer()
 

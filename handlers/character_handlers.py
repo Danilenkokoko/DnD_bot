@@ -200,7 +200,6 @@ async def cancel_creation(message: Message, state: FSMContext):
 @router.callback_query(lambda c: c.data.startswith("class_") and not c.data.startswith("class_skill"))
 async def select_class(callback: CallbackQuery, state: FSMContext):
     class_name = callback.data.replace("class_", "")
-    class_name = callback.data.replace("class_", "")
     await state.update_data(class_name=class_name)
     logger.info(f"[FLOW] Выбран класс: {class_name}")
 
@@ -236,41 +235,39 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
         return
 
     # НЕТ ПОДКЛАССА НА 1 УРОВНЕ — ПЕРЕХОДИМ К ВЫБОРУ НАВЫКОВ
-await state.update_data(class_name=class_name)
+    class_data = _class_repo.get_by_name(class_name)
+    available_skills = class_data.get('skills', []) if class_data else []
+    skill_choices = class_data.get('skill_choices', 2) if class_data else 2
 
-class_data = _class_repo.get_by_name(class_name)
-available_skills = class_data.get('skills', []) if class_data else []
-skill_choices = class_data.get('skill_choices', 2) if class_data else 2
+    # Если список навыков пуст (например, для Барда), используем общий список всех навыков
+    if not available_skills:
+        available_skills = [
+            "Акробатика", "Атлетика", "Восприятие", "Выживание", "Выступление",
+            "Запугивание", "История", "Ловкость рук", "Медицина", "Обман",
+            "Обращение с животными", "Природа", "Проницательность", "Расследование",
+            "Религия", "Скрытность", "Тайная магия", "Убеждение"
+        ]
 
-# Если список навыков пуст (например, для Барда), используем общий список всех навыков
-if not available_skills:
-    available_skills = [
-        "Акробатика", "Атлетика", "Восприятие", "Выживание", "Выступление",
-        "Запугивание", "История", "Ловкость рук", "Медицина", "Обман",
-        "Обращение с животными", "Природа", "Проницательность", "Расследование",
-        "Религия", "Скрытность", "Тайная магия", "Убеждение"
-    ]
-
-await state.set_state(CreateCharacter.skills_select)
-selected_skills = []
-await state.update_data(selected_class_skills=selected_skills)
-keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
-text_skills = (f"📚 **Шаг 2/12: Выбор НАВЫКОВ класса {class_name}**\n\n"
-               f"Выберите {skill_choices} навык(а) из списка ниже. "
-               f"Навыки, отмеченные ✅, будут добавлены к вашему персонажу.\n\n"
-               f"После выбора нажмите «✅ Готово».")
-img_path = CharacterStatsService.get_class_image_path(class_name)
-try:
-    await callback.message.delete()
-    if img_path and os.path.exists(img_path):
-        photo = FSInputFile(img_path)
-        await callback.message.answer_photo(photo=photo, caption=text_skills, parse_mode=None, reply_markup=keyboard)
-    else:
+    await state.set_state(CreateCharacter.skills_select)
+    selected_skills = []
+    await state.update_data(selected_class_skills=selected_skills)
+    keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
+    text_skills = (f"📚 **Шаг 2/12: Выбор НАВЫКОВ класса {class_name}**\n\n"
+                   f"Выберите {skill_choices} навык(а) из списка ниже. "
+                   f"Навыки, отмеченные ✅, будут добавлены к вашему персонажу.\n\n"
+                   f"После выбора нажмите «✅ Готово».")
+    img_path = CharacterStatsService.get_class_image_path(class_name)
+    try:
+        await callback.message.delete()
+        if img_path and os.path.exists(img_path):
+            photo = FSInputFile(img_path)
+            await callback.message.answer_photo(photo=photo, caption=text_skills, parse_mode=None, reply_markup=keyboard)
+        else:
+            await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
+    except Exception as e:
+        logger.error(f"Ошибка: {e}")
         await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
-except Exception as e:
-    logger.error(f"Ошибка: {e}")
-    await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
-await callback.answer()
+    await callback.answer()
 
 
 # =========================================================

@@ -240,14 +240,16 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
 
     class_data = _class_repo.get_by_name(class_name)
     available_skills = class_data.get('skills', []) if class_data else []
-    if not available_skills:
+skill_choices = class_data.get('skill_choices', 2) if class_data else 2
+
+# Если список навыков пуст (например, для Барда), используем общий список всех навыков
+if not available_skills:
     available_skills = [
         "Акробатика", "Атлетика", "Восприятие", "Выживание", "Выступление",
         "Запугивание", "История", "Ловкость рук", "Медицина", "Обман",
         "Обращение с животными", "Природа", "Проницательность", "Расследование",
         "Религия", "Скрытность", "Тайная магия", "Убеждение"
     ]
-    skill_choices = class_data.get('skill_choices', 2) if class_data else 2
 
     await state.set_state(CreateCharacter.skills_select)
     selected_skills = []

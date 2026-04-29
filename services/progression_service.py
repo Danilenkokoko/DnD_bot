@@ -27,12 +27,18 @@ class ProgressionService:
 
     @staticmethod
     def should_select_fighting_style(class_name: str) -> bool:
-        """Проверяет, нужно ли выбирать боевой стиль"""
-        return class_name in ["Воин", "Паладин", "Следопыт", "Варвар"]
+        """
+        Проверяет, нужно ли выбирать боевой стиль.
+        В D&D 5.5e (2024) боевой стиль на 1 уровне получают только:
+        - Воин
+        - Паладин
+        - Следопыт
+        """
+        return class_name in ["Воин", "Паладин", "Следопыт"]
 
     @staticmethod
     def should_select_invocations(class_name: str) -> bool:
-        """Проверяет, нужно ли выбирать таинственные возвания"""
+        """Проверяет, нужно ли выбирать таинственные возвания (только Колдун)"""
         return class_name == "Колдун"
 
     @staticmethod

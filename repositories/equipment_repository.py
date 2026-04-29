@@ -67,6 +67,10 @@ class EquipmentRepository(BaseRepository):
         """
         return self._fetch_all(query)
 
+    def get_all_armors(self) -> List[Dict[str, Any]]:
+        """Алиас для get_all_armor (множественное число) для совместимости с тестами"""
+        return self.get_all_armor()
+
     def get_weapon_by_name(self, weapon_name: str) -> Optional[Dict[str, Any]]:
         """Получает оружие по названию"""
         query = """

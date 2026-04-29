@@ -1062,7 +1062,11 @@ async def cancel_delete(callback: CallbackQuery):
 @router.callback_query(lambda c: c.data == "cancel_creation")
 async def cancel_creation_callback(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("❌ Создание персонажа отменено")
+    await callback.message.delete()   # удаляем текущее сообщение
+    await callback.message.answer(
+        "❌ Создание персонажа отменено.\n\nЧтобы начать заново, нажмите «🎲 Создать персонажа»",
+        reply_markup=main_menu()
+    )
     await callback.answer()
 
 

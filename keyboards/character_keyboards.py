@@ -1,4 +1,4 @@
-# keyboards/character_keyboards.py (полный файл с функцией create_skills_keyboard)
+# keyboards/character_keyboards.py (полный исправленный файл)
 """
 Клавиатуры для создания персонажа
 """
@@ -103,16 +103,13 @@ def create_skills_keyboard(
     max_choices: int,
     selected_skills: List[str]
 ) -> InlineKeyboardMarkup:
-    """Клавиатура для выбора навыков класса"""
     buttons = []
-    # Информационная строка
     buttons.append([
         InlineKeyboardButton(
             text=f"📌 Выбрано: {len(selected_skills)}/{max_choices}",
             callback_data="class_skills_info"
         )
     ])
-    # Список навыков
     for skill in skills:
         is_selected = skill in selected_skills
         icon = "✅" if is_selected else "🔘"
@@ -122,11 +119,23 @@ def create_skills_keyboard(
                 callback_data=f"class_skill_toggle_{skill}"
             )
         ])
-    # Кнопка "Готово"
     if len(selected_skills) == max_choices:
         buttons.append([InlineKeyboardButton(text="✅ Готово", callback_data="class_skills_ready")])
     else:
         buttons.append([InlineKeyboardButton(text="📖 Готово", callback_data="class_skills_ready_disabled")])
+    buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_creation")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def create_background_keyboard() -> InlineKeyboardMarkup:
+    backgrounds = get_background_list()
+    buttons = []
+    row = []
+    for i, bg in enumerate(backgrounds):
+        row.append(InlineKeyboardButton(text=bg, callback_data=f"bg_{bg}"))
+        if len(row) == 2 or i == len(backgrounds) - 1:
+            buttons.append(row)
+            row = []
     buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

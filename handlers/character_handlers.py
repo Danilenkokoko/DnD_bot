@@ -319,7 +319,6 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
                 return
             selected_skills.append(skill_name)
         await state.update_data(selected_class_skills=selected_skills)
-        # Обновляем клавиатуру
         keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
         try:
             await callback.message.edit_reply_markup(reply_markup=keyboard)

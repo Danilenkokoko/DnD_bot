@@ -49,10 +49,11 @@ async def main():
         migrate_database_v2()
         logger.info("✅ База данных готова")
 
-        # Подключение роутеров
+        # Подключение роутеров (сначала spell_router, чтобы его обработчики имели приоритет)
         dp.include_router(spell_router)
         dp.include_router(character_router)
 
+        # Удаляем webhook (для polling режима)
         await bot.delete_webhook(drop_pending_updates=True)
         logger.info("✅ Webhook удалён")
 

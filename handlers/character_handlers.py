@@ -998,7 +998,7 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
                    f"⚔️ Класс: {char_data['class_name']}\n"
                    f"📜 Предыстория: {char_data['background']}\n"
                    f"🧝 Раса: {char_data['race']}{f' ({char_data['subrace']})' if char_data['subrace'] else ''}\n\n"
-                   f"❤️ HP: {char_data['hp']} | 🛡️ AC: {char_data['ac']}\n\n"
+                   f"❤️ Хиты: {char_data['hp']} | 🛡️ КД: {char_data['ac']}\n\n"
                    f"📊 Характеристики:\n"
                    f"💪 Сила: {stats['STR']} ({mod(stats['STR']):+d})\n"
                    f"🤸 Ловкость: {stats['DEX']} ({mod(stats['DEX']):+d})\n"

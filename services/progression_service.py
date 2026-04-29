@@ -43,18 +43,9 @@ class ProgressionService:
 
     @staticmethod
     async def go_to_spells(message: "Message", state: "FSMContext") -> None:
-        """Переход к выбору заклинаний (заглушка, будет реализована позже)"""
-        from services.character_service import CharacterStatsService
-        data = await state.get_data()
-        class_name = data.get("class_name")
-        is_spellcaster = ProgressionService.is_spellcaster(class_name)
-        logger.info(f"[FLOW] go_to_spells: class={class_name}, is_spellcaster={is_spellcaster}")
-        if is_spellcaster:
-            # Будет вызван SpellSelectionService.start_cantrips_selection
-            # Пока заглушка
-            await message.answer("📖 Выбор заклинаний (в разработке)")
-        else:
-            await ProgressionService.go_to_fighting_style(message, state)
+        """Переход к выбору заклинаний"""
+        from services.spell_service import SpellSelectionService
+        await SpellSelectionService.start_cantrips_selection(message, state)
 
     @staticmethod
     async def go_to_fighting_style(message: "Message", state: "FSMContext") -> None:

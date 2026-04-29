@@ -20,7 +20,6 @@ from keyboards.character_keyboards import (
     create_class_keyboard,
     create_race_keyboard,
     create_background_keyboard,
-    create_background_equipment_keyboard,
     create_character_list_keyboard,
     create_delete_keyboard,
     create_skills_keyboard,
@@ -122,6 +121,16 @@ def _create_invocations_keyboard(level: int = 1, selected_names: list = None) ->
             callback_data=f"inv_{inv['id']}"
         )])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def _create_background_equipment_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора снаряжения от предыстории (короткие кнопки)"""
+    buttons = [
+        [InlineKeyboardButton(text="📦 Вариант А", callback_data="bg_equip_A")],
+        [InlineKeyboardButton(text="🎒 Вариант Б", callback_data="bg_equip_B")],
+        [InlineKeyboardButton(text="⬅️ Назад к предыстории", callback_data="back_to_background")]
+    ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -708,6 +717,7 @@ async def select_background(callback: CallbackQuery, state: FSMContext):
     origin_feat_text = f"✨ **Черта происхождения:** {origin_feat}\n\n" if origin_feat else ""
 
     await callback.message.delete()
+    # Отправляем сообщение с подробным описанием вариантов
     await callback.message.answer(
         f"📜 **Предыстория: {background}**\n\n"
         f"📖 {bg_info.get('description', 'Нет описания')[:300]}...\n\n"
@@ -717,9 +727,11 @@ async def select_background(callback: CallbackQuery, state: FSMContext):
         f"📚 **Навыки:** {', '.join(bg_info.get('skills', []))}\n"
         f"🛠️ **Инструменты:** {bg_info.get('tools', 'Нет')}\n\n"
         f"**Шаг 8/12: Выберите СНАРЯЖЕНИЕ от предыстории**\n\n"
-        f"📦 Вариант А: {equip_a}...\n🎒 Вариант Б: {equip_b}...",
+        f"📦 **Вариант А:** {equip_a}\n\n"
+        f"🎒 **Вариант Б:** {equip_b}\n\n"
+        f"Нажмите на кнопку с нужным вариантом.",
         parse_mode=None,
-        reply_markup=create_background_equipment_keyboard(background)
+        reply_markup=_create_background_equipment_keyboard()
     )
     await callback.answer()
 

@@ -7,8 +7,11 @@ from typing import Optional, List
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 from db import get_user_characters
-from dnd_logic import get_class_list, get_class_equipment, get_subclasses_for_class, get_background_list, get_race_list, get_subraces
-from dnd_logic import get_fighting_styles_for_class, get_all_invocations
+from dnd_logic import (
+    get_class_list, get_class_equipment, get_subclasses_for_class,
+    get_background_list, get_race_list, get_subraces,
+    get_fighting_styles_for_class, get_all_invocations
+)
 
 
 # =========================================================
@@ -104,6 +107,46 @@ def create_subclass_keyboard(class_name: str) -> Optional[InlineKeyboardMarkup]:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+# НОВАЯ КЛАВИАТУРА: ВЫБОР НАВЫКОВ КЛАССА
+
+def create_skills_keyboard(
+    skills: List[str],
+    max_choices: int,
+    selected_skills: List[str]
+) -> InlineKeyboardMarkup:
+    """
+    Клавиатура для выбора навыков класса.
+    Отображает список навыков с отметками (✅/🔘) и кнопки управления.
+    """
+    buttons = []
+    # Кнопка с информацией о количестве выбранных навыков
+    buttons.append([
+        InlineKeyboardButton(
+            text=f"📌 Выбрано: {len(selected_skills)}/{max_choices}",
+            callback_data="skills_info"
+        )
+    ])
+    # Список навыков
+    for skill in skills:
+        is_selected = skill in selected_skills
+        icon = "✅" if is_selected else "🔘"
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{icon} {skill}",
+                callback_data=f"skill_toggle_{skill}"
+            )
+        ])
+    # Кнопки управления
+    controls = []
+    if len(selected_skills) == max_choices:
+        controls.append(InlineKeyboardButton(text="✅ Готово", callback_data="skills_ready"))
+    else:
+        controls.append(InlineKeyboardButton(text="📖 Готово", callback_data="skills_ready_disabled"))
+    controls.append(InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_creation"))
+    buttons.append(controls)
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def create_background_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура выбора предыстории"""
     backgrounds = get_background_list()
@@ -184,6 +227,7 @@ def create_fighting_style_keyboard(class_name: str) -> InlineKeyboardMarkup:
 
 
 def create_invocations_keyboard(level: int = 1, selected_count: int = 0) -> InlineKeyboardMarkup:
+    """Клавиатура выбора таинственных возваний (с динамической кнопкой 'Продолжить')"""
     invocations = get_all_invocations(level)
     if not invocations:
         return InlineKeyboardMarkup(inline_keyboard=[
@@ -196,7 +240,7 @@ def create_invocations_keyboard(level: int = 1, selected_count: int = 0) -> Inli
         buttons.append([InlineKeyboardButton(text=f"{emoji} {inv['name']} (ур. {inv['level_required']})",
                                              callback_data=f"inv_{inv['id']}")])
     buttons.append([InlineKeyboardButton(text="➡️ Пропустить", callback_data="inv_skip")])
-    if selected_count > 0:  # Показываем кнопку "Продолжить", если выбрано хотя бы одно возвание
+    if selected_count > 0:
         buttons.append([InlineKeyboardButton(text="✅ Продолжить", callback_data="inv_continue")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)

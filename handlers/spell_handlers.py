@@ -22,15 +22,12 @@ router = Router()
 
 @router.callback_query(lambda c: c.data.startswith("cantrip_cat_"))
 async def show_cantrips_in_category(callback: CallbackQuery, state: FSMContext):
-    # Удаляем текущее сообщение с категориями, если оно есть, чтобы начать чисто
-    # В методе сервиса будет отправлено новое сообщение
-    await callback.message.delete()
+    # Не удаляем, сервис отредактирует текущее сообщение
     await SpellSelectionService.show_cantrips_in_category(callback, state)
 
 
 @router.callback_query(lambda c: c.data.startswith("cantrip_view_"))
 async def view_cantrip_detail(callback: CallbackQuery, state: FSMContext):
-    # Не удаляем, а редактируем (показываем детали) — это нормально
     await SpellSelectionService.view_cantrip_detail(callback, state)
 
 
@@ -46,16 +43,14 @@ async def remove_cantrip(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(lambda c: c.data == "cantrip_back_list")
 async def back_to_cantrip_list(callback: CallbackQuery, state: FSMContext):
-    # Возврат к списку заклинаний в категории – обычно редактируем текущее сообщение,
-    # но для надёжности удалим и отправим новое (или доверимся сервису)
-    await callback.message.delete()
+    # Сервис отредактирует сообщение, не удаляем
     await SpellSelectionService.back_to_cantrip_list(callback, state)
     await callback.answer()
 
 
 @router.callback_query(lambda c: c.data == "cantrip_back_categories")
 async def back_to_cantrip_categories(callback: CallbackQuery, state: FSMContext):
-    # При возврате к категориям удаляем текущее сообщение (список заклинаний)
+    # Здесь сервис отправляет новое сообщение (категории), поэтому удалим старое
     await callback.message.delete()
     await SpellSelectionService.back_to_cantrip_categories(callback, state)
     await callback.answer()
@@ -65,7 +60,6 @@ async def back_to_cantrip_categories(callback: CallbackQuery, state: FSMContext)
 
 @router.callback_query(lambda c: c.data.startswith("level1_cat_"))
 async def show_level1_in_category(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
     await SpellSelectionService.show_level1_in_category(callback, state)
 
 
@@ -86,7 +80,6 @@ async def remove_level1_spell(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(lambda c: c.data == "level1_back_list")
 async def back_to_level1_list(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
     await SpellSelectionService.back_to_level1_list(callback, state)
     await callback.answer()
 

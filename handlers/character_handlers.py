@@ -103,12 +103,10 @@ def _create_invocations_keyboard(level: int = 1, selected_count: int = 0) -> Opt
     buttons = []
     for inv in invocations[:12]:
         emoji = "🔮" if inv['level_required'] == 1 else "🔷"
-        # Можно показывать галочку, если уже выбрано (но selected_count не даёт имён, поэтому упростим)
         buttons.append([InlineKeyboardButton(
             text=f"{emoji} {inv['name']} (ур. {inv['level_required']})",
             callback_data=f"inv_{inv['id']}"
         )])
-    # Кнопка "Назад" (без пропуска)
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -268,7 +266,7 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
         text += f"\n📖 **На 1 уровне вы можете выбрать подкласс:**\n"
         for sub in subclasses:
             text += f"   • {sub['name']} — {sub['description'][:60]}...\n"
-        reply_markup = _create_subclass_keyboard(class_name)   # изменено
+        reply_markup = _create_subclass_keyboard(class_name)
         await state.set_state(CreateCharacter.subclass_select)
         img_path = CharacterStatsService.get_class_image_path(class_name)
         try:
@@ -320,7 +318,7 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
 
 
 # =========================================================
-# ВЫБОР ПОДКЛАССА (НОВЫЙ ОБРАБОТЧИК)
+# ВЫБОР ПОДКЛАССА
 # =========================================================
 
 @router.callback_query(lambda c: c.data.startswith("subclass_"))
@@ -548,7 +546,6 @@ async def go_to_invocations(message: Message, state: FSMContext):
         invocations = CharacterStatsService.get_all_invocations(level=1)
         if invocations:
             selected_count = len(data.get("selected_invocations", []))
-            # Используем изменённую клавиатуру без пропуска
             keyboard = _create_invocations_keyboard(level=1, selected_count=selected_count)
             if keyboard:
                 await message.answer(
@@ -594,6 +591,8 @@ async def select_fighting_style(callback: CallbackQuery, state: FSMContext):
         await state.update_data(selected_fighting_style=style_name)
         await callback.answer(f"✅ Выбран стиль: {style_name}")
         logger.info(f"[FLOW] Выбран боевой стиль: {style_name}")
+    # Удаляем текущее сообщение
+    await callback.message.delete()
     await go_to_invocations(callback.message, state)
     await callback.answer()
 
@@ -601,6 +600,7 @@ async def select_fighting_style(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(lambda c: c.data == "style_skip")
 async def skip_fighting_style(callback: CallbackQuery, state: FSMContext):
     await callback.answer("⏩ Боевой стиль пропущен")
+    await callback.message.delete()
     await go_to_invocations(callback.message, state)
     await callback.answer()
 
@@ -632,21 +632,17 @@ async def select_invocation(callback: CallbackQuery, state: FSMContext):
         keyboard = _create_invocations_keyboard(level=1, selected_count=new_count)
         if keyboard:
             await callback.message.edit_reply_markup(reply_markup=keyboard)
-    # Если выбрано 2 возвания, автоматически переходим к предыстории
+    # Если выбрано 2 возвания, удаляем сообщение и переходим
     if new_count == 2:
+        await callback.message.delete()
         logger.info("[FLOW] Выбрано 2 возвания, переходим к предыстории")
         await go_to_background(callback.message, state)
     await callback.answer()
 
 
-# Удаляем обработчики skip_invocations — они больше не нужны
-# @router.callback_query(lambda c: c.data == "inv_skip")
-# async def skip_invocations(callback: CallbackQuery, state: FSMContext):
-#     ...
-
-
 @router.callback_query(lambda c: c.data == "inv_continue")
 async def continue_invocations(callback: CallbackQuery, state: FSMContext):
+    await callback.message.delete()
     await go_to_background(callback.message, state)
     await callback.answer()
 
@@ -788,7 +784,7 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
             sub_trait = CharacterStatsService.get_subrace_trait(race, sub)
             text += f"   • **{sub}** — {sub_trait[:50] + '...' if len(sub_trait) > 50 else sub_trait}\n"
         text += f"\n**Шаг 10/12: Выберите ПОДРАСУ**"
-        reply_markup = _create_subrace_keyboard(race)   # изменено
+        reply_markup = _create_subrace_keyboard(race)
         await state.set_state(CreateCharacter.subrace_select)
     else:
         await go_to_name(callback.message, state)
@@ -822,11 +818,6 @@ async def select_subrace(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(text, parse_mode=None)
     await go_to_name(callback.message, state)
     await callback.answer()
-
-
-# Удаляем обработчик skip_subrace — он больше не нужен
-# @router.callback_query(lambda c: c.data == "subrace_skip")
-# async def skip_subrace(...): ...
 
 
 @router.callback_query(lambda c: c.data == "back_to_races")
@@ -1062,7 +1053,7 @@ async def cancel_delete(callback: CallbackQuery):
 @router.callback_query(lambda c: c.data == "cancel_creation")
 async def cancel_creation_callback(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.delete()   # удаляем текущее сообщение
+    await callback.message.delete()
     await callback.message.answer(
         "❌ Создание персонажа отменено.\n\nЧтобы начать заново, нажмите «🎲 Создать персонажа»",
         reply_markup=main_menu()

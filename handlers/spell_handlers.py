@@ -88,6 +88,9 @@ async def back_to_level1_categories(callback: CallbackQuery, state: FSMContext):
 async def continue_after_spells(message: Message, state: FSMContext):
     """Обработчик кнопки 'Продолжить' после выбора заклинаний"""
     logger.info("🔵 Кнопка 'Продолжить' нажата")
+    # Удаляем сообщение с кнопкой, чтобы не захламлять чат
+    await message.delete()
+
     current_state = await state.get_state()
     logger.info(f"Текущее состояние FSM: {current_state}")
 

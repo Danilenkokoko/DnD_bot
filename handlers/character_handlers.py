@@ -95,7 +95,7 @@ def _create_subrace_keyboard(race: str) -> Optional[InlineKeyboardMarkup]:
 
 
 def _create_invocations_keyboard(level: int = 1, selected_names: list = None) -> Optional[InlineKeyboardMarkup]:
-    """Клавиатура выбора возваний с отображением выбранных"""
+    """Клавиатура выбора возваний с отображением выбранных (без кнопки пропуска)"""
     from services.character_service import CharacterStatsService
     invocations = CharacterStatsService.get_all_invocations(level)
     if not invocations:
@@ -104,14 +104,61 @@ def _create_invocations_keyboard(level: int = 1, selected_names: list = None) ->
         selected_names = []
     buttons = []
     for inv in invocations[:12]:
-        emoji = "🔮" if inv['level_required'] == 1 else "🔷"
         check = "✅ " if inv['name'] in selected_names else ""
         buttons.append([InlineKeyboardButton(
-            text=f"{check}{emoji} {inv['name']} (ур. {inv['level_required']})",
+            text=f"{check}{inv['name']}",
             callback_data=f"inv_{inv['id']}"
         )])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def _create_fighting_style_keyboard(class_name: str) -> Optional[InlineKeyboardMarkup]:
+    """Клавиатура выбора боевого стиля (без кнопки пропуска)"""
+    styles = CharacterStatsService.get_fighting_styles_for_class(class_name)
+    if not styles:
+        return None
+    buttons = []
+    for s in styles:
+        buttons.append([InlineKeyboardButton(
+            text=f"⚔️ {s['name']}",
+            callback_data=f"style_{s['id']}"
+        )])
+    # Кнопка "Назад" (без пропуска)
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_spells")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# Заменить существующую функцию go_to_fighting_style
+async def go_to_fighting_style(message: Message, state: FSMContext):
+    logger.info("=" * 50)
+    logger.info("🔧 go_to_fighting_style ВЫЗВАНА!")
+    logger.info("=" * 50)
+    data = await state.get_data()
+    class_name = data.get("class_name")
+    logger.info(f"   class_name = {class_name}")
+
+    if ProgressionService.should_select_fighting_style(class_name):
+        styles = CharacterStatsService.get_fighting_styles_for_class(class_name)
+        logger.info(f"   Найдено стилей: {len(styles) if styles else 0}")
+        if not styles:
+            logger.warning(f"⚠️ Нет боевых стилей для класса {class_name}")
+            await message.answer(f"⚠️ Для класса {class_name} нет доступных боевых стилей.\n\nПереходим к следующему шагу...")
+            await go_to_invocations(message, state)
+            return
+
+        # Формируем текстовое описание стилей
+        text = f"⚔️ **Шаг 5/12: Выбор БОЕВОГО СТИЛЯ**\n\n"
+        text += f"Класс **{class_name}** может выбрать один боевой стиль.\n\n"
+        text += "**Доступные стили:**\n"
+        for s in styles:
+            text += f"• **{s['name']}** – {s['description']}\n"
+        text += "\nНажмите на кнопку с названием стиля, чтобы выбрать его."
+
+        await state.set_state(CreateCharacter.fighting_style_select)
+        await message.answer(text, parse_mode=None, reply_markup=_create_fighting_style_keyboard(class_name))
+    else:
+        logger.info(f"   Класс {class_name} не в списке, идём к invocations")
+        await go_to_invocations(message, state)
 
 
 # =========================================================
@@ -546,20 +593,26 @@ async def go_to_invocations(message: Message, state: FSMContext):
     data = await state.get_data()
     class_name = data.get("class_name")
     logger.info(f"🔧 go_to_invocations вызвана для класса: {class_name}")
+
     if ProgressionService.should_select_invocations(class_name):
         await state.set_state(CreateCharacter.invocations_select)
         invocations = CharacterStatsService.get_all_invocations(level=1)
         if invocations:
             selected_names = data.get("selected_invocations", [])
+            # Формируем текстовое описание
+            text = f"🔮 **Шаг 6/12: Выбор ТАИНСТВЕННЫХ ВОЗВАНИЙ**\n\n"
+            text += "Колдун может выбрать таинственные возвания.\n"
+            text += "Вы можете выбрать до 2 возваний на 1 уровне.\n\n"
+            text += "**Доступные возвания:**\n"
+            for inv in invocations:
+                level_req = inv.get('level_required', 1)
+                effect = inv.get('effect', 'Нет описания')
+                text += f"• **{inv['name']}** (ур. {level_req}) – {effect}\n"
+            text += "\nНажмите на название возвания, чтобы добавить/удалить его. ✅ означает выбранное."
+
             keyboard = _create_invocations_keyboard(level=1, selected_names=selected_names)
             if keyboard:
-                await message.answer(
-                    f"🔮 **Шаг 6/12: Выбор ТАИНСТВЕННЫХ ВОЗВАНИЙ**\n\n"
-                    f"Колдун может выбрать таинственные возвания.\n"
-                    f"Вы можете выбрать до 2 возваний на 1 уровне.",
-                    parse_mode=None,
-                    reply_markup=keyboard
-                )
+                await message.answer(text, parse_mode=None, reply_markup=keyboard)
             else:
                 await message.answer("📖 Нет доступных возваний для вашего уровня.")
                 await go_to_background(message, state)
@@ -602,12 +655,11 @@ async def select_fighting_style(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(lambda c: c.data == "style_skip")
-async def skip_fighting_style(callback: CallbackQuery, state: FSMContext):
-    await callback.answer("⏩ Боевой стиль пропущен")
-    await callback.message.delete()
-    await go_to_invocations(callback.message, state)
-    await callback.answer()
+#@router.callback_query(lambda c: c.data == "style_skip")
+#async def skip_fighting_style(callback: CallbackQuery, state: FSMContext):
+#   await callback.answer("⏩ Боевой стиль пропущен")
+#  await go_to_invocations(callback.message, state)
+# await callback.answer()
 
 
 @router.callback_query(lambda c: c.data.startswith("inv_") and c.data not in ("inv_skip", "inv_continue"))

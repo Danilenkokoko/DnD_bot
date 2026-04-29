@@ -272,7 +272,7 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
     except Exception:
         pass
 
-    # Получаем данные для навыков (используем один раз)
+    # Общие данные для навыков (используются в обеих ветках)
     class_data = _class_repo.get_by_name(class_name)
     available_skills = class_data.get('skills', []) if class_data else []
     skill_choices = class_data.get('skill_choices', 2) if class_data else 2
@@ -284,6 +284,7 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
             "Религия", "Скрытность", "Тайная магия", "Убеждение"
         ]
 
+    # ------------------ ЕСТЬ ПОДКЛАСС ------------------
     if subclasses and class_name in ["Жрец", "Друид", "Колдун"]:
         text += f"\n📖 **На 1 уровне вы можете выбрать подкласс:**\n"
         for sub in subclasses:
@@ -301,15 +302,15 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
-    # --- НЕТ ПОДКЛАССА ---
-    # Отправляем информационное сообщение с картинкой (без кнопок)
+    # ------------------ НЕТ ПОДКЛАССА ------------------
+    # Отправляем информационное сообщение (без кнопок)
     if img_path and os.path.exists(img_path):
         photo = FSInputFile(img_path)
         await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
     else:
         await callback.message.answer(text, parse_mode=None)
 
-    # Переходим к выбору навыков
+    # Переход к выбору навыков
     await state.set_state(CreateCharacter.skills_select)
     selected_skills = []
     await state.update_data(selected_class_skills=selected_skills)
@@ -319,40 +320,6 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
                    f"Навыки, отмеченные ✅, будут добавлены к вашему персонажу.\n\n"
                    f"После выбора нажмите «✅ Готово».")
     await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
-    await callback.answer()
-
-    # НЕТ ПОДКЛАССА НА 1 УРОВНЕ — ПЕРЕХОДИМ К ВЫБОРУ НАВЫКОВ
-    class_data = _class_repo.get_by_name(class_name)
-    available_skills = class_data.get('skills', []) if class_data else []
-    skill_choices = class_data.get('skill_choices', 2) if class_data else 2
-
-    if not available_skills:
-        available_skills = [
-            "Акробатика", "Атлетика", "Восприятие", "Выживание", "Выступление",
-            "Запугивание", "История", "Ловкость рук", "Медицина", "Обман",
-            "Обращение с животными", "Природа", "Проницательность", "Расследование",
-            "Религия", "Скрытность", "Тайная магия", "Убеждение"
-        ]
-
-    await state.set_state(CreateCharacter.skills_select)
-    selected_skills = []
-    await state.update_data(selected_class_skills=selected_skills)
-    keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
-    text_skills = (f"📚 **Шаг 2/12: Выбор НАВЫКОВ класса {class_name}**\n\n"
-                   f"Выберите {skill_choices} навык(а) из списка ниже. "
-                   f"Навыки, отмеченные ✅, будут добавлены к вашему персонажу.\n\n"
-                   f"После выбора нажмите «✅ Готово».")
-    img_path = CharacterStatsService.get_class_image_path(class_name)
-    try:
-        await callback.message.delete()
-        if img_path and os.path.exists(img_path):
-            photo = FSInputFile(img_path)
-            await callback.message.answer_photo(photo=photo, caption=text_skills, parse_mode=None, reply_markup=keyboard)
-        else:
-            await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
-    except Exception as e:
-        logger.error(f"Ошибка: {e}")
-        await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
     await callback.answer()
 
 
@@ -367,14 +334,20 @@ async def select_subclass(callback: CallbackQuery, state: FSMContext):
     logger.info(f"[FLOW] Выбран подкласс ID: {subclass_id}")
     # Удаляем сообщение с клавиатурой подкласса
     await callback.message.delete()
-    # Переходим к выбору навыков
+
+    # Переходим к выбору навыков (без повторной отправки картинки)
     data = await state.get_data()
     class_name = data.get("class_name")
     class_data = _class_repo.get_by_name(class_name)
     available_skills = class_data.get('skills', []) if class_data else []
     skill_choices = class_data.get('skill_choices', 2) if class_data else 2
     if not available_skills:
-        available_skills = [ ... ]  # стандартный список
+        available_skills = [
+            "Акробатика", "Атлетика", "Восприятие", "Выживание", "Выступление",
+            "Запугивание", "История", "Ловкость рук", "Медицина", "Обман",
+            "Обращение с животными", "Природа", "Проницательность", "Расследование",
+            "Религия", "Скрытность", "Тайная магия", "Убеждение"
+        ]
     await state.set_state(CreateCharacter.skills_select)
     selected_skills = []
     await state.update_data(selected_class_skills=selected_skills)

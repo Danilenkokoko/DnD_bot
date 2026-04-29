@@ -548,6 +548,10 @@ async def select_background(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         return
 
+    # Получаем черту происхождения
+    origin_feat = bg_info.get('origin_feat', '')
+    origin_feat_text = f"\n🌟 **Черта происхождения:** {origin_feat}" if origin_feat else ""
+
     await state.update_data(selected_skills=bg_info.get('skills', []), background_trait=bg_info.get('trait', 'Нет'))
     await state.set_state(CreateCharacter.background_equipment_select)
 
@@ -558,7 +562,9 @@ async def select_background(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(
         f"📜 **Предыстория: {background}**\n\n📖 {bg_info.get('description', 'Нет описания')[:300]}...\n\n"
         f"✨ **Бонусы к характеристикам:**\n   • +2 к {bg_info['characteristics'][0]}\n   • +1 к {bg_info['characteristics'][1]}\n\n"
-        f"🔧 **Черта:** {bg_info.get('trait', 'Нет')}\n📚 **Навыки:** {', '.join(bg_info.get('skills', []))}\n"
+        f"🔧 **Черта предыстории:** {bg_info.get('trait', 'Нет')}"
+        f"{origin_feat_text}\n"
+        f"📚 **Навыки:** {', '.join(bg_info.get('skills', []))}\n"
         f"🛠️ **Инструменты:** {bg_info.get('tools', 'Нет')}\n\n"
         f"**Шаг 8/12: Выберите СНАРЯЖЕНИЕ от предыстории**\n\n"
         f"📦 Вариант А: {equip_a}...\n🎒 Вариант Б: {equip_b}...",

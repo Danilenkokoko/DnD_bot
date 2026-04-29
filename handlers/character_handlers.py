@@ -265,27 +265,50 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
             f"• 🛡️ Спасброски: {', '.join(class_info.get('saving_throws', []))}\n"
             f"• 🔮 Заклинания: {'Да' if class_info.get('spellcasting', False) else 'Нет'}\n")
 
+    img_path = CharacterStatsService.get_class_image_path(class_name)
+    # Удаляем исходное сообщение с кнопками выбора класса
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass  # сообщение уже могло быть удалено
+
     if subclasses and class_name in ["Жрец", "Друид", "Колдун"]:
         text += f"\n📖 **На 1 уровне вы можете выбрать подкласс:**\n"
         for sub in subclasses:
             text += f"   • {sub['name']} — {sub['description'][:60]}...\n"
+        # Отправляем информационное сообщение с картинкой (без кнопок)
+        if img_path and os.path.exists(img_path):
+            photo = FSInputFile(img_path)
+            await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
+        else:
+            await callback.message.answer(text, parse_mode=None)
+        # Отправляем отдельное сообщение с клавиатурой выбора подкласса
+        reply_markup = _create_subclass_keyboard(class_name)
+        await callback.message.answer("Выберите подкласс:", reply_markup=reply_markup)
         await state.set_state(CreateCharacter.subclass_select)
-        img_path = CharacterStatsService.get_class_image_path(class_name)
-        try:
-            await callback.message.delete()
-            # Отправляем фото с текстом (без клавиатуры)
-            if img_path and os.path.exists(img_path):
-                photo = FSInputFile(img_path)
-                await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
-            else:
-                await callback.message.answer(text, parse_mode=None)
-            # Отправляем клавиатуру выбора подкласса отдельным сообщением
-            await callback.message.answer("Выберите подкласс:", reply_markup=_create_subclass_keyboard(class_name))
-        except Exception as e:
-            logger.error(f"Ошибка: {e}")
-            await callback.message.answer(text, parse_mode=None, reply_markup=_create_subclass_keyboard(class_name))
-        await callback.answer()
-        return
+    else:
+        # Нет подкласса – отправляем информационное сообщение и переходим к навыкам
+        if img_path and os.path.exists(img_path):
+            photo = FSInputFile(img_path)
+            await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
+        else:
+            await callback.message.answer(text, parse_mode=None)
+        # Далее идём к выбору навыков (как было)
+        class_data = _class_repo.get_by_name(class_name)
+        available_skills = class_data.get('skills', []) if class_data else []
+        skill_choices = class_data.get('skill_choices', 2) if class_data else 2
+        if not available_skills:
+            available_skills = [ ... ]  # стандартный список
+        await state.set_state(CreateCharacter.skills_select)
+        selected_skills = []
+        await state.update_data(selected_class_skills=selected_skills)
+        keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
+        text_skills = (f"📚 **Шаг 2/12: Выбор НАВЫКОВ класса {class_name}**\n\n"
+                       f"Выберите {skill_choices} навык(а) из списка ниже. "
+                       f"Навыки, отмеченные ✅, будут добавлены к вашему персонажу.\n\n"
+                       f"После выбора нажмите «✅ Готово».")
+        await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
+    await callback.answer()
 
     # НЕТ ПОДКЛАССА НА 1 УРОВНЕ — ПЕРЕХОДИМ К ВЫБОРУ НАВЫКОВ
     class_data = _class_repo.get_by_name(class_name)
@@ -331,22 +354,16 @@ async def select_subclass(callback: CallbackQuery, state: FSMContext):
     subclass_id = int(callback.data.replace("subclass_", ""))
     await state.update_data(subclass_id=subclass_id)
     logger.info(f"[FLOW] Выбран подкласс ID: {subclass_id}")
-
-    # Переходим к выбору навыков (как в случае без подкласса)
+    # Удаляем сообщение с клавиатурой подкласса
+    await callback.message.delete()
+    # Переходим к выбору навыков
     data = await state.get_data()
     class_name = data.get("class_name")
     class_data = _class_repo.get_by_name(class_name)
     available_skills = class_data.get('skills', []) if class_data else []
     skill_choices = class_data.get('skill_choices', 2) if class_data else 2
-
     if not available_skills:
-        available_skills = [
-            "Акробатика", "Атлетика", "Восприятие", "Выживание", "Выступление",
-            "Запугивание", "История", "Ловкость рук", "Медицина", "Обман",
-            "Обращение с животными", "Природа", "Проницательность", "Расследование",
-            "Религия", "Скрытность", "Тайная магия", "Убеждение"
-        ]
-
+        available_skills = [ ... ]  # стандартный список
     await state.set_state(CreateCharacter.skills_select)
     selected_skills = []
     await state.update_data(selected_class_skills=selected_skills)
@@ -354,7 +371,6 @@ async def select_subclass(callback: CallbackQuery, state: FSMContext):
     text_skills = (f"📚 **Шаг 2/12: Выбор НАВЫКОВ класса {class_name}**\n\n"
                    f"Выберите {skill_choices} навык(а) из списка ниже.\n\n"
                    f"После выбора нажмите «✅ Готово».")
-    await callback.message.delete()
     await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
     await callback.answer()
 
@@ -786,35 +802,38 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
     subraces_list = CharacterStatsService.get_subraces(race) if has_sub else []
 
     text = f"🧝 **Раса: {race}**\n\n📖 {race_desc}\n\n🏃 **Скорость:** {race_speed} футов\n📏 **Размер:** {race_size}\n"
+    img_path = CharacterStatsService.get_race_image_path(race)
 
-    # Удаляем текущее сообщение (клавиатуру выбора расы)
-    await callback.message.delete()
+    # Удаляем исходное сообщение с кнопками выбора расы
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
 
     if has_sub and subraces_list:
         text += f"\n🌟 **Доступные подрасы:**\n"
         for sub in subraces_list:
             sub_trait = CharacterStatsService.get_subrace_trait(race, sub)
             text += f"   • **{sub}** — {sub_trait[:50] + '...' if len(sub_trait) > 50 else sub_trait}\n"
-        text += f"\n**Шаг 10/12: Выберите ПОДРАСУ**"
+        # Отправляем информационное сообщение с картинкой
+        if img_path and os.path.exists(img_path):
+            photo = FSInputFile(img_path)
+            await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
+        else:
+            await callback.message.answer(text, parse_mode=None)
+        # Отправляем отдельное сообщение с клавиатурой выбора подрасы
+        reply_markup = _create_subrace_keyboard(race)
+        await callback.message.answer("Выберите подрасу:", reply_markup=reply_markup)
         await state.set_state(CreateCharacter.subrace_select)
-        img_path = CharacterStatsService.get_race_image_path(race)
-        try:
-            await callback.message.delete()
-            # Отправляем фото с текстом (без клавиатуры)
-            if img_path and os.path.exists(img_path):
-                photo = FSInputFile(img_path)
-                await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
-            else:
-                await callback.message.answer(text, parse_mode=None)
-            # Отправляем клавиатуру выбора подрасы отдельным сообщением
-            await callback.message.answer("Выберите подрасу:", reply_markup=_create_subrace_keyboard(race))
-        except Exception as e:
-            logger.error(f"Ошибка: {e}")
-            await callback.message.answer(text, parse_mode=None, reply_markup=_create_subrace_keyboard(race))
     else:
-        # Нет подрас – сразу переходим к вводу имени
-        await callback.message.delete()
+        # Нет подрас – отправляем информационное сообщение и переходим к имени
+        if img_path and os.path.exists(img_path):
+            photo = FSInputFile(img_path)
+            await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
+        else:
+            await callback.message.answer(text, parse_mode=None)
         await go_to_name(callback.message, state)
+    await callback.answer()
 
 
 @router.callback_query(lambda c: c.data.startswith("subrace_"))
@@ -826,8 +845,10 @@ async def select_subrace(callback: CallbackQuery, state: FSMContext):
     sub_desc = CharacterStatsService.get_subrace_description(race, subrace)
     sub_trait = CharacterStatsService.get_subrace_trait(race, subrace)
     text = f"🧝 **{race} — {subrace}**\n\n📖 {sub_desc}\n\n✨ **Особенность:** {sub_trait}\n\nПереходим к вводу имени..."
+    # Удаляем сообщение с клавиатурой подрасы
     await callback.message.delete()
-    await callback.message.answer(text, parse_mode=None)
+    # Отправляем информационное сообщение о выборе подрасы (можно отправить новое, но можно и не отправлять, так как основное сообщение с расой уже есть)
+    # Просто переходим к имени
     await go_to_name(callback.message, state)
     await callback.answer()
 

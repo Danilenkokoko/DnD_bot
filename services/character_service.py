@@ -47,17 +47,14 @@ class CharacterStatsService:
 
     @staticmethod
     def get_class_primary_stats(class_name: str) -> List[str]:
-        """Возвращает основные характеристики класса"""
         return _class_repo.get_primary_stats(class_name)
 
     @staticmethod
     def get_class_hit_die(class_name: str) -> int:
-        """Возвращает хитовый кубик класса"""
         return _class_repo.get_hit_die(class_name)
 
     @staticmethod
     def get_class_info(class_name: str) -> Dict[str, Any]:
-        """Возвращает полную информацию о классе (для совместимости с handlers)"""
         class_data = _class_repo.get_by_name(class_name)
         if not class_data:
             return {}
@@ -73,114 +70,94 @@ class CharacterStatsService:
 
     @staticmethod
     def get_class_description(class_name: str) -> str:
-        """Возвращает описание класса"""
         class_data = _class_repo.get_by_name(class_name)
         return class_data.get('description', '') if class_data else ''
 
     @staticmethod
     def get_class_image_path(class_name: str) -> Optional[str]:
-        """Возвращает путь к картинке класса"""
         class_data = _class_repo.get_by_name(class_name)
         return class_data.get('image_path') if class_data else None
 
     @staticmethod
     def get_class_spell_counts(class_name: str) -> Dict[str, int]:
-        """Возвращает количество заговоров и заклинаний 1 уровня"""
         return _class_repo.get_spell_counts(class_name)
 
     @staticmethod
     def get_background_characteristics(background_name: str) -> List[str]:
-        """Возвращает характеристики предыстории"""
         return _background_repo.get_characteristics(background_name)
 
     @staticmethod
     def get_background_data(background_name: str) -> Dict[str, Any]:
-        """Возвращает полные данные предыстории"""
         return _background_repo.get_by_name(background_name) or {}
 
     @staticmethod
     def get_race_list() -> List[str]:
-        """Возвращает список рас"""
         return _race_repo.get_all_names()
 
     @staticmethod
     def get_race_description(race_name: str) -> str:
-        """Возвращает описание расы"""
         race = _race_repo.get_by_name(race_name)
         return race.get('description', '') if race else ''
 
     @staticmethod
     def get_race_speed(race_name: str) -> int:
-        """Возвращает скорость расы"""
         race = _race_repo.get_by_name(race_name)
         return race.get('speed', 30) if race else 30
 
     @staticmethod
     def get_race_size(race_name: str) -> str:
-        """Возвращает размер расы"""
         race = _race_repo.get_by_name(race_name)
         return race.get('size', 'Средний') if race else 'Средний'
 
     @staticmethod
     def get_race_image_path(race_name: str) -> Optional[str]:
-        """Возвращает путь к картинке расы"""
         race = _race_repo.get_by_name(race_name)
         return race.get('image_path') if race else None
 
     @staticmethod
     def has_subraces(race_name: str) -> bool:
-        """Проверяет наличие подрас"""
         return _race_repo.has_subraces(race_name)
 
     @staticmethod
     def get_subraces(race_name: str) -> List[str]:
-        """Возвращает список названий подрас"""
         return _race_repo.get_subrace_names(race_name)
 
     @staticmethod
     def get_subrace_description(race_name: str, subrace_name: str) -> str:
-        """Возвращает описание подрасы"""
         subrace = _race_repo.get_subrace_by_name(race_name, subrace_name)
         return subrace.get('description', '') if subrace else ''
 
     @staticmethod
     def get_subrace_trait(race_name: str, subrace_name: str) -> str:
-        """Возвращает особенность подрасы"""
         subrace = _race_repo.get_subrace_by_name(race_name, subrace_name)
         return subrace.get('trait', '') if subrace else ''
 
     @staticmethod
     def get_class_equipment(class_name: str, choice: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Возвращает снаряжение класса"""
         return _equipment_repo.get_class_equipment(class_name, choice)
 
     @staticmethod
     def get_fighting_styles_for_class(class_name: str) -> List[Dict[str, Any]]:
-        """Возвращает боевые стили для класса"""
         return _fighting_style_repo.get_for_class(class_name)
 
     @staticmethod
     def get_all_invocations(level: int = 1) -> List[Dict[str, Any]]:
-        """Возвращает доступные возвания"""
         return _invocation_repo.get_all(level)
 
     @staticmethod
     def auto_assign_masteries(weapon_name: str, class_name: str) -> List[str]:
-        """Автоматически назначает оружейные приёмы"""
         return _equipment_repo.auto_assign_masteries(weapon_name, class_name)
 
     @staticmethod
     def get_spells_grouped_by_category(class_name: str, is_cantrip: bool = True) -> Dict[str, List[Dict[str, Any]]]:
-        """Возвращает заклинания, сгруппированные по категориям"""
         return _spell_repo.get_categories_for_class(class_name, is_cantrip)
 
     @staticmethod
     def get_spell_by_id(spell_id: int) -> Optional[Dict[str, Any]]:
-        """Возвращает заклинание по ID"""
         return _spell_repo.get_by_id(spell_id)
 
     # =========================================================
-    # РАСЧЁТ ХАРАКТЕРИСТИК (ENGINE)
+    # РАСЧЁТ ХАРАКТЕРИСТИК (ENGINE) - без расовых бонусов
     # =========================================================
 
     @staticmethod
@@ -190,7 +167,8 @@ class CharacterStatsService:
         base_stats_dict: Optional[Dict[str, int]] = None
     ) -> Dict[str, Any]:
         """
-        Рассчитывает финальные характеристики, используя engine и репозитории
+        Рассчитывает финальные характеристики, используя engine и репозитории.
+        ВНИМАНИЕ: Расовые бонусы НЕ применяются (согласно D&D 5.5e 2024).
         """
         class_primary = _class_repo.get_primary_stats(class_name)
         background_stats = _background_repo.get_characteristics(background_name)
@@ -211,6 +189,8 @@ class CharacterStatsService:
         )
         final_stats = bonuses.apply_to(base_stats)
 
+        # Расовые бонусы (get_race_ability_bonuses) полностью удалены.
+
         return {
             'stats': final_stats.to_str_dict(),
             'bonuses': bonuses.to_str_dict(),
@@ -225,7 +205,6 @@ class CharacterStatsService:
         level: int = 1,
         use_average: bool = True
     ) -> int:
-        """Рассчитывает HP персонажа"""
         hit_die = _class_repo.get_hit_die(class_name)
 
         valid, msg = validate_level(level)
@@ -248,7 +227,6 @@ class CharacterStatsService:
         armor_name: Optional[str] = None,
         has_shield: bool = False
     ) -> int:
-        """Рассчитывает AC персонажа"""
         valid, msg = validate_ability_score(dexterity, "DEX")
         if not valid:
             logger.warning(f"Невалидное значение DEX {dexterity}: {msg}, используем 10")
@@ -264,12 +242,10 @@ class CharacterStatsService:
 
     @staticmethod
     def calculate_proficiency_bonus(level: int) -> int:
-        """Рассчитывает бонус мастерства"""
         return calculate_proficiency_bonus(level)
 
     @staticmethod
     def format_stats_display(stats: Dict[str, int]) -> str:
-        """Форматирует характеристики для отображения"""
         def modifier(stat_value: int) -> int:
             return hp_calculate_modifier(stat_value)
 
@@ -282,7 +258,6 @@ class CharacterStatsService:
 
     @staticmethod
     def validate_character_stats(stats: Dict[str, int]) -> Tuple[bool, List[str]]:
-        """Проверяет корректность характеристик персонажа"""
         valid, msg = validate_all_ability_scores(stats)
         if not valid:
             return False, [msg]
@@ -301,9 +276,6 @@ class CharacterStatsService:
         base_stats_dict: Optional[Dict[str, int]] = None,
         equipment_choice: str = "A"
     ) -> Dict[str, Any]:
-        """
-        Комплексный расчёт и форматирование характеристик
-        """
         if base_stats_dict is None:
             base_stats_dict = get_class_starting_stats(class_name, equipment_choice)
 
@@ -398,7 +370,7 @@ class CharacterFinalizationService:
         hp = CharacterStatsService.calculate_hp(class_name, constitution, level=1)
         ac = CharacterStatsService.calculate_ac(dexterity, selected_armor)
 
-        # Навыки от предыстории
+        # Навыки от предыстории (будут объединены с навыками класса в финальном сохранении)
         bg_skills = background_data.get('skills', []) if background_data else []
 
         return {
@@ -423,7 +395,7 @@ class CharacterFinalizationService:
             'selected_invocations': selected_invocations,
             'selected_weapon': selected_weapon,
             'selected_armor': selected_armor,
-            'selected_skills': bg_skills,
+            'selected_skills_bg': bg_skills,
         }
 
     @staticmethod

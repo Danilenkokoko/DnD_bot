@@ -778,6 +778,9 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
 
     text = f"🧝 **Раса: {race}**\n\n📖 {race_desc}\n\n🏃 **Скорость:** {race_speed} футов\n📏 **Размер:** {race_size}\n"
 
+    # Удаляем текущее сообщение (клавиатуру выбора расы)
+    await callback.message.delete()
+
     if has_sub and subraces_list:
         text += f"\n🌟 **Доступные подрасы:**\n"
         for sub in subraces_list:
@@ -786,22 +789,19 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
         text += f"\n**Шаг 10/12: Выберите ПОДРАСУ**"
         reply_markup = _create_subrace_keyboard(race)
         await state.set_state(CreateCharacter.subrace_select)
-    else:
-        await go_to_name(callback.message, state)
-        await callback.answer()
-        return
-
-    img_path = CharacterStatsService.get_race_image_path(race)
-    try:
-        await callback.message.delete()
-        if img_path and os.path.exists(img_path):
-            photo = FSInputFile(img_path)
-            await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None, reply_markup=reply_markup)
-        else:
+        img_path = CharacterStatsService.get_race_image_path(race)
+        try:
+            if img_path and os.path.exists(img_path):
+                photo = FSInputFile(img_path)
+                await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None, reply_markup=reply_markup)
+            else:
+                await callback.message.answer(text, parse_mode=None, reply_markup=reply_markup)
+        except Exception as e:
+            logger.error(f"Ошибка: {e}")
             await callback.message.answer(text, parse_mode=None, reply_markup=reply_markup)
-    except Exception as e:
-        logger.error(f"Ошибка: {e}")
-        await callback.message.answer(text, parse_mode=None, reply_markup=reply_markup)
+    else:
+        # Нет подрас – сразу переходим к вводу имени
+        await go_to_name(callback.message, state)
     await callback.answer()
 
 

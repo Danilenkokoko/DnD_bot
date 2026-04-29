@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, List, Tuple
 # Engine (чистая логика)
 from engine.stats import AbilityScores, BackgroundBonusDistributor
 from engine.hp import calculate_hp_at_level, HpCalculationMethod, calculate_modifier as hp_calculate_modifier
-from engine.ac import calculate_ac_with_armor, calculate_base_ac
+from engine.ac import calculate_ac_with_armor, calculate_base_ac, calculate_unarmored_ac
 from engine.proficiency import calculate_proficiency_bonus
 from engine.validators import validate_all_ability_scores, validate_ability_score, validate_level
 
@@ -189,7 +189,7 @@ class CharacterStatsService:
         )
         final_stats = bonuses.apply_to(base_stats)
 
-        # Расовые бонусы (get_race_ability_bonuses) полностью удалены.
+        # Расовые бонусы не применяются
 
         return {
             'stats': final_stats.to_str_dict(),
@@ -225,13 +225,33 @@ class CharacterStatsService:
     def calculate_ac(
         dexterity: int,
         armor_name: Optional[str] = None,
-        has_shield: bool = False
+        has_shield: bool = False,
+        class_name: Optional[str] = None,
+        second_stat: Optional[int] = None
     ) -> int:
+        """
+        Рассчитывает AC персонажа.
+        Если броня не указана и класс Варвар или Монах, использует Unarmored Defense.
+        Для Варвара second_stat = CON, для Монаха second_stat = WIS.
+        """
         valid, msg = validate_ability_score(dexterity, "DEX")
         if not valid:
             logger.warning(f"Невалидное значение DEX {dexterity}: {msg}, используем 10")
             dexterity = 10
 
+        # Проверяем, нужно ли использовать Unarmored Defense
+        if not armor_name and class_name in ["Варвар", "Монах"] and second_stat is not None:
+            # Валидируем вторую характеристику
+            valid_second, _ = validate_ability_score(second_stat, "CON" if class_name == "Варвар" else "WIS")
+            if not valid_second:
+                logger.warning(f"Невалидное значение second_stat {second_stat} для {class_name}, используем 10")
+                second_stat = 10
+            ac = calculate_unarmored_ac(class_name, dexterity, second_stat)
+            if has_shield:
+                ac += 2
+            return ac
+
+        # Стандартный расчёт
         if armor_name:
             ac = calculate_ac_with_armor(dexterity, armor_name, has_shield)
         else:
@@ -290,7 +310,8 @@ class CharacterStatsService:
         dexterity = final_stats.get('DEX', 10)
 
         hp = CharacterStatsService.calculate_hp(class_name, constitution, level=1)
-        ac = CharacterStatsService.calculate_ac(dexterity, armor_name=None)
+        ac = CharacterStatsService.calculate_ac(dexterity, armor_name=None, class_name=class_name,
+                                                 second_stat=constitution if class_name == "Варвар" else final_stats.get('WIS', 10))
         proficiency_bonus = CharacterStatsService.calculate_proficiency_bonus(1)
         stats_text = CharacterStatsService.format_stats_display(final_stats)
         bg_chars = stats_result['background_stats']
@@ -366,9 +387,11 @@ class CharacterFinalizationService:
         # Пересчёт HP и AC
         dexterity = stats.get('DEX', 10)
         constitution = stats.get('CON', 10)
+        wisdom = stats.get('WIS', 10)
 
         hp = CharacterStatsService.calculate_hp(class_name, constitution, level=1)
-        ac = CharacterStatsService.calculate_ac(dexterity, selected_armor)
+        ac = CharacterStatsService.calculate_ac(dexterity, selected_armor, False, class_name,
+                                                 constitution if class_name == "Варвар" else wisdom)
 
         # Навыки от предыстории (будут объединены с навыками класса в финальном сохранении)
         bg_skills = background_data.get('skills', []) if background_data else []

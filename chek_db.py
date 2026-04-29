@@ -1,13 +1,7 @@
-# migrate_origin_feat.py
-"""
-Скрипт для миграции: добавление колонки origin_feat в таблицу backgrounds
-и заполнение её данными из списка черт происхождения для D&D 5.5e 2024.
-
-Запуск: python migrate_origin_feat.py
-"""
-
+# fill_class_skills.py
 import psycopg2
 import os
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -20,71 +14,76 @@ DB_CONFIG = {
     "port": int(os.getenv("DB_PORT", 5432))
 }
 
-# Соответствие предыстория -> черта происхождения (из предоставленного файла)
-ORIGIN_FEATS = {
-    "Артист": "Музыкант",
-    "Бродяга": "Везучий",
-    "Дворянин": "Одарённый",
-    "Моряк": "Дебошир",
-    "Мудрец": "Посвящённый в магию (Волшебник)",
-    "Отшельник": "Лекарь",
-    "Писарь": "Одарённый",
-    "Послушник": "Посвящённый в магию (Жрец)",
-    "Преступник": "Бдительный",
-    "Проводник": "Посвящённый в магию (Друид)",
-    "Ремесленник": "Мастеровой",
-    "Солдат": "Неистово атакующий",
-    "Стражник": "Бдительный",
-    "Торговец": "Везучий",
-    "Фермер": "Крепкий",
-    "Шарлатан": "Одарённый",
+# Данные о навыках классов (из вашего файла Навыки.txt)
+skills_data = {
+    "Артефактор": {
+        "skills": ["Восприятие", "История", "Ловкость рук", "Медицина", "Природа", "Расследование", "Тайная магия"],
+        "choices": 2
+    },
+    "Бард": {
+        "skills": None,  # бард может выбирать любые навыки, оставим пустым
+        "choices": 3
+    },
+    "Варвар": {
+        "skills": ["Атлетика", "Восприятие", "Выживание", "Запугивание", "Обращение с животными", "Природа"],
+        "choices": 2
+    },
+    "Воин": {
+        "skills": ["Акробатика", "Атлетика", "Восприятие", "Выживание", "Запугивание", "История", "Обращение с животными", "Проницательность", "Убеждение"],
+        "choices": 2
+    },
+    "Волшебник": {
+        "skills": ["История", "Медицина", "Природа", "Проницательность", "Расследование", "Религия", "Тайная магия"],
+        "choices": 2
+    },
+    "Друид": {
+        "skills": ["Восприятие", "Выживание", "Медицина", "Обращение с животными", "Природа", "Проницательность", "Религия", "Тайная магия"],
+        "choices": 2
+    },
+    "Жрец": {
+        "skills": ["История", "Медицина", "Проницательность", "Религия", "Убеждение"],
+        "choices": 2
+    },
+    "Колдун": {
+        "skills": ["Запугивание", "История", "Обман", "Природа", "Расследование", "Религия", "Тайная магия"],
+        "choices": 2
+    },
+    "Монах": {
+        "skills": ["Акробатика", "Атлетика", "История", "Проницательность", "Религия", "Скрытность"],
+        "choices": 2
+    },
+    "Паладин": {
+        "skills": ["Атлетика", "Запугивание", "Медицина", "Проницательность", "Религия", "Убеждение"],
+        "choices": 2
+    },
+    "Плут": {
+        "skills": ["Акробатика", "Атлетика", "Восприятие", "Запугивание", "Ловкость рук", "Обман", "Проницательность", "Расследование", "Скрытность", "Убеждение"],
+        "choices": 4
+    },
+    "Следопыт": {
+        "skills": ["Атлетика", "Восприятие", "Выживание", "Обращение с животными", "Природа", "Проницательность", "Расследование", "Скрытность"],
+        "choices": 3
+    },
+    "Чародей": {
+        "skills": ["Запугивание", "Обман", "Проницательность", "Религия", "Тайная магия", "Убеждение"],
+        "choices": 2
+    },
 }
 
-def add_origin_feat_column(conn):
-    """Добавляет колонку origin_feat, если её нет"""
-    with conn.cursor() as cur:
-        # Проверяем существование колонки
-        cur.execute("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'backgrounds' AND column_name = 'origin_feat'
-        """)
-        if not cur.fetchone():
-            cur.execute("ALTER TABLE backgrounds ADD COLUMN origin_feat TEXT")
-            print("✅ Колонка origin_feat добавлена")
-        else:
-            print("ℹ️ Колонка origin_feat уже существует")
-
-def update_origin_feat_values(conn):
-    """Заполняет origin_feat для каждой предыстории"""
-    with conn.cursor() as cur:
-        for bg_name, feat_name in ORIGIN_FEATS.items():
-            cur.execute(
-                "UPDATE backgrounds SET origin_feat = %s WHERE name = %s",
-                (feat_name, bg_name)
-            )
-            if cur.rowcount > 0:
-                print(f"  Обновлено: {bg_name} -> {feat_name}")
-            else:
-                print(f"⚠️ Предыстория '{bg_name}' не найдена в БД")
-        conn.commit()
-
-def main():
-    print("🚀 Запуск миграции origin_feat...")
-    try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        conn.autocommit = False
-        add_origin_feat_column(conn)
-        update_origin_feat_values(conn)
-        conn.commit()
-        print("✅ Миграция завершена успешно")
-    except Exception as e:
-        print(f"❌ Ошибка: {e}")
-        if conn:
-            conn.rollback()
-    finally:
-        if conn:
-            conn.close()
+def update_class_skills():
+    conn = psycopg2.connect(**DB_CONFIG)
+    cur = conn.cursor()
+    for class_name, data in skills_data.items():
+        skills_json = json.dumps(data["skills"]) if data["skills"] else '[]'
+        cur.execute(
+            "UPDATE classes SET skills = %s, skill_choices = %s WHERE name = %s",
+            (skills_json, data["choices"], class_name)
+        )
+        print(f"Обновлён {class_name}: навыки={data['skills']}, выборов={data['choices']}")
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("✅ Готово!")
 
 if __name__ == "__main__":
-    main()
+    update_class_skills()

@@ -109,7 +109,7 @@ def create_skills_keyboard(
     buttons.append([
         InlineKeyboardButton(
             text=f"📌 Выбрано: {len(selected_skills)}/{max_choices}",
-            callback_data="skills_info"
+            callback_data="class_skills_info"
         )
     ])
     # Список навыков
@@ -119,27 +119,14 @@ def create_skills_keyboard(
         buttons.append([
             InlineKeyboardButton(
                 text=f"{icon} {skill}",
-                callback_data=f"skill_toggle_{skill}"
+                callback_data=f"class_skill_toggle_{skill}"
             )
         ])
     # Кнопка "Готово"
     if len(selected_skills) == max_choices:
-        buttons.append([InlineKeyboardButton(text="✅ Готово", callback_data="skills_ready")])
+        buttons.append([InlineKeyboardButton(text="✅ Готово", callback_data="class_skills_ready")])
     else:
-        buttons.append([InlineKeyboardButton(text="📖 Готово", callback_data="skills_ready_disabled")])
-    buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_creation")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def create_background_keyboard() -> InlineKeyboardMarkup:
-    backgrounds = get_background_list()
-    buttons = []
-    row = []
-    for i, bg in enumerate(backgrounds):
-        row.append(InlineKeyboardButton(text=bg, callback_data=f"bg_{bg}"))
-        if len(row) == 2 or i == len(backgrounds) - 1:
-            buttons.append(row)
-            row = []
+        buttons.append([InlineKeyboardButton(text="📖 Готово", callback_data="class_skills_ready_disabled")])
     buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

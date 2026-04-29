@@ -275,9 +275,21 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
 # =========================================================
 
 @router.callback_query(lambda c: c.data.startswith("class_skills_") or c.data.startswith("class_skill_toggle_"))
-async def show_class_equipment(message: Message, state: FSMContext, class_name: str):
-    """Показывает выбор снаряжения класса (вынесено из основного потока)"""
+async def show_class_equipment(message: Message, state: FSMContext):
+    """Показывает выбор снаряжения класса (получает class_name из state)"""
+    data = await state.get_data()
+    class_name = data.get("class_name")
+    if not class_name:
+        logger.error("❌ class_name не найден в state при вызове show_class_equipment")
+        return
+
     equipment = CharacterStatsService.get_class_equipment(class_name)
+    if not equipment:
+        logger.error(f"❌ Нет снаряжения для класса {class_name} в БД")
+        await message.answer(f"⚠️ Не найдено снаряжение для класса {class_name}. Переходим к заклинаниям.")
+        await go_to_spells(message, state)
+        return
+
     has_equipment_choice = len(equipment) > 1
     if has_equipment_choice:
         reply_markup = create_class_equipment_keyboard(class_name)

@@ -275,6 +275,25 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
 # =========================================================
 
 @router.callback_query(lambda c: c.data.startswith("class_skills_") or c.data.startswith("class_skill_toggle_"))
+async def show_class_equipment(message: Message, state: FSMContext, class_name: str):
+    """Показывает выбор снаряжения класса (вынесено из основного потока)"""
+    equipment = CharacterStatsService.get_class_equipment(class_name)
+    has_equipment_choice = len(equipment) > 1
+    if has_equipment_choice:
+        reply_markup = create_class_equipment_keyboard(class_name)
+        text = f"⚔️ **Шаг 3/12: СНАРЯЖЕНИЕ класса {class_name}**\n\nВыберите один из вариантов снаряжения:"
+        await message.answer(text, parse_mode=None, reply_markup=reply_markup)
+    else:
+        if equipment:
+            eq = equipment[0]
+            await state.update_data(
+                selected_armor=eq.get('armor'),
+                selected_weapon=eq.get('weapon'),
+                selected_secondary_weapon=eq.get('secondary_weapon'),
+                selected_other_items=eq.get('other_items'),
+                selected_coins=eq.get('coins', 0)
+            )
+        await go_to_spells(message, state)
 async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
     logger.info(f"🟢 Обработчик навыков вызван, data={callback.data}")
     data = callback.data

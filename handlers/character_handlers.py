@@ -197,8 +197,9 @@ async def cancel_creation(message: Message, state: FSMContext):
 # ШАГ 1: ВЫБОР КЛАССА
 # =========================================================
 
-@router.callback_query(lambda c: c.data.startswith("class_"))
+@router.callback_query(lambda c: c.data.startswith("class_") and not c.data.startswith("class_skill_"))
 async def select_class(callback: CallbackQuery, state: FSMContext):
+    class_name = callback.data.replace("class_", "")
     class_name = callback.data.replace("class_", "")
     await state.update_data(class_name=class_name)
     logger.info(f"[FLOW] Выбран класс: {class_name}")

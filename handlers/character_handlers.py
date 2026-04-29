@@ -94,17 +94,20 @@ def _create_subrace_keyboard(race: str) -> Optional[InlineKeyboardMarkup]:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def _create_invocations_keyboard(level: int = 1, selected_count: int = 0) -> Optional[InlineKeyboardMarkup]:
-    """Клавиатура выбора возваний (без кнопки пропуска)"""
+def _create_invocations_keyboard(level: int = 1, selected_names: list = None) -> Optional[InlineKeyboardMarkup]:
+    """Клавиатура выбора возваний с отображением выбранных"""
     from services.character_service import CharacterStatsService
     invocations = CharacterStatsService.get_all_invocations(level)
     if not invocations:
         return None
+    if selected_names is None:
+        selected_names = []
     buttons = []
     for inv in invocations[:12]:
         emoji = "🔮" if inv['level_required'] == 1 else "🔷"
+        check = "✅ " if inv['name'] in selected_names else ""
         buttons.append([InlineKeyboardButton(
-            text=f"{emoji} {inv['name']} (ур. {inv['level_required']})",
+            text=f"{check}{emoji} {inv['name']} (ур. {inv['level_required']})",
             callback_data=f"inv_{inv['id']}"
         )])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")])
@@ -545,8 +548,8 @@ async def go_to_invocations(message: Message, state: FSMContext):
         await state.set_state(CreateCharacter.invocations_select)
         invocations = CharacterStatsService.get_all_invocations(level=1)
         if invocations:
-            selected_count = len(data.get("selected_invocations", []))
-            keyboard = _create_invocations_keyboard(level=1, selected_count=selected_count)
+            selected_names = data.get("selected_invocations", [])
+            keyboard = _create_invocations_keyboard(level=1, selected_names=selected_names)
             if keyboard:
                 await message.answer(
                     f"🔮 **Шаг 6/12: Выбор ТАИНСТВЕННЫХ ВОЗВАНИЙ**\n\n"
@@ -615,7 +618,6 @@ async def select_invocation(callback: CallbackQuery, state: FSMContext):
         return
     data = await state.get_data()
     selected = data.get("selected_invocations", [])
-    old_count = len(selected)
     if inv_name in selected:
         selected.remove(inv_name)
         await callback.answer(f"❌ Возвание '{inv_name}' удалено")
@@ -626,14 +628,19 @@ async def select_invocation(callback: CallbackQuery, state: FSMContext):
         selected.append(inv_name)
         await callback.answer(f"✅ Возвание '{inv_name}' добавлено")
     await state.update_data(selected_invocations=selected)
-    new_count = len(selected)
-    # Обновляем клавиатуру
-    if (old_count == 0 and new_count > 0) or (old_count > 0 and new_count == 0):
-        keyboard = _create_invocations_keyboard(level=1, selected_count=new_count)
-        if keyboard:
+
+    # Обновляем клавиатуру с новым списком выбранных
+    keyboard = _create_invocations_keyboard(level=1, selected_names=selected)
+    if keyboard:
+        try:
             await callback.message.edit_reply_markup(reply_markup=keyboard)
-    # Если выбрано 2 возвания, удаляем сообщение и переходим
-    if new_count == 2:
+        except Exception as e:
+            # Игнорируем ошибку "message is not modified" (она не критична)
+            if "message is not modified" not in str(e):
+                logger.warning(f"Ошибка обновления клавиатуры: {e}")
+
+    # Если выбрано 2 возвания, удаляем сообщение и переходим к предыстории
+    if len(selected) == 2:
         await callback.message.delete()
         logger.info("[FLOW] Выбрано 2 возвания, переходим к предыстории")
         await go_to_background(callback.message, state)

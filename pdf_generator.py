@@ -1,12 +1,12 @@
 # pdf_generator.py
 """
 PDF Generator Module for D&D Character Sheets
-Модуль для генерации PDF листов персонажей D&D в стиле официальных листов
+Добавлена поддержка черты происхождения (Origin Feat)
 """
 
 import os
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader, TemplateError
 from weasyprint import HTML, CSS
@@ -16,7 +16,7 @@ from weasyprint.text.fonts import FontConfiguration
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# HTML шаблон для персонажа в стиле D&D
+# HTML шаблон для персонажа в стиле D&D (с добавленной чертой происхождения)
 DEFAULT_HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="ru">
@@ -368,6 +368,9 @@ DEFAULT_HTML_TEMPLATE = '''
                     {% if background_trait %}
                     <li><strong>Предыстория:</strong> {{ background_trait }}</li>
                     {% endif %}
+                    {% if origin_feat %}
+                    <li><strong>Черта происхождения:</strong> {{ origin_feat }}</li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
@@ -434,7 +437,6 @@ DEFAULT_HTML_TEMPLATE = '''
 
 
 def get_jinja_env():
-    """Создает и возвращает окружение Jinja2"""
     if not os.path.exists("templates"):
         os.makedirs("templates")
         logger.info("✅ Создана папка templates")
@@ -449,20 +451,15 @@ def get_jinja_env():
 
 
 def ensure_template_exists() -> bool:
-    """Проверяет существование шаблона и создает его при необходимости"""
     try:
         template_path = "templates/character.html"
-
         if not os.path.exists("templates"):
             os.makedirs("templates")
             logger.info("📁 Создана папка templates")
-
         if not os.path.exists(template_path):
             with open(template_path, 'w', encoding='utf-8') as f:
                 f.write(DEFAULT_HTML_TEMPLATE)
             logger.info("📄 Создан файл шаблона character.html")
-            return True
-
         return True
     except Exception as e:
         logger.error(f"❌ Ошибка при создании шаблона: {e}")
@@ -470,15 +467,6 @@ def ensure_template_exists() -> bool:
 
 
 def get_skill_ability(skill_name: str) -> str:
-    """
-    Определяет, какая характеристика отвечает за навык
-
-    Args:
-        skill_name: название навыка на русском
-
-    Returns:
-        str: название характеристики (STR, DEX, CON, INT, WIS, CHA)
-    """
     skill_map = {
         "Акробатика": "DEX",
         "Атлетика": "STR",
@@ -504,49 +492,28 @@ def get_skill_ability(skill_name: str) -> str:
 
 
 def calculate_modifier(stat_value: int) -> int:
-    """
-    Рассчитывает модификатор характеристики
-
-    Args:
-        stat_value: значение характеристики (например, 15)
-
-    Returns:
-        int: модификатор (например, 2)
-    """
     return (stat_value - 10) // 2
 
 
 def prepare_pdf_data(character_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Подготавливает данные для PDF шаблона с значениями по умолчанию
-
-    Args:
-        character_data: сырые данные персонажа
-
-    Returns:
-        Dict[str, Any]: подготовленные данные для шаблона
-    """
-    # Полный список навыков для отображения
     all_skills = [
         "Акробатика", "Атлетика", "Аркана", "Восприятие", "Выживание",
         "Выступление", "Запугивание", "История", "Ловкость рук", "Медицина",
         "Обман", "Обращение с животными", "Природа", "Проницательность",
         "Расследование", "Религия", "Скрытность", "Тайная магия", "Убеждение"
     ]
-
-    def calculate_skill_mod(skill: str, stats: Dict[str, int], prof_bonus: int) -> int:
-        """Вспомогательная функция для расчёта модификатора навыка"""
+    
+    def calculate_skill_mod(skill, stats, prof_bonus):
         ability = get_skill_ability(skill)
         mod = calculate_modifier(stats.get(ability, 10))
         if prof_bonus > 0:
             mod += prof_bonus
         return mod
 
-    # Подготавливаем данные с значениями по умолчанию
     stats = character_data.get('stats', {})
     if not stats:
         stats = {"STR": 10, "DEX": 10, "CON": 10, "INT": 10, "WIS": 10, "CHA": 10}
-
+    
     return {
         'name': character_data.get('name', 'Безымянный'),
         'class_name': character_data.get('class_name', 'Без класса'),
@@ -555,6 +522,7 @@ def prepare_pdf_data(character_data: Dict[str, Any]) -> Dict[str, Any]:
         'background': character_data.get('background', 'Нет'),
         'background_trait': character_data.get('background_trait', 'Нет'),
         'background_description': character_data.get('background_description', ''),
+        'origin_feat': character_data.get('origin_feat', ''),
         'backstory': character_data.get('backstory', 'Нет истории'),
         'stats': stats,
         'hp': character_data.get('hp', 0),
@@ -582,22 +550,11 @@ def prepare_pdf_data(character_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
-    """
-    Генерирует PDF файл с листом персонажа в стиле D&D
-
-    Args:
-        data: словарь с данными персонажа
-        filename: имя файла для сохранения PDF
-
-    Returns:
-        str: путь к созданному файлу или None при ошибке
-    """
     try:
         if not ensure_template_exists():
             logger.error("❌ Не удалось создать/найти шаблон")
             return None
 
-        # Валидация входных данных
         required_fields = ['name', 'class_name', 'race', 'level', 'stats', 'hp', 'ac']
         for field in required_fields:
             if field not in data:
@@ -612,8 +569,6 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
 
         env = get_jinja_env()
         template = env.get_template("character.html")
-
-        # Подготавливаем данные для шаблона
         template_data = prepare_pdf_data(data)
 
         try:
@@ -626,8 +581,6 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
         try:
             font_config = FontConfiguration()
             html = HTML(string=html_content)
-
-            # CSS для печати
             css = CSS(string='''
                 @page {
                     size: A4;
@@ -638,91 +591,55 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
                     padding: 0;
                 }
             ''')
-
             html.write_pdf(filename, stylesheets=[css], font_config=font_config)
-
             if os.path.exists(filename) and os.path.getsize(filename) > 0:
                 logger.info(f"✅ PDF создан: {filename} (размер: {os.path.getsize(filename)} байт)")
                 return filename
             else:
                 logger.error(f"❌ Файл PDF не создан или пуст: {filename}")
                 return None
-
         except Exception as e:
             logger.error(f"❌ Ошибка при создании PDF: {e}")
             return None
-
     except Exception as e:
         logger.error(f"❌ Непредвиденная ошибка в generate_pdf: {e}")
         return None
 
 
 def generate_pdf_from_template(template_name: str, data: Dict[str, Any], filename: str) -> Optional[str]:
-    """
-    Генерирует PDF используя указанный шаблон
-
-    Args:
-        template_name: имя файла шаблона
-        data: данные для шаблона
-        filename: имя выходного файла
-
-    Returns:
-        str: путь к файлу или None при ошибке
-    """
     try:
         if not ensure_template_exists():
             return None
-
         env = get_jinja_env()
         template = env.get_template(template_name)
         html_content = template.render(**data)
-
         HTML(string=html_content).write_pdf(filename)
-
         if os.path.exists(filename):
             return filename
         return None
-
     except Exception as e:
         logger.error(f"❌ Ошибка в generate_pdf_from_template: {e}")
         return None
 
 
 def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
-    """
-    Очищает старые PDF файлы
-
-    Args:
-        directory: директория для очистки
-        max_age_hours: максимальный возраст файла в часах
-    """
     import time
-
     try:
         current_time = time.time()
         max_age_seconds = max_age_hours * 3600
-
         for filename in os.listdir(directory):
-            if (filename.startswith("temp_") or filename.endswith("_character_sheet.pdf")) and filename.endswith(
-                    ".pdf"):
+            if (filename.startswith("temp_") or filename.endswith("_character_sheet.pdf")) and filename.endswith(".pdf"):
                 filepath = os.path.join(directory, filename)
                 file_age = current_time - os.path.getmtime(filepath)
-
                 if file_age > max_age_seconds:
                     os.remove(filepath)
                     logger.info(f"🗑️ Удален старый PDF: {filename}")
-
     except Exception as e:
         logger.error(f"❌ Ошибка при очистке PDF: {e}")
 
 
-# =========================================================
-# ТЕСТИРОВАНИЕ
-# =========================================================
-
 if __name__ == "__main__":
     print("=== Тестирование PDF Generator ===\n")
-
     test_data = {
         "name": "Арагорн",
         "class_name": "Следопыт",
@@ -730,16 +647,10 @@ if __name__ == "__main__":
         "level": 3,
         "background": "Стражник",
         "background_trait": "Бдительный",
-        "background_description": "Вы прошли через множество сражений и научились выживать в самых опасных условиях.",
-        "backstory": "Родился в семье лесничих, с детства учился выживать в дикой природе. После нападения орков на деревню поклялся защищать невинных.",
-        "stats": {
-            "STR": 16,
-            "DEX": 14,
-            "CON": 15,
-            "INT": 12,
-            "WIS": 13,
-            "CHA": 11
-        },
+        "background_description": "Вы прошли через множество сражений...",
+        "origin_feat": "Бдительный",
+        "backstory": "Родился в семье лесничих...",
+        "stats": {"STR": 16, "DEX": 14, "CON": 15, "INT": 12, "WIS": 13, "CHA": 11},
         "hp": 32,
         "ac": 16,
         "speed": 30,
@@ -753,19 +664,14 @@ if __name__ == "__main__":
         "class_features": ["Боевой стиль: Стрельба", "Первобытное чутьё", "Избранный враг: Звери"],
         "equipment": ["Длинный лук", "20 стрел", "Кожаная броня", "Два кинжала"],
         "coins": "50 ЗМ",
-        "notes": "Ищет доказательства существования древнего пророчества.",
+        "notes": "Ищет доказательства...",
         "spells": [],
         "spell_slots_1": 0,
         "spell_slots_2": 0
     }
-
     result = generate_pdf(test_data, "test_character.pdf")
-
     if result:
         print(f"✅ PDF успешно создан: {result}")
-        file_size = os.path.getsize(result)
-        print(f"📄 Размер файла: {file_size} байт")
     else:
         print("❌ Ошибка при создании PDF")
-
     print("\n✅ Модуль pdf_generator.py готов к использованию!")

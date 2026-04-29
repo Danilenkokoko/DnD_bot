@@ -286,7 +286,15 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
         await callback.answer("❌ Ошибка: класс не найден")
         return
     
+    # Если класс — Бард, используем общий список навыков
     available_skills = class_info.get('skills', [])
+    if not available_skills:
+        available_skills = [
+            "Акробатика", "Атлетика", "Восприятие", "Выживание", "Выступление",
+            "Запугивание", "История", "Ловкость рук", "Медицина", "Обман",
+            "Обращение с животными", "Природа", "Проницательность", "Расследование",
+            "Религия", "Скрытность", "Тайная магия", "Убеждение"
+        ]
     skill_choices = class_info.get('skill_choices', 2)
     selected_skills = user_data.get("selected_class_skills", [])
     
@@ -319,22 +327,18 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
                 return
             selected_skills.append(skill_name)
         await state.update_data(selected_class_skills=selected_skills)
+        
+        # Обновляем клавиатуру, не удаляя сообщение (только редактируем)
         keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
         try:
             await callback.message.edit_reply_markup(reply_markup=keyboard)
             logger.info(f"✅ Клавиатура обновлена, выбрано {len(selected_skills)}")
         except Exception as e:
             logger.error(f"❌ Ошибка обновления клавиатуры: {e}")
-            # Отправляем новое сообщение, если редактирование не удалось
-            await callback.message.delete()
-            text_skills = (f"📚 **Шаг 2/12: Выбор НАВЫКОВ класса {class_name}**\n\n"
-                           f"Выберите {skill_choices} навык(а) из списка ниже. "
-                           f"Навыки, отмеченные ✅, будут добавлены к вашему персонажу.\n\n"
-                           f"После выбора нажмите «✅ Готово».")
-            await callback.message.answer(text_skills, reply_markup=keyboard)
+            # Если редактирование не удалось, просто ответим, что произошла ошибка
+            await callback.answer(f"⚠️ Ошибка обновления, повторите попытку", show_alert=True)
         await callback.answer()
         return
-
 
 # =========================================================
 # ШАГ 3: ВЫБОР СНАРЯЖЕНИЯ КЛАССА

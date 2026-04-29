@@ -198,7 +198,7 @@ async def create_character_start(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(CreateCharacter.class_select)
     await message.answer(
-        "🏰 Шаг 1/12: твой класс\n\n"
+        "🏰 Твой класс\n\n"
         "Класс = стиль игры, умения и стартовое снаряжение.\n\n"
         "Выбери класс:",
         parse_mode=None,
@@ -330,7 +330,7 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
     selected_skills = []
     await state.update_data(selected_class_skills=selected_skills)
     keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
-    text_skills = (f"📚 Шаг 2/12 — навыки класса {class_name}\n\n"
+    text_skills = (f"📚 Навыки класса {class_name}\n\n"
                    f"Ты можешь выбрать {skill_choices} навыка(ов). Отмеченные ✅ войдут в лист.\n\n"
                    f"Когда наберёшь нужное количество, жми «✅ Готово».")
     await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
@@ -364,7 +364,7 @@ async def select_subclass(callback: CallbackQuery, state: FSMContext):
     selected_skills = []
     await state.update_data(selected_class_skills=selected_skills)
     keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
-    text_skills = (f"📚 Шаг 2/12 — навыки класса {class_name}\n\n"
+    text_skills = (f"📚 Навыки класса {class_name}\n\n"
                    f"Ты можешь выбрать {skill_choices} навыка(ов). Отмеченные ✅ войдут в лист.\n\n"
                    f"Когда наберёшь нужное количество, жми «✅ Готово».")
     await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
@@ -451,13 +451,13 @@ async def show_class_equipment(message: Message, state: FSMContext, class_name: 
     equipment = CharacterStatsService.get_class_equipment(class_name)
     if not equipment:
         logger.error(f"❌ Нет снаряжения для класса {class_name} в БД")
-        await message.answer(f"⚠️ Для класса {class_name} нет готового набора снаряжения. Переходим к заклинаниям.")
+        await message.answer(f"⚠️ Для класса {class_name} нет готового набора снаряжения. Переходим к следующему шагу.")
         await go_to_spells(message, state)
         return
 
     has_equipment_choice = len(equipment) > 1
     if has_equipment_choice:
-        text = f"⚔️ Шаг 3/12 — экипировка для {class_name}\n\n"
+        text = f"⚔️ Снаряжение для {class_name}\n\n"
         text += "Выбери один стартовый набор:\n"
         for eq in equipment:
             choice = eq.get('choice', 'A')
@@ -528,7 +528,7 @@ async def select_class_equipment(callback: CallbackQuery, state: FSMContext):
 async def back_to_classes(callback: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.class_select)
     await callback.message.delete()
-    await callback.message.answer("Шаг 1/12. Выбери класс заново:", parse_mode=None, reply_markup=create_class_keyboard())
+    await callback.message.answer("Выбери класс заново:", parse_mode=None, reply_markup=create_class_keyboard())
     await callback.answer()
 
 
@@ -564,7 +564,7 @@ async def go_to_fighting_style(message: Message, state: FSMContext):
             await go_to_invocations(message, state)
             return
 
-        text = f"⚔️ Шаг 5/12 — боевой стиль\n\n"
+        text = f"⚔️ Боевой стиль\n\n"
         text += f"Класс {class_name} позволяет взять один стиль.\n\n"
         text += "Доступно:\n"
         for s in styles:
@@ -588,7 +588,7 @@ async def go_to_invocations(message: Message, state: FSMContext):
         invocations = CharacterStatsService.get_all_invocations(level=1)
         if invocations:
             selected_names = data.get("selected_invocations", [])
-            text = f"🔮 Шаг 6/12 — таинственные возвания (колдун)\n\n"
+            text = f"🔮 Таинственные возвания (колдун)\n\n"
             text += "На 1-м уровне можно взять до 2 возваний.\n\n"
             text += "Список:\n"
             for inv in invocations:
@@ -615,7 +615,7 @@ async def go_to_background(message: Message, state: FSMContext):
     logger.info("🔧 go_to_background вызвана")
     await state.set_state(CreateCharacter.background_select)
     await message.answer(
-        f"📜 Шаг 7/12 — твоё прошлое\n\n"
+        f"📜 Твоё прошлое (предыстория)\n\n"
         f"Предыстория даёт бонусы к характеристикам, черты и снаряжение.\n\n"
         f"Выбери одну:",
         parse_mode=None,
@@ -672,7 +672,7 @@ async def select_invocation(callback: CallbackQuery, state: FSMContext):
 
     if len(selected) == 2:
         await callback.message.delete()
-        logger.info("[FLOW] Выбрано 2 возвания, переходим к предыстории")
+        logger.info("[FLOW] Выбрано 2 возвания, переходим к следующему шагу")
         await go_to_background(callback.message, state)
     await callback.answer()
 
@@ -721,7 +721,7 @@ async def select_background(callback: CallbackQuery, state: FSMContext):
         f"🔧 Черта: {bg_info.get('trait', 'Нет')}\n"
         f"📚 Навыки: {', '.join(bg_info.get('skills', []))}\n"
         f"🛠️ Инструменты: {bg_info.get('tools', 'Нет')}\n\n"
-        f"Шаг 8/12 — снаряжение от предыстории\n\n"
+        f"Снаряжение от предыстории\n\n"
         f"Выбери один стартовый набор:\n"
         f"📦 Вариант А: {equip_a}\n\n"
         f"🎒 Вариант Б: {equip_b}\n\n"
@@ -754,7 +754,7 @@ async def select_background_equipment(callback: CallbackQuery, state: FSMContext
 async def back_to_background_list(callback: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.background_select)
     await callback.message.delete()
-    await callback.message.answer("Шаг 7/12. Выбери предысторию заново:", parse_mode=None,
+    await callback.message.answer("Выбери предысторию заново:", parse_mode=None,
                                   reply_markup=create_background_keyboard())
     await callback.answer()
 
@@ -788,7 +788,7 @@ async def calculate_and_show_stats(message: Message, state: FSMContext):
     def mod(s): return (s-10)//2
 
     await message.answer(
-        f"📊 Шаг 9/12 – твои характеристики\n\n"
+        f"📊 Твои характеристики\n\n"
         f"Класс: {class_name}\n"
         f"Предыстория: {background}\n\n"
         f"✨ Бонусы предыстории: +2 к {stats_result['bg_chars'][0]}, +1 к {stats_result['bg_chars'][1]}\n\n"
@@ -873,7 +873,7 @@ async def select_subrace(callback: CallbackQuery, state: FSMContext):
 async def back_to_races(callback: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.race_select)
     await callback.message.delete()
-    await callback.message.answer("Шаг 9/12. Выбери расу заново:", parse_mode=None, reply_markup=create_race_keyboard())
+    await callback.message.answer("Выбери расу заново:", parse_mode=None, reply_markup=create_race_keyboard())
     await callback.answer()
 
 
@@ -885,7 +885,7 @@ async def go_to_name(message: Message, state: FSMContext):
     logger.info("🔧 go_to_name вызвана")
     await state.set_state(CreateCharacter.name_input)
     await message.answer(
-        "📛 Шаг 11/12 — как зовут твоего героя?\n\n"
+        "📛 Как зовут твоего героя?\n\n"
         "Имя: от 2 до 50 символов. Любое на твой вкус.\n\n"
         "Введи имя:",
         parse_mode=None,
@@ -897,7 +897,7 @@ async def go_to_backstory(message: Message, state: FSMContext):
     logger.info("🔧 go_to_backstory вызвана")
     await state.set_state(CreateCharacter.backstory_input)
     await message.answer(
-        "📖 Финальный шаг (12/12) — история персонажа\n\n"
+        "📖 История персонажа\n\n"
         "Коротко расскажи:\n"
         "• Откуда он родом?\n"
         "• Что привело его к приключениям?\n"

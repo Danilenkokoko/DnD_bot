@@ -271,14 +271,79 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
 
 
 # =========================================================
-# НОВЫЙ ШАГ: ВЫБОР НАВЫКОВ КЛАССА
+# ШАГ 2: ВЫБОР НАВЫКОВ КЛАССА
 # =========================================================
 
-@router.callback_query(lambda c: c.data.startswith("class_skills_") or c.data.startswith("class_skill_toggle_"))
-async def show_class_equipment(message: Message, state: FSMContext):
-    """Показывает выбор снаряжения класса (получает class_name из state)"""
-    data = await state.get_data()
-    class_name = data.get("class_name")
+@router.callback_query(lambda c: c.data.startswith(
+    "class_skill_toggle_") or c.data == "class_skills_ready" or c.data == "class_skills_info")
+async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
+    """Обрабатывает выбор навыков класса"""
+    logger.info(f"🟢 Обработчик навыков вызван, data={callback.data}")
+    data = callback.data
+    user_data = await state.get_data()
+    class_name = user_data.get("class_name")
+
+    class_info = _class_repo.get_by_name(class_name)
+    if not class_info:
+        await callback.answer("❌ Ошибка: класс не найден")
+        return
+
+    # Если класс — Бард, используем общий список навыков
+    available_skills = class_info.get('skills', [])
+    if not available_skills:
+        available_skills = [
+            "Акробатика", "Атлетика", "Восприятие", "Выживание", "Выступление",
+            "Запугивание", "История", "Ловкость рук", "Медицина", "Обман",
+            "Обращение с животными", "Природа", "Проницательность", "Расследование",
+            "Религия", "Скрытность", "Тайная магия", "Убеждение"
+        ]
+    skill_choices = class_info.get('skill_choices', 2)
+    selected_skills = user_data.get("selected_class_skills", [])
+
+    if data == "class_skills_ready":
+        if len(selected_skills) == skill_choices:
+            await state.update_data(selected_class_skills=selected_skills)
+            await state.set_state(CreateCharacter.class_equipment_select)
+            await callback.message.delete()
+            await show_class_equipment(callback.message, state)  # Переход к снаряжению
+            await callback.answer("✅ Навыки класса выбраны!")
+        else:
+            await callback.answer(f"❌ Нужно выбрать ровно {skill_choices} навыков. Выбрано: {len(selected_skills)}",
+                                  show_alert=True)
+        return
+
+    if data == "class_skills_info":
+        await callback.answer(f"Выбрано {len(selected_skills)} из {skill_choices} навыков", show_alert=False)
+        return
+
+    if data.startswith("class_skill_toggle_"):
+        skill_name = data.replace("class_skill_toggle_", "")
+        if skill_name in selected_skills:
+            selected_skills.remove(skill_name)
+        else:
+            if len(selected_skills) >= skill_choices:
+                await callback.answer(f"❌ Нельзя выбрать больше {skill_choices} навыков", show_alert=True)
+                return
+            selected_skills.append(skill_name)
+        await state.update_data(selected_class_skills=selected_skills)
+
+        # Обновляем клавиатуру
+        keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
+        try:
+            await callback.message.edit_reply_markup(reply_markup=keyboard)
+            logger.info(f"✅ Клавиатура обновлена, выбрано {len(selected_skills)}")
+        except Exception as e:
+            logger.error(f"❌ Ошибка обновления клавиатуры: {e}")
+            await callback.answer(f"⚠️ Ошибка обновления, повторите попытку", show_alert=True)
+        await callback.answer()
+        return
+
+
+async def show_class_equipment(message: Message, state: FSMContext, class_name: str = None):
+    """Показывает выбор снаряжения класса"""
+    if class_name is None:
+        data = await state.get_data()
+        class_name = data.get("class_name")
     if not class_name:
         logger.error("❌ class_name не найден в state при вызове show_class_equipment")
         return
@@ -306,70 +371,6 @@ async def show_class_equipment(message: Message, state: FSMContext):
                 selected_coins=eq.get('coins', 0)
             )
         await go_to_spells(message, state)
-async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
-    logger.info(f"🟢 Обработчик навыков вызван, data={callback.data}")
-    data = callback.data
-    user_data = await state.get_data()
-    class_name = user_data.get("class_name")
-    
-    class_info = _class_repo.get_by_name(class_name)
-    if not class_info:
-        await callback.answer("❌ Ошибка: класс не найден")
-        return
-    
-    # Если класс — Бард, используем общий список навыков
-    available_skills = class_info.get('skills', [])
-    if not available_skills:
-        available_skills = [
-            "Акробатика", "Атлетика", "Восприятие", "Выживание", "Выступление",
-            "Запугивание", "История", "Ловкость рук", "Медицина", "Обман",
-            "Обращение с животными", "Природа", "Проницательность", "Расследование",
-            "Религия", "Скрытность", "Тайная магия", "Убеждение"
-        ]
-    skill_choices = class_info.get('skill_choices', 2)
-    selected_skills = user_data.get("selected_class_skills", [])
-    
-    if data == "class_skills_ready":
-        if len(selected_skills) == skill_choices:
-            await state.update_data(selected_class_skills=selected_skills)
-            await state.set_state(CreateCharacter.class_equipment_select)
-            await callback.message.delete()
-            await show_class_equipment(callback.message, state, class_name)
-            await callback.answer("✅ Навыки класса выбраны!")
-        else:
-            await callback.answer(f"❌ Нужно выбрать ровно {skill_choices} навыков. Выбрано: {len(selected_skills)}", show_alert=True)
-        return
-    
-    if data == "class_skills_ready_disabled":
-        await callback.answer(f"❌ Сначала выберите {skill_choices} навыков. Выбрано: {len(selected_skills)}", show_alert=True)
-        return
-    
-    if data == "class_skills_info":
-        await callback.answer(f"Выбрано {len(selected_skills)} из {skill_choices} навыков", show_alert=False)
-        return
-    
-    if data.startswith("class_skill_toggle_"):
-        skill_name = data.replace("class_skill_toggle_", "")
-        if skill_name in selected_skills:
-            selected_skills.remove(skill_name)
-        else:
-            if len(selected_skills) >= skill_choices:
-                await callback.answer(f"❌ Нельзя выбрать больше {skill_choices} навыков", show_alert=True)
-                return
-            selected_skills.append(skill_name)
-        await state.update_data(selected_class_skills=selected_skills)
-        
-        # Обновляем клавиатуру, не удаляя сообщение (только редактируем)
-        keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
-        try:
-            await callback.message.edit_reply_markup(reply_markup=keyboard)
-            logger.info(f"✅ Клавиатура обновлена, выбрано {len(selected_skills)}")
-        except Exception as e:
-            logger.error(f"❌ Ошибка обновления клавиатуры: {e}")
-            # Если редактирование не удалось, просто ответим, что произошла ошибка
-            await callback.answer(f"⚠️ Ошибка обновления, повторите попытку", show_alert=True)
-        await callback.answer()
-        return
 
 # =========================================================
 # ШАГ 3: ВЫБОР СНАРЯЖЕНИЯ КЛАССА

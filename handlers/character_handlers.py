@@ -276,7 +276,6 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(lambda c: c.data.startswith("class_skills_") or c.data.startswith("class_skill_toggle_"))
 async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
-    """Обработчик callback-запросов для выбора навыков класса"""
     logger.info(f"🟢 Обработчик навыков вызван, data={callback.data}")
     data = callback.data
     user_data = await state.get_data()
@@ -324,31 +323,18 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
         keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
         try:
             await callback.message.edit_reply_markup(reply_markup=keyboard)
+            logger.info(f"✅ Клавиатура обновлена, выбрано {len(selected_skills)}")
         except Exception as e:
-            logger.error(f"Ошибка обновления клавиатуры: {e}")
+            logger.error(f"❌ Ошибка обновления клавиатуры: {e}")
+            # Отправляем новое сообщение, если редактирование не удалось
+            await callback.message.delete()
+            text_skills = (f"📚 **Шаг 2/12: Выбор НАВЫКОВ класса {class_name}**\n\n"
+                           f"Выберите {skill_choices} навык(а) из списка ниже. "
+                           f"Навыки, отмеченные ✅, будут добавлены к вашему персонажу.\n\n"
+                           f"После выбора нажмите «✅ Готово».")
+            await callback.message.answer(text_skills, reply_markup=keyboard)
         await callback.answer()
         return
-
-
-async def show_class_equipment(message: Message, state: FSMContext, class_name: str):
-    """Показывает выбор снаряжения класса"""
-    equipment = CharacterStatsService.get_class_equipment(class_name)
-    has_equipment_choice = len(equipment) > 1
-    if has_equipment_choice:
-        reply_markup = create_class_equipment_keyboard(class_name)
-        text = f"⚔️ **Шаг 3/12: СНАРЯЖЕНИЕ класса {class_name}**\n\nВыберите один из вариантов снаряжения:"
-        await message.answer(text, parse_mode=None, reply_markup=reply_markup)
-    else:
-        if equipment:
-            eq = equipment[0]
-            await state.update_data(
-                selected_armor=eq.get('armor'),
-                selected_weapon=eq.get('weapon'),
-                selected_secondary_weapon=eq.get('secondary_weapon'),
-                selected_other_items=eq.get('other_items'),
-                selected_coins=eq.get('coins', 0)
-            )
-        await go_to_spells(message, state)
 
 
 # =========================================================

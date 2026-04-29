@@ -278,10 +278,10 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
     class_info = CharacterStatsService.get_class_info(class_name)
     subclasses = _class_repo.get_subclasses(class_name, level=1)
 
-    # Базовый текст
-    text = (f"🎭 **{class_name}**\n\n"
+    # Базовый текст (без звёздочек)
+    text = (f"🎭 {class_name}\n\n"
             f"{class_desc}\n\n"
-            f"📊 **Данные класса:**\n"
+            f"📊 Данные класса:\n"
             f"• Кость хитов: d{class_info.get('hit_die', 6)}\n"
             f"• Основные характеристики: {', '.join(class_info.get('primary_stats', []))}\n"
             f"• Спасброски: {', '.join(class_info.get('saving_throws', []))}\n"
@@ -305,7 +305,7 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
         ]
 
     if subclasses and class_name in ["Жрец", "Друид", "Колдун"]:
-        text += f"\n📖 **На 1-м уровне нужно выбрать путь — подкласс:**\n"
+        text += f"\n📖 На 1-м уровне нужно выбрать путь — подкласс:\n"
         for sub in subclasses:
             text += f"   • {sub['name']} — {sub['description'][:60]}...\n"
         if img_path and os.path.exists(img_path):
@@ -330,7 +330,7 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
     selected_skills = []
     await state.update_data(selected_class_skills=selected_skills)
     keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
-    text_skills = (f"📚 **Шаг 2/12 — навыки класса {class_name}**\n\n"
+    text_skills = (f"📚 Шаг 2/12 — навыки класса {class_name}\n\n"
                    f"Ты можешь выбрать {skill_choices} навыка(ов). Отмеченные ✅ войдут в лист.\n\n"
                    f"Когда наберёшь нужное количество, жми «✅ Готово».")
     await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
@@ -364,7 +364,7 @@ async def select_subclass(callback: CallbackQuery, state: FSMContext):
     selected_skills = []
     await state.update_data(selected_class_skills=selected_skills)
     keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
-    text_skills = (f"📚 **Шаг 2/12 — навыки класса {class_name}**\n\n"
+    text_skills = (f"📚 Шаг 2/12 — навыки класса {class_name}\n\n"
                    f"Ты можешь выбрать {skill_choices} навыка(ов). Отмеченные ✅ войдут в лист.\n\n"
                    f"Когда наберёшь нужное количество, жми «✅ Готово».")
     await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
@@ -457,7 +457,7 @@ async def show_class_equipment(message: Message, state: FSMContext, class_name: 
 
     has_equipment_choice = len(equipment) > 1
     if has_equipment_choice:
-        text = f"⚔️ **Шаг 3/12 — экипировка для {class_name}**\n\n"
+        text = f"⚔️ Шаг 3/12 — экипировка для {class_name}\n\n"
         text += "Выбери один стартовый набор:\n"
         for eq in equipment:
             choice = eq.get('choice', 'A')
@@ -466,7 +466,7 @@ async def show_class_equipment(message: Message, state: FSMContext, class_name: 
             secondary = eq.get('secondary_weapon', '')
             other = eq.get('other_items', '')
             coins = eq.get('coins', 0)
-            text += f"\n📦 **Вариант {choice}:** {weapon}, {armor}"
+            text += f"\n📦 Вариант {choice}: {weapon}, {armor}"
             if secondary:
                 text += f", {secondary}"
             if other:
@@ -564,11 +564,11 @@ async def go_to_fighting_style(message: Message, state: FSMContext):
             await go_to_invocations(message, state)
             return
 
-        text = f"⚔️ **Шаг 5/12 — боевой стиль**\n\n"
-        text += f"Класс **{class_name}** позволяет взять один стиль.\n\n"
-        text += "**Доступно:**\n"
+        text = f"⚔️ Шаг 5/12 — боевой стиль\n\n"
+        text += f"Класс {class_name} позволяет взять один стиль.\n\n"
+        text += "Доступно:\n"
         for s in styles:
-            text += f"• **{s['name']}** – {s['description']}\n"
+            text += f"• {s['name']} – {s['description']}\n"
         text += "\nНажми на название, чтобы выбрать."
 
         await state.set_state(CreateCharacter.fighting_style_select)
@@ -588,13 +588,13 @@ async def go_to_invocations(message: Message, state: FSMContext):
         invocations = CharacterStatsService.get_all_invocations(level=1)
         if invocations:
             selected_names = data.get("selected_invocations", [])
-            text = f"🔮 **Шаг 6/12 — таинственные возвания (колдун)**\n\n"
+            text = f"🔮 Шаг 6/12 — таинственные возвания (колдун)\n\n"
             text += "На 1-м уровне можно взять до 2 возваний.\n\n"
-            text += "**Список:**\n"
+            text += "Список:\n"
             for inv in invocations:
                 level_req = inv.get('level_required', 1)
                 effect = inv.get('effect', 'Нет описания')
-                text += f"• **{inv['name']}** (мин. ур. {level_req}) – {effect}\n"
+                text += f"• {inv['name']} (мин. ур. {level_req}) – {effect}\n"
             text += "\nКликни по названию, чтобы добавить/убрать. ✅ = выбрано."
 
             keyboard = _create_invocations_keyboard(level=1, selected_names=selected_names)
@@ -615,7 +615,7 @@ async def go_to_background(message: Message, state: FSMContext):
     logger.info("🔧 go_to_background вызвана")
     await state.set_state(CreateCharacter.background_select)
     await message.answer(
-        f"📜 **Шаг 7/12 — твоё прошлое**\n\n"
+        f"📜 Шаг 7/12 — твоё прошлое\n\n"
         f"Предыстория даёт бонусы к характеристикам, черты и снаряжение.\n\n"
         f"Выбери одну:",
         parse_mode=None,
@@ -714,14 +714,14 @@ async def select_background(callback: CallbackQuery, state: FSMContext):
 
     await callback.message.delete()
     await callback.message.answer(
-        f"📜 **{background}**\n\n"
+        f"📜 {background}\n\n"
         f"📖 {bg_info.get('description', 'Нет описания')[:300]}...\n\n"
         f"{origin_feat_text}"
         f"✨ Бонусы характеристик: +2 {bg_info['characteristics'][0]}, +1 {bg_info['characteristics'][1]}\n\n"
         f"🔧 Черта: {bg_info.get('trait', 'Нет')}\n"
         f"📚 Навыки: {', '.join(bg_info.get('skills', []))}\n"
         f"🛠️ Инструменты: {bg_info.get('tools', 'Нет')}\n\n"
-        f"**Шаг 8/12 — снаряжение от предыстории**\n\n"
+        f"Шаг 8/12 — снаряжение от предыстории\n\n"
         f"Выбери один стартовый набор:\n"
         f"📦 Вариант А: {equip_a}\n\n"
         f"🎒 Вариант Б: {equip_b}\n\n"
@@ -788,7 +788,7 @@ async def calculate_and_show_stats(message: Message, state: FSMContext):
     def mod(s): return (s-10)//2
 
     await message.answer(
-        f"📊 **Шаг 9/12 – твои характеристики**\n\n"
+        f"📊 Шаг 9/12 – твои характеристики\n\n"
         f"Класс: {class_name}\n"
         f"Предыстория: {background}\n\n"
         f"✨ Бонусы предыстории: +2 к {stats_result['bg_chars'][0]}, +1 к {stats_result['bg_chars'][1]}\n\n"
@@ -824,7 +824,7 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
     has_sub = CharacterStatsService.has_subraces(race)
     subraces_list = CharacterStatsService.get_subraces(race) if has_sub else []
 
-    text = f"🧝 **Раса: {race}**\n\n📖 {race_desc}\n\n🏃 **Скорость:** {race_speed} футов\n📏 **Размер:** {race_size}\n"
+    text = f"🧝 Раса: {race}\n\n📖 {race_desc}\n\n🏃 Скорость: {race_speed} футов\n📏 Размер: {race_size}\n"
     img_path = CharacterStatsService.get_race_image_path(race)
 
     try:
@@ -833,10 +833,10 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
         pass
 
     if has_sub and subraces_list:
-        text += f"\n🌟 **Доступные подрасы:**\n"
+        text += f"\n🌟 Доступные подрасы:\n"
         for sub in subraces_list:
             sub_trait = CharacterStatsService.get_subrace_trait(race, sub)
-            text += f"   • **{sub}** — {sub_trait[:50] + '...' if len(sub_trait) > 50 else sub_trait}\n"
+            text += f"   • {sub} — {sub_trait[:50] + '...' if len(sub_trait) > 50 else sub_trait}\n"
         if img_path and os.path.exists(img_path):
             photo = FSInputFile(img_path)
             await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
@@ -863,7 +863,7 @@ async def select_subrace(callback: CallbackQuery, state: FSMContext):
     race = data.get("race")
     sub_desc = CharacterStatsService.get_subrace_description(race, subrace)
     sub_trait = CharacterStatsService.get_subrace_trait(race, subrace)
-    text = f"🧝 **{race} — {subrace}**\n\n📖 {sub_desc}\n\n✨ **Особенность:** {sub_trait}\n\nПереходим к имени…"
+    text = f"🧝 {race} — {subrace}\n\n📖 {sub_desc}\n\n✨ Особенность: {sub_trait}\n\nПереходим к имени…"
     await callback.message.delete()
     await go_to_name(callback.message, state)
     await callback.answer()
@@ -885,7 +885,7 @@ async def go_to_name(message: Message, state: FSMContext):
     logger.info("🔧 go_to_name вызвана")
     await state.set_state(CreateCharacter.name_input)
     await message.answer(
-        "📛 **Шаг 11/12 — как зовут твоего героя?**\n\n"
+        "📛 Шаг 11/12 — как зовут твоего героя?\n\n"
         "Имя: от 2 до 50 символов. Любое на твой вкус.\n\n"
         "Введи имя:",
         parse_mode=None,
@@ -897,7 +897,7 @@ async def go_to_backstory(message: Message, state: FSMContext):
     logger.info("🔧 go_to_backstory вызвана")
     await state.set_state(CreateCharacter.backstory_input)
     await message.answer(
-        "📖 **Финальный шаг (12/12) — история персонажа**\n\n"
+        "📖 Финальный шаг (12/12) — история персонажа\n\n"
         "Коротко расскажи:\n"
         "• Откуда он родом?\n"
         "• Что привело его к приключениям?\n"
@@ -984,23 +984,28 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         stats = char_data['stats']
         def mod(s): return (s-10)//2
 
-        spells_preview = ""
+        # Формируем список заклинаний столбиком
+        spells_text = ""
         if char_data.get('selected_spells'):
-            spells_list = ", ".join(char_data['selected_spells'][:5])
-            if len(char_data['selected_spells']) > 5:
-                spells_list += f" и ещё {len(char_data['selected_spells'])-5}"
-            spells_preview = f"\n\n🔮 Заклинания: {spells_list}"
+            spells_list = char_data['selected_spells']
+            spells_text = "\n\n🔮 Заклинания:\n"
+            for spell in spells_list:
+                spells_text += f"• {spell}\n"
 
-        caption = (f"✅ **Персонаж готов!**\n\n"
+        caption = (f"✅ Персонаж готов!\n\n"
                    f"📛 {name}\n"
                    f"⚔️ Класс: {char_data['class_name']}\n"
                    f"📜 Предыстория: {char_data['background']}\n"
                    f"🧝 Раса: {char_data['race']}{f' ({char_data['subrace']})' if char_data['subrace'] else ''}\n\n"
                    f"❤️ HP: {char_data['hp']} | 🛡️ AC: {char_data['ac']}\n\n"
                    f"📊 Характеристики (мод.):\n"
-                   f"💪 Сила {stats['STR']} ({mod(stats['STR']):+d}) | 🤸 Ловкость {stats['DEX']} ({mod(stats['DEX']):+d}) | 🏋️ Телосложение {stats['CON']} ({mod(stats['CON']):+d})\n"
-                   f"🧠 Интеллект {stats['INT']} ({mod(stats['INT']):+d}) | 🧙 Мудрость {stats['WIS']} ({mod(stats['WIS']):+d}) | ✨ Харизма {stats['CHA']} ({mod(stats['CHA']):+d})"
-                   f"{spells_preview}\n\n"
+                   f"💪 Сила (STR): {stats['STR']} ({mod(stats['STR']):+d})\n"
+                   f"🤸 Ловкость (DEX): {stats['DEX']} ({mod(stats['DEX']):+d})\n"
+                   f"🏋️ Телосложение (CON): {stats['CON']} ({mod(stats['CON']):+d})\n"
+                   f"🧠 Интеллект (INT): {stats['INT']} ({mod(stats['INT']):+d})\n"
+                   f"🧙 Мудрость (WIS): {stats['WIS']} ({mod(stats['WIS']):+d})\n"
+                   f"✨ Харизма (CHA): {stats['CHA']} ({mod(stats['CHA']):+d})"
+                   f"{spells_text}\n\n"
                    f"📄 Твой PDF-лист — под этим сообщением.")
 
         if image_file_id:
@@ -1079,7 +1084,7 @@ async def view_character(callback: CallbackQuery):
     if not character:
         await callback.answer("❌ Персонаж не найден")
         return
-    info = (f"📛 **{character['name']}**\n\n"
+    info = (f"📛 {character['name']}\n\n"
             f"🧝 Раса: {character.get('race_name', 'Неизвестно')}\n"
             f"⚔️ Класс: {character.get('class_name', 'Неизвестно')}\n"
             f"📜 Предыстория: {character.get('background_name', 'Нет')}\n"

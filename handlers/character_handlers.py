@@ -36,6 +36,7 @@ from keyboards.character_keyboards import (
 )
 
 from services.character_service import CharacterStatsService, CharacterFinalizationService
+from keyboards.character_keyboards import create_skills_keyboard
 from services.progression_service import ProgressionService
 from services.spell_service import SpellSelectionService
 from repositories.character_repository import CharacterRepository

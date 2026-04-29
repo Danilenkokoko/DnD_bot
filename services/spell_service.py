@@ -68,7 +68,6 @@ class SpellSelectionService:
             selector = SpellSelector.from_dict(selector_data)
 
         if not selector.has_cantrips:
-            # Защита от рассинхрона
             await SpellSelectionService.start_level1_selection(message, state)
             return
 
@@ -188,8 +187,15 @@ class SpellSelectionService:
     @staticmethod
     async def start_level1_selection(message: Message, state: FSMContext) -> None:
         data = await state.get_data()
-        selector_data = data.get("spell_selector", {})
-        selector = SpellSelector.from_dict(selector_data)
+        selector_data = data.get("spell_selector")
+        class_name = data.get("class_name")
+
+        # Если селектора нет – создаём новый
+        if not selector_data:
+            selector = SpellSelector(class_name)
+            await state.update_data(spell_selector=selector.to_dict())
+        else:
+            selector = SpellSelector.from_dict(selector_data)
 
         if not selector.has_level1_spells:
             from handlers.character_handlers import go_to_fighting_style

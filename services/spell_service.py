@@ -41,12 +41,26 @@ class SpellSelectionService:
         is_spellcaster = class_info.get('is_spellcaster', False) if class_info else False
         spell_counts = _class_repo.get_spell_counts(class_name)
         has_cantrips = spell_counts.get('cantrips', 0) > 0
+        has_level1 = spell_counts.get('level1', 0) > 0
 
-        if not is_spellcaster or not has_cantrips:
+        # 1. Если класс не заклинатель – сразу к боевому стилю
+        if not is_spellcaster:
             from handlers.character_handlers import go_to_fighting_style
             await go_to_fighting_style(message, state)
             return
 
+        # 2. Если нет заговоров, но есть заклинания 1 уровня – сразу к ним
+        if not has_cantrips and has_level1:
+            await SpellSelectionService.start_level1_selection(message, state)
+            return
+
+        # 3. Если нет ни заговоров, ни заклинаний – к боевому стилю
+        if not has_cantrips and not has_level1:
+            from handlers.character_handlers import go_to_fighting_style
+            await go_to_fighting_style(message, state)
+            return
+
+        # 4. Есть заговоры – запускаем выбор заговоров
         if not selector_data:
             selector = SpellSelector(class_name)
             await state.update_data(spell_selector=selector.to_dict())
@@ -54,6 +68,7 @@ class SpellSelectionService:
             selector = SpellSelector.from_dict(selector_data)
 
         if not selector.has_cantrips:
+            # Защита от рассинхрона
             await SpellSelectionService.start_level1_selection(message, state)
             return
 
@@ -74,60 +89,6 @@ class SpellSelectionService:
             parse_mode=None,
             reply_markup=create_category_keyboard(categories, "cantrip", selected_count, required)
         )
-
-    @staticmethod
-    async def show_cantrips_in_category(callback: CallbackQuery, state: FSMContext) -> None:
-        category = callback.data.replace("cantrip_cat_", "")
-        data = await state.get_data()
-        selector_data = data.get("spell_selector", {})
-        selector = SpellSelector.from_dict(selector_data)
-
-        spells = selector.get_cantrips_in_category(category)
-        selected_spells = selector.get_selected_cantrips()
-        await state.update_data(current_category=category)
-        await state.set_state(CreateCharacter.spells_cantrips_list)
-
-        if not spells:
-            await callback.message.edit_text(f"📖 В категории **{category}** нет заговоров для этого класса.")
-            await callback.answer()
-            return
-
-        await callback.message.edit_text(
-            f"📖 **Категория: {category}**\n\nВыберите заговор для просмотра:",
-            reply_markup=create_spell_list_keyboard(spells, "cantrip", selected_spells, category)
-        )
-        await callback.answer()
-
-    @staticmethod
-    async def view_cantrip_detail(callback: CallbackQuery, state: FSMContext) -> None:
-        spell_id = int(callback.data.replace("cantrip_view_", ""))
-        spell = _spell_repo.get_by_id(spell_id)
-        if not spell:
-            await callback.answer("❌ Заговор не найден")
-            return
-
-        data = await state.get_data()
-        selector_data = data.get("spell_selector", {})
-        selector = SpellSelector.from_dict(selector_data)
-
-        is_selected = spell['name'] in selector.get_selected_cantrips()
-        remaining = selector.cantrip_state.remaining_count if selector.cantrip_state else 0
-
-        await state.update_data(current_spell_id=spell_id, current_spell_name=spell['name'])
-        await state.set_state(CreateCharacter.spells_cantrips_detail)
-
-        description = spell.get('description', 'Описание отсутствует')
-        category = spell.get('category', 'Прочее')
-        icon = get_category_icon(category)
-
-        await callback.message.edit_text(
-            f"{icon} **{spell['name']}**\n\n📖 **Описание:**\n{description}\n\n"
-            f"🏷️ **Категория:** {category}\n"
-            f"📊 **Уровень:** {spell.get('level', 0)} (заговор)\n\n"
-            f"{'✅ Уже выбран' if is_selected else '❌ Не выбран'}",
-            reply_markup=create_spell_detail_keyboard(spell_id, spell['name'], "cantrip", is_selected, remaining)
-        )
-        await callback.answer()
 
     @staticmethod
     async def add_cantrip(callback: CallbackQuery, state: FSMContext) -> None:

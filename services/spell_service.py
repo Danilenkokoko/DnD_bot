@@ -30,6 +30,63 @@ class SpellSelectionService:
     """Сервис управления выбором заклинаний"""
 
     # ========== ЗАГОВОРЫ (CANTRIPS) - дополнительные методы ==========
+    @staticmethod
+    async def start_cantrips_selection(message: Message, state: FSMContext) -> None:
+        data = await state.get_data()
+        selector_data = data.get("spell_selector")
+        class_name = data.get("class_name")
+
+        class_info = _class_repo.get_by_name(class_name)
+        is_spellcaster = class_info.get('is_spellcaster', False) if class_info else False
+        spell_counts = _class_repo.get_spell_counts(class_name)
+        has_cantrips = spell_counts.get('cantrips', 0) > 0
+        has_level1 = spell_counts.get('level1', 0) > 0
+
+        # 1. Если класс не заклинатель – сразу к боевому стилю
+        if not is_spellcaster:
+            from handlers.character_handlers import go_to_fighting_style
+            await go_to_fighting_style(message, state)
+            return
+
+        # 2. Если нет заговоров, но есть заклинания 1 уровня – сразу к ним
+        if not has_cantrips and has_level1:
+            await SpellSelectionService.start_level1_selection(message, state)
+            return
+
+        # 3. Если нет ни заговоров, ни заклинаний – к боевому стилю
+        if not has_cantrips and not has_level1:
+            from handlers.character_handlers import go_to_fighting_style
+            await go_to_fighting_style(message, state)
+            return
+
+        # 4. Есть заговоры – запускаем выбор заговоров
+        if not selector_data:
+            selector = SpellSelector(class_name)
+            await state.update_data(spell_selector=selector.to_dict())
+        else:
+            selector = SpellSelector.from_dict(selector_data)
+
+        if not selector.has_cantrips:
+            await SpellSelectionService.start_level1_selection(message, state)
+            return
+
+        categories = selector.get_cantrip_categories()
+        selected_count, required = selector.get_cantrip_progress()
+
+        if not categories:
+            from handlers.character_handlers import go_to_fighting_style
+            await go_to_fighting_style(message, state)
+            return
+
+        await state.set_state(CreateCharacter.spells_cantrips_category)
+        await message.answer(
+            f"📖 **Шаг 3/12: Выбор ЗАГОВОРОВ**\n\n"
+            f"Класс **{selector.class_name}** может выбрать {required} заговор(а).\n"
+            f"Осталось выбрать: {required - selected_count}\n\n"
+            f"Выберите категорию для просмотра заговоров:",
+            parse_mode=None,
+            reply_markup=create_category_keyboard(categories, "cantrip", selected_count, required)
+        )
 
     @staticmethod
     async def show_cantrips_in_category(callback: CallbackQuery, state: FSMContext) -> None:

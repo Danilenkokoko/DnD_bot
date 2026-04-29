@@ -594,7 +594,8 @@ async def go_to_invocations(message: Message, state: FSMContext):
             for inv in invocations:
                 level_req = inv.get('level_required', 1)
                 effect = inv.get('effect', 'Нет описания')
-                text += f"• {inv['name']} (мин. ур. {level_req}) – {effect}\n"
+                # Добавлен дополнительный перевод строки после каждого воззвания
+                text += f"• {inv['name']} (мин. ур. {level_req}) – {effect}\n\n"
             text += "\nКликни по названию, чтобы добавить/убрать. ✅ = выбрано."
 
             keyboard = _create_invocations_keyboard(level=1, selected_names=selected_names)
@@ -792,15 +793,15 @@ async def calculate_and_show_stats(message: Message, state: FSMContext):
         f"Класс: {class_name}\n"
         f"Предыстория: {background}\n\n"
         f"✨ Бонусы предыстории: +2 к {stats_result['bg_chars'][0]}, +1 к {stats_result['bg_chars'][1]}\n\n"
-        f"📈 Итоговые значения (модификатор):\n"
-        f"💪 Сила (STR): {stats['STR']} ({mod(stats['STR']):+d})\n"
-        f"🤸 Ловкость (DEX): {stats['DEX']} ({mod(stats['DEX']):+d})\n"
-        f"🏋️ Телосложение (CON): {stats['CON']} ({mod(stats['CON']):+d})\n"
-        f"🧠 Интеллект (INT): {stats['INT']} ({mod(stats['INT']):+d})\n"
-        f"🧙 Мудрость (WIS): {stats['WIS']} ({mod(stats['WIS']):+d})\n"
-        f"✨ Харизма (CHA): {stats['CHA']} ({mod(stats['CHA']):+d})\n\n"
-        f"❤️ Хиты (HP): {stats_result['hp']}\n"
-        f"🛡️ Класс брони (AC): {stats_result['ac']}\n\n"
+        f"📈 Итоговые значения:\n"
+        f"💪 Сила: {stats['STR']} ({mod(stats['STR']):+d})\n"
+        f"🤸 Ловкость: {stats['DEX']} ({mod(stats['DEX']):+d})\n"
+        f"🏋️ Телосложение: {stats['CON']} ({mod(stats['CON']):+d})\n"
+        f"🧠 Интеллект: {stats['INT']} ({mod(stats['INT']):+d})\n"
+        f"🧙 Мудрость: {stats['WIS']} ({mod(stats['WIS']):+d})\n"
+        f"✨ Харизма: {stats['CHA']} ({mod(stats['CHA']):+d})\n\n"
+        f"❤️ Хиты: {stats_result['hp']}\n"
+        f"🛡️ Класс брони: {stats_result['ac']}\n\n"
         f"А теперь выбери расу:",
         parse_mode=None,
         reply_markup=create_race_keyboard()
@@ -998,13 +999,13 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
                    f"📜 Предыстория: {char_data['background']}\n"
                    f"🧝 Раса: {char_data['race']}{f' ({char_data['subrace']})' if char_data['subrace'] else ''}\n\n"
                    f"❤️ HP: {char_data['hp']} | 🛡️ AC: {char_data['ac']}\n\n"
-                   f"📊 Характеристики (мод.):\n"
-                   f"💪 Сила (STR): {stats['STR']} ({mod(stats['STR']):+d})\n"
-                   f"🤸 Ловкость (DEX): {stats['DEX']} ({mod(stats['DEX']):+d})\n"
-                   f"🏋️ Телосложение (CON): {stats['CON']} ({mod(stats['CON']):+d})\n"
-                   f"🧠 Интеллект (INT): {stats['INT']} ({mod(stats['INT']):+d})\n"
-                   f"🧙 Мудрость (WIS): {stats['WIS']} ({mod(stats['WIS']):+d})\n"
-                   f"✨ Харизма (CHA): {stats['CHA']} ({mod(stats['CHA']):+d})"
+                   f"📊 Характеристики:\n"
+                   f"💪 Сила: {stats['STR']} ({mod(stats['STR']):+d})\n"
+                   f"🤸 Ловкость: {stats['DEX']} ({mod(stats['DEX']):+d})\n"
+                   f"🏋️ Телосложение: {stats['CON']} ({mod(stats['CON']):+d})\n"
+                   f"🧠 Интеллект: {stats['INT']} ({mod(stats['INT']):+d})\n"
+                   f"🧙 Мудрость: {stats['WIS']} ({mod(stats['WIS']):+d})\n"
+                   f"✨ Харизма: {stats['CHA']} ({mod(stats['CHA']):+d})"
                    f"{spells_text}\n\n"
                    f"📄 Твой PDF-лист — под этим сообщением.")
 

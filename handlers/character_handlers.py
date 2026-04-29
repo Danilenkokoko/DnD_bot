@@ -1,4 +1,4 @@
-# handlers/character_handlers.py (полный исправленный файл с корректной обработкой навыков)
+# handlers/character_handlers.py
 """
 Обработчики для создания персонажа
 Используют сервисы для бизнес-логики
@@ -28,7 +28,7 @@ from keyboards.character_keyboards import (
     create_invocations_keyboard,
     create_character_list_keyboard,
     create_delete_keyboard,
-    create_skills_keyboard,
+    create_skills_keyboard,   # ✅ добавлен импорт
     cancel_kb,
     skip_kb,
     continue_kb_for_spells,
@@ -36,7 +36,6 @@ from keyboards.character_keyboards import (
 )
 
 from services.character_service import CharacterStatsService, CharacterFinalizationService
-from keyboards.character_keyboards import create_skills_keyboard
 from services.progression_service import ProgressionService
 from services.spell_service import SpellSelectionService
 from repositories.character_repository import CharacterRepository
@@ -271,7 +270,7 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(lambda c: c.data.startswith("skills_"))
 async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
     """Обработчик callback-запросов для выбора навыков класса"""
-    logger.info(f"DEBUG: вызван handle_skills_selection с data={callback.data}")
+    logger.info(f"🟢 Обработчик навыков вызван, data={callback.data}")
     data = callback.data
     user_data = await state.get_data()
     class_name = user_data.get("class_name")
@@ -913,7 +912,7 @@ async def view_character(callback: CallbackQuery):
             f"📜 **Предыстория:** {character.get('background_name', 'Нет')}\n"
             f"📊 **Уровень:** {character['level']}\n"
             f"❤️ **HP:** {character['hp']} | 🛡️ **AC:** {character['ac']}\n\n"
-            f"**Характеристики:**\n"
+            f"**Характеристики:\n"
             f"STR {character['str']} | DEX {character['dex']} | CON {character['con']} | "
             f"INT {character['int']} | WIS {character['wis']} | CHA {character['cha']}")
     if character.get('image_file_id'):

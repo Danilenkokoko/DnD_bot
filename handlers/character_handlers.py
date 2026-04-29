@@ -1,4 +1,4 @@
-# handlers/character_handlers.py
+# handlers/character_handlers.py (полный исправленный файл с корректной обработкой навыков)
 """
 Обработчики для создания персонажа
 Используют сервисы для бизнес-логики
@@ -235,15 +235,12 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
         return
 
     # НЕТ ПОДКЛАССА НА 1 УРОВНЕ — ПЕРЕХОДИМ К ВЫБОРУ НАВЫКОВ
-    # Сохраняем класс
     await state.update_data(class_name=class_name)
 
-    # Получаем список навыков класса и количество выборов
     class_data = _class_repo.get_by_name(class_name)
     available_skills = class_data.get('skills', []) if class_data else []
     skill_choices = class_data.get('skill_choices', 2) if class_data else 2
 
-    # Переход к выбору навыков
     await state.set_state(CreateCharacter.skills_select)
     selected_skills = []
     await state.update_data(selected_class_skills=selected_skills)
@@ -273,11 +270,11 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(lambda c: c.data.startswith("skills_"))
 async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
     """Обработчик callback-запросов для выбора навыков класса"""
+    logger.info(f"DEBUG: вызван handle_skills_selection с data={callback.data}")
     data = callback.data
     user_data = await state.get_data()
     class_name = user_data.get("class_name")
     
-    # Получаем список навыков класса и количество выборов
     class_info = _class_repo.get_by_name(class_name)
     if not class_info:
         await callback.answer("❌ Ошибка: класс не найден")
@@ -288,11 +285,8 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
     selected_skills = user_data.get("selected_class_skills", [])
     
     if data == "skills_ready":
-        # Проверка: выбрано ровно skill_choices навыков
         if len(selected_skills) == skill_choices:
-            # Сохраняем выбранные навыки
             await state.update_data(selected_class_skills=selected_skills)
-            # Переход к следующему шагу (выбор снаряжения класса)
             await state.set_state(CreateCharacter.class_equipment_select)
             await callback.message.delete()
             await show_class_equipment(callback.message, state, class_name)
@@ -309,7 +303,6 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
         await callback.answer(f"Выбрано {len(selected_skills)} из {skill_choices} навыков", show_alert=False)
         return
     
-    # Обработка toggle навыка: data вида "skill_toggle_Акробатика"
     if data.startswith("skill_toggle_"):
         skill_name = data.replace("skill_toggle_", "")
         if skill_name in selected_skills:
@@ -322,13 +315,16 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
         await state.update_data(selected_class_skills=selected_skills)
         # Обновляем клавиатуру
         keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
-        await callback.message.edit_reply_markup(reply_markup=keyboard)
+        try:
+            await callback.message.edit_reply_markup(reply_markup=keyboard)
+        except Exception as e:
+            logger.error(f"Ошибка обновления клавиатуры: {e}")
         await callback.answer()
         return
 
 
 async def show_class_equipment(message: Message, state: FSMContext, class_name: str):
-    """Показывает выбор снаряжения класса (вынесено из основного потока)"""
+    """Показывает выбор снаряжения класса"""
     equipment = CharacterStatsService.get_class_equipment(class_name)
     has_equipment_choice = len(equipment) > 1
     if has_equipment_choice:
@@ -349,7 +345,7 @@ async def show_class_equipment(message: Message, state: FSMContext, class_name: 
 
 
 # =========================================================
-# ШАГ 3: ВЫБОР СНАРЯЖЕНИЯ КЛАССА (обновлён номер шага)
+# ШАГ 3: ВЫБОР СНАРЯЖЕНИЯ КЛАССА
 # =========================================================
 
 @router.callback_query(lambda c: c.data.startswith("equip_"))
@@ -390,7 +386,7 @@ async def back_to_classes(callback: CallbackQuery, state: FSMContext):
 
 
 # =========================================================
-# ПЕРЕХОДЫ МЕЖДУ ШАГАМИ (обновлены номера шагов)
+# ПЕРЕХОДЫ МЕЖДУ ШАГАМИ
 # =========================================================
 
 async def go_to_spells(message: Message, state: FSMContext):
@@ -515,7 +511,6 @@ async def select_invocation(callback: CallbackQuery, state: FSMContext):
         await callback.answer(f"✅ Возвание '{inv_name}' добавлено")
     await state.update_data(selected_invocations=selected)
     new_count = len(selected)
-    # Обновляем клавиатуру только при изменении статуса кнопки "Продолжить"
     if (old_count == 0 and new_count > 0) or (old_count > 0 and new_count == 0):
         await callback.message.edit_reply_markup(reply_markup=create_invocations_keyboard(level=1, selected_count=new_count))
 
@@ -548,22 +543,25 @@ async def select_background(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         return
 
-    # Получаем черту происхождения
-    origin_feat = bg_info.get('origin_feat', '')
-    origin_feat_text = f"\n🌟 **Черта происхождения:** {origin_feat}" if origin_feat else ""
-
-    await state.update_data(selected_skills=bg_info.get('skills', []), background_trait=bg_info.get('trait', 'Нет'))
+    await state.update_data(
+        selected_skills_bg=bg_info.get('skills', []),
+        background_trait=bg_info.get('trait', 'Нет'),
+        background_origin_feat=bg_info.get('origin_feat', '')
+    )
     await state.set_state(CreateCharacter.background_equipment_select)
 
-    equip_a = bg_info.get('equipment_a', 'Нет описания')[:60]
-    equip_b = bg_info.get('equipment_b', 'Нет описания')[:60]
+    equip_a = bg_info.get('equipment_a', 'Нет описания')[:120]
+    equip_b = bg_info.get('equipment_b', 'Нет описания')[:120]
+    origin_feat = bg_info.get('origin_feat', '')
+    origin_feat_text = f"✨ **Черта происхождения:** {origin_feat}\n\n" if origin_feat else ""
 
     await callback.message.delete()
     await callback.message.answer(
-        f"📜 **Предыстория: {background}**\n\n📖 {bg_info.get('description', 'Нет описания')[:300]}...\n\n"
+        f"📜 **Предыстория: {background}**\n\n"
+        f"📖 {bg_info.get('description', 'Нет описания')[:300]}...\n\n"
+        f"{origin_feat_text}"
         f"✨ **Бонусы к характеристикам:**\n   • +2 к {bg_info['characteristics'][0]}\n   • +1 к {bg_info['characteristics'][1]}\n\n"
-        f"🔧 **Черта предыстории:** {bg_info.get('trait', 'Нет')}"
-        f"{origin_feat_text}\n"
+        f"🔧 **Черта:** {bg_info.get('trait', 'Нет')}\n"
         f"📚 **Навыки:** {', '.join(bg_info.get('skills', []))}\n"
         f"🛠️ **Инструменты:** {bg_info.get('tools', 'Нет')}\n\n"
         f"**Шаг 8/12: Выберите СНАРЯЖЕНИЕ от предыстории**\n\n"
@@ -816,9 +814,12 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
 
         # Объединяем навыки класса и предыстории, убирая дубликаты
         class_skills = data.get("selected_class_skills", [])
-        bg_skills = data.get("selected_skills", [])
+        bg_skills = data.get("selected_skills_bg", [])
         all_skills = list(set(class_skills + bg_skills))
         char_data['selected_skills'] = all_skills
+
+        # Добавляем черту происхождения
+        char_data['origin_feat'] = data.get("background_origin_feat", "")
 
         # Сохраняем персонажа
         char_id = CharacterFinalizationService.save_character(char_data)
@@ -840,6 +841,7 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             "background": char_data['background'],
             "background_trait": bg_info.get('trait', '') if bg_info else '',
             "background_description": bg_info.get('description', '') if bg_info else '',
+            "origin_feat": char_data.get('origin_feat', ''),
             "race_traits": [],
             "class_features": [],
             "backstory": char_data['backstory'],

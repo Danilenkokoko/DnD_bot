@@ -419,8 +419,7 @@ async def select_invocation(callback: CallbackQuery, state: FSMContext):
         await callback.answer(f"✅ Возвание '{inv_name}' добавлено")
     await state.update_data(selected_invocations=selected)
     new_count = len(selected)
-    # Обновляем клавиатуру только при изменении состояния кнопки "Продолжить":
-    # 0 -> >0 или >0 -> 0
+    # Обновляем клавиатуру только при изменении статуса кнопки "Продолжить"
     if (old_count == 0 and new_count > 0) or (old_count > 0 and new_count == 0):
         await callback.message.edit_reply_markup(reply_markup=create_invocations_keyboard(level=1, selected_count=new_count))
 
@@ -435,7 +434,6 @@ async def skip_invocations(callback: CallbackQuery, state: FSMContext):
 async def continue_invocations(callback: CallbackQuery, state: FSMContext):
     await go_to_background(callback.message, state)
     await callback.answer()
-
 
 
 # =========================================================
@@ -713,9 +711,6 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             await message.answer("❌ Ошибка: имя не сохранено.", reply_markup=main_menu())
             await state.clear()
             return
-
-        # Сохраняем персонажа
-        char_id = CharacterFinalizationService.save_character(char_data)
 
         bg_info = _bg_repo.get_by_name(char_data['background']) if char_data['background'] else None
         pdf_data = {

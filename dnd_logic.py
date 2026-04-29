@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+# dnd_logic.py
 """
 dnd_logic.py - D&D 5.5e (2024) Character Logic Module (LEGACY FACADE)
 
@@ -85,7 +84,6 @@ def calculate_proficiency_bonus(level: int) -> int:
 
 @_deprecated("calc_hp() устарела. Используйте engine.hp.calculate_hp_at_level()")
 def calc_hp(class_id: int, constitution: int, level: int = 1) -> int:
-    # Для обратной совместимости получаем hit_die из репозитория по class_id
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT hit_die FROM classes WHERE id = %s", (class_id,))
@@ -103,7 +101,6 @@ def calc_ac_with_armor(dexterity: int, armor_name: Optional[str]) -> int:
 def calc_ac(dexterity: int, armor_type: str = "none") -> int:
     if armor_type == "none":
         return calculate_base_ac(dexterity)
-    # fallback – старая логика
     dex_mod = modifier(dexterity)
     armor_base = {
         "light": 11 + dex_mod,
@@ -114,10 +111,9 @@ def calc_ac(dexterity: int, armor_type: str = "none") -> int:
 
 
 # ------------------------------------------------------------
-# 2. Характеристики и бонусы предыстории (перенаправление в engine)
+# 2. Характеристики и бонусы предыстории
 # ------------------------------------------------------------
 def get_class_starting_stats(class_name: str, variant: Optional[str] = None) -> Dict[str, int]:
-    """Оставлено без изменений – статические данные."""
     key = f"{class_name}_{variant}" if variant else class_name
     if key in CLASS_STARTING_STATS:
         return CLASS_STARTING_STATS[key].copy()
@@ -127,12 +123,10 @@ def get_class_starting_stats(class_name: str, variant: Optional[str] = None) -> 
 
 
 def get_class_primary_stats(class_name: str) -> List[str]:
-    """Перенаправление в ClassRepository"""
     return _class_repo.get_primary_stats(class_name)
 
 
 def get_background_characteristics(background_name: str) -> List[str]:
-    """Перенаправление в BackgroundRepository"""
     return _bg_repo.get_characteristics(background_name)
 
 
@@ -226,7 +220,7 @@ def get_race_info(race_name: str) -> Dict[str, Any]:
 
 def get_race_traits_list(race: str, subrace: Optional[str] = None) -> List[str]:
     traits = []
-    # fallback для совместимости (точные данные лучше брать из БД)
+    # fallback для совместимости
     race_traits_map = {
         "Аасимар": ["Тёмное зрение", "Небесное наследие", "Исцеляющие руки", "Светоносный"],
         "Гном": ["Тёмное зрение", "Гномья хитрость", "Искусный ремесленник"],
@@ -300,7 +294,6 @@ def get_class_info(class_name: str) -> Dict[str, Any]:
 
 
 def get_class_features(class_name: str, level: int = 1) -> List[str]:
-    # fallback – простые особенности
     features = []
     data = _class_repo.get_by_name(class_name)
     if data and data.get('is_spellcaster'):
@@ -507,12 +500,8 @@ def validate_character(name: str, class_name: str, race: str, background: str, s
 # ------------------------------------------------------------
 # 11. Подклассы (уже есть в ClassRepository, но оставим для API)
 # ------------------------------------------------------------
-def get_subclasses_for_class(class_name: str, level: int = 1) -> List[Dict[str, Any]]:
-    return _class_repo.get_subclasses(class_name, level)
+# get_subclasses_for_class уже определена выше
 
-
-# ------------------------------------------------------------
 # Вспомогательное для обратной совместимости (get_connection)
-# ------------------------------------------------------------
 from db import get_connection  # noqa
 import os  # noqa

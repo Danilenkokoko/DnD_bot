@@ -9,6 +9,8 @@ import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader, TemplateError
+from weasyprint import HTML, CSS
+from weasyprint.text.fonts import FontConfiguration
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -622,6 +624,25 @@ def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
                     logger.info(f"🗑️ Удален старый файл: {filename}")
     except Exception as e:
         logger.error(f"❌ Ошибка при очистке: {e}")
+
+def convert_html_to_pdf(html_path: str, pdf_path: str) -> bool:
+    """
+    Конвертирует HTML-файл в PDF с помощью WeasyPrint.
+    Возвращает True при успехе.
+    """
+    try:
+        font_config = FontConfiguration()
+        css = CSS(string='@page { size: A4; margin: 1.5cm; }')
+        HTML(filename=html_path).write_pdf(pdf_path, stylesheets=[css], font_config=font_config)
+        if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+            logger.info(f"✅ PDF успешно создан: {pdf_path}")
+            return True
+        else:
+            logger.error(f"❌ PDF не создан или пуст: {pdf_path}")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Ошибка конвертации HTML в PDF: {e}")
+        return False
 
 
 if __name__ == "__main__":

@@ -32,6 +32,10 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
+print("DB_NAME:", os.getenv("DB_NAME"))
+print("DB_USER:", os.getenv("DB_USER"))
+print("DB_PASSWORD:", "*****" if os.getenv("DB_PASSWORD") else "NOT SET")
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN не найден в .env файле")

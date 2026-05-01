@@ -10,17 +10,17 @@ class CreateCharacter(StatesGroup):
     """Состояния создания персонажа"""
     # Шаг 1: Класс
     class_select = State()
-    subclass_select = State()
-    
-    # НОВЫЙ ШАГ: Выбор навыков класса
+    # Подкласс удалён (выбирается на 3 уровне, не на 1-м)
+
+    # Шаг 2: Выбор навыков класса
     skills_select = State()
     skills_list = State()
     skills_complete = State()
-    
-    # Шаг 2: Снаряжение класса
+
+    # Шаг 3: Снаряжение класса
     class_equipment_select = State()
-    
-    # Шаг 3-4: Заклинания
+
+    # Шаг 4-5: Заклинания
     spells_cantrips_category = State()
     spells_cantrips_list = State()
     spells_cantrips_detail = State()
@@ -29,22 +29,26 @@ class CreateCharacter(StatesGroup):
     spells_level1_list = State()
     spells_level1_detail = State()
     spells_level1_complete = State()
-    
-    # Шаг 5: Боевой стиль
+
+    # Шаг 6: Боевой стиль
     fighting_style_select = State()
-    
-    # Шаг 6: Возвания (колдун)
-    invocations_select = State()
-    
-    # Шаг 7-8: Предыстория и её снаряжение
+
+    # Возвания удалены (не выбираются на 1 уровне)
+
+    # Шаг 7: Предыстория (без отдельного выбора снаряжения)
     background_select = State()
-    background_equipment_select = State()
-    
-    # Шаг 9-10: Раса и подраса
+    # background_equipment_select удалено
+
+    # Шаг 8-9: Раса и подраса
     race_select = State()
     subrace_select = State()
-    
-    # Шаг 11-12: Имя, история, изображение
+
+    # Шаг 10-11: Имя, история
     name_input = State()
     backstory_input = State()
+
+    # Шаг 12: Мировоззрение
+    alignment_select = State()
+
+    # Шаг 13: Изображение
     image_input = State()

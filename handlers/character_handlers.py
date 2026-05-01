@@ -63,35 +63,6 @@ WEBAPP_BASE_URL = os.getenv("WEBAPP_URL", "http://localhost:8000")
 # СОБСТВЕННЫЕ КЛАВИАТУРЫ (БЕЗ КНОПОК "ПРОПУСТИТЬ")
 # =========================================================
 
-def _create_subclass_keyboard(class_name: str) -> Optional[InlineKeyboardMarkup]:
-    """Клавиатура выбора подкласса (без кнопки пропуска)"""
-    from services.character_service import CharacterStatsService
-    subclasses = CharacterStatsService.get_subclasses_for_class(class_name, level=1)
-    if not subclasses:
-        return None
-    buttons = []
-    for sub in subclasses:
-        buttons.append([InlineKeyboardButton(
-            text=f"📖 {sub['name']} — {sub['description'][:40]}...",
-            callback_data=f"subclass_{sub['id']}"
-        )])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад к классам", callback_data="back_to_classes")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def _create_subrace_keyboard(race: str) -> Optional[InlineKeyboardMarkup]:
-    """Клавиатура выбора подрасы (без кнопки пропуска)"""
-    from services.character_service import CharacterStatsService
-    subraces = CharacterStatsService.get_subraces(race)
-    if not subraces:
-        return None
-    buttons = []
-    for subrace in subraces:
-        buttons.append([InlineKeyboardButton(text=subrace, callback_data=f"subrace_{subrace}")])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад к расам", callback_data="back_to_races")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
 def _create_fighting_style_keyboard(class_name: str) -> Optional[InlineKeyboardMarkup]:
     """Клавиатура выбора боевого стиля (без кнопки пропуска)"""
     styles = CharacterStatsService.get_fighting_styles_for_class(class_name)
@@ -107,32 +78,29 @@ def _create_fighting_style_keyboard(class_name: str) -> Optional[InlineKeyboardM
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def _create_invocations_keyboard(level: int = 1, selected_names: list = None) -> Optional[InlineKeyboardMarkup]:
-    """Клавиатура выбора возваний с отображением выбранных (без кнопки пропуска)"""
-    from services.character_service import CharacterStatsService
-    invocations = CharacterStatsService.get_all_invocations(level)
-    if not invocations:
-        return None
-    if selected_names is None:
-        selected_names = []
-    buttons = []
-    for inv in invocations[:12]:
-        check = "✅ " if inv['name'] in selected_names else ""
-        buttons.append([InlineKeyboardButton(
-            text=f"{check}{inv['name']}",
-            callback_data=f"inv_{inv['id']}"
-        )])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def _create_background_equipment_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора снаряжения от предыстории (короткие кнопки)"""
-    buttons = [
-        [InlineKeyboardButton(text="📦 Вариант А", callback_data="bg_equip_A")],
-        [InlineKeyboardButton(text="🎒 Вариант Б", callback_data="bg_equip_B")],
-        [InlineKeyboardButton(text="⬅️ Назад к предыстории", callback_data="back_to_background")]
+def _create_alignment_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора мировоззрения"""
+    alignments = [
+        ("Законно-добрый", "lawful_good"),
+        ("Нейтрально-добрый", "neutral_good"),
+        ("Хаотично-добрый", "chaotic_good"),
+        ("Законно-нейтральный", "lawful_neutral"),
+        ("Нейтральный", "neutral"),
+        ("Хаотично-нейтральный", "chaotic_neutral"),
+        ("Законно-злой", "lawful_evil"),
+        ("Нейтрально-злой", "neutral_evil"),
+        ("Хаотично-злой", "chaotic_evil")
     ]
+    buttons = []
+    row = []
+    for name, value in alignments:
+        row.append(InlineKeyboardButton(text=name, callback_data=f"alignment_{value}"))
+        if len(row) == 3:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -155,7 +123,8 @@ async def cmd_start(message: Message, state: FSMContext):
         "6️⃣ Предыстория\n"
         "7️⃣ Раса\n"
         "8️⃣ Имя и история\n"
-        "9️⃣ Готовый PDF\n\n"
+        "9️⃣ Мировоззрение\n"
+        "🔟 Готовый PDF\n\n"
         "Жми «🎲 Создать персонажа» — и погнали!",
         reply_markup=main_menu(),
         parse_mode=None
@@ -181,8 +150,9 @@ async def cmd_help(message: Message):
         "7. РАСА — врождённые способности\n"
         "8. ИМЯ — как к тебе обращаться\n"
         "9. ИСТОРИЯ — твоя легенда\n"
-        "10. ИЗОБРАЖЕНИЕ — портрет (можно пропустить)\n"
-        "11. PDF — готовый лист персонажа\n\n"
+        "10. МИРОВОЗЗРЕНИЕ — моральный компас\n"
+        "11. ИЗОБРАЖЕНИЕ — портрет (можно пропустить)\n"
+        "12. PDF — готовый лист персонажа\n\n"
         "🔹 Команды:\n"
         "/start — начать заново\n"
         "/menu — главное меню\n"
@@ -215,7 +185,6 @@ async def list_characters(message: Message):
     if not characters:
         await message.answer("📭 У тебя пока нет ни одного персонажа.\n\nНажми «🎲 Создать персонажа», чтобы исправить это.")
         return
-    # Используем новую клавиатуру с двумя кнопками: текстовый просмотр + Web App
     webapp_base_url = WEBAPP_BASE_URL
     reply_markup = create_character_list_with_webapp_keyboard(message.from_user.id, webapp_base_url)
     await message.answer("📋 Твои персонажи:", reply_markup=reply_markup)
@@ -249,7 +218,7 @@ async def info_button(message: Message):
         "• Умные бонусы от предыстории\n"
         "• Заклинания по категориям\n"
         "• Оружейные приёмы (Weapon Mastery)\n"
-        "• Боевые стили и возвания колдуна\n\n"
+        "• Боевые стили\n\n"
         "🐉 Создай героя — и в бой!",
         parse_mode=None
     )
@@ -281,7 +250,6 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
 
     class_desc = CharacterStatsService.get_class_description(class_name)
     class_info = CharacterStatsService.get_class_info(class_name)
-    subclasses = _class_repo.get_subclasses(class_name, level=1)
 
     text = (f"🎭 {class_name}\n\n"
             f"{class_desc}\n\n"
@@ -308,62 +276,12 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
             "Религия", "Скрытность", "Тайная магия", "Убеждение"
         ]
 
-    if subclasses and class_name in ["Жрец", "Друид", "Колдун"]:
-        text += f"\n📖 На 1-м уровне нужно выбрать путь — подкласс:\n"
-        for sub in subclasses:
-            text += f"   • {sub['name']} — {sub['description'][:60]}...\n"
-        if img_path and os.path.exists(img_path):
-            photo = FSInputFile(img_path)
-            await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
-        else:
-            await callback.message.answer(text, parse_mode=None)
-        reply_markup = _create_subclass_keyboard(class_name)
-        await callback.message.answer("Выбери подкласс:", reply_markup=reply_markup)
-        await state.set_state(CreateCharacter.subclass_select)
-        await callback.answer()
-        return
-
-    # НЕТ ПОДКЛАССА
     if img_path and os.path.exists(img_path):
         photo = FSInputFile(img_path)
         await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
     else:
         await callback.message.answer(text, parse_mode=None)
 
-    await state.set_state(CreateCharacter.skills_select)
-    selected_skills = []
-    await state.update_data(selected_class_skills=selected_skills)
-    keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
-    text_skills = (f"📚 Навыки класса {class_name}\n\n"
-                   f"Ты можешь выбрать {skill_choices} навыка(ов). Отмеченные ✅ войдут в лист.\n\n"
-                   f"Когда наберёшь нужное количество, жми «✅ Готово».")
-    await callback.message.answer(text_skills, parse_mode=None, reply_markup=keyboard)
-    await callback.answer()
-
-
-# =========================================================
-# ВЫБОР ПОДКЛАССА
-# =========================================================
-
-@router.callback_query(lambda c: c.data.startswith("subclass_"))
-async def select_subclass(callback: CallbackQuery, state: FSMContext):
-    subclass_id = int(callback.data.replace("subclass_", ""))
-    await state.update_data(subclass_id=subclass_id)
-    logger.info(f"[FLOW] Выбран подкласс ID: {subclass_id}")
-    await callback.message.delete()
-
-    data = await state.get_data()
-    class_name = data.get("class_name")
-    class_data = _class_repo.get_by_name(class_name)
-    available_skills = class_data.get('skills', []) if class_data else []
-    skill_choices = class_data.get('skill_choices', 2) if class_data else 2
-    if not available_skills:
-        available_skills = [
-            "Акробатика", "Атлетика", "Восприятие", "Выживание", "Выступление",
-            "Запугивание", "История", "Ловкость рук", "Медицина", "Обман",
-            "Обращение с животными", "Природа", "Проницательность", "Расследование",
-            "Религия", "Скрытность", "Тайная магия", "Убеждение"
-        ]
     await state.set_state(CreateCharacter.skills_select)
     selected_skills = []
     await state.update_data(selected_class_skills=selected_skills)
@@ -565,7 +483,7 @@ async def go_to_fighting_style(message: Message, state: FSMContext):
         if not styles:
             logger.warning(f"⚠️ Нет боевых стилей для класса {class_name}")
             await message.answer(f"⚠️ У класса {class_name} нет боевых стилей. Пропускаем шаг.")
-            await go_to_invocations(message, state)
+            await go_to_background(message, state)
             return
 
         text = f"⚔️ Боевой стиль\n\n"
@@ -578,40 +496,7 @@ async def go_to_fighting_style(message: Message, state: FSMContext):
         await state.set_state(CreateCharacter.fighting_style_select)
         await message.answer(text, parse_mode=None, reply_markup=_create_fighting_style_keyboard(class_name))
     else:
-        logger.info(f"   Класс {class_name} не в списке, идём к invocations")
-        await go_to_invocations(message, state)
-
-
-async def go_to_invocations(message: Message, state: FSMContext):
-    data = await state.get_data()
-    class_name = data.get("class_name")
-    logger.info(f"🔧 go_to_invocations вызвана для класса: {class_name}")
-
-    if ProgressionService.should_select_invocations(class_name):
-        await state.set_state(CreateCharacter.invocations_select)
-        invocations = CharacterStatsService.get_all_invocations(level=1)
-        if invocations:
-            selected_names = data.get("selected_invocations", [])
-            text = f"🔮 Таинственные возвания (колдун)\n\n"
-            text += "На 1-м уровне можно взять до 2 возваний.\n\n"
-            text += "Список:\n"
-            for inv in invocations:
-                level_req = inv.get('level_required', 1)
-                effect = inv.get('effect', 'Нет описания')
-                text += f"• {inv['name']} (мин. ур. {level_req}) – {effect}\n"
-            text += "\nКликни по названию, чтобы добавить/убрать. ✅ = выбрано."
-
-            keyboard = _create_invocations_keyboard(level=1, selected_names=selected_names)
-            if keyboard:
-                await message.answer(text, parse_mode=None, reply_markup=keyboard)
-            else:
-                await message.answer("📖 Для твоего уровня возвания не предусмотрены. Идём дальше.")
-                await go_to_background(message, state)
-        else:
-            await message.answer("📖 Для твоего уровня возвания не предусмотрены. Идём дальше.")
-            await go_to_background(message, state)
-    else:
-        logger.info(f"   Переход к выбору предыстории для {class_name}")
+        logger.info(f"   Класс {class_name} не требует боевого стиля, сразу к предыстории")
         await go_to_background(message, state)
 
 
@@ -620,7 +505,7 @@ async def go_to_background(message: Message, state: FSMContext):
     await state.set_state(CreateCharacter.background_select)
     await message.answer(
         f"📜 Твоё прошлое (предыстория)\n\n"
-        f"Предыстория даёт бонусы к характеристикам, черты и снаряжение.\n\n"
+        f"Предыстория даёт бонусы к характеристикам, черту происхождения, навыки и инструменты.\n\n"
         f"Выбери одну:",
         parse_mode=None,
         reply_markup=create_background_keyboard()
@@ -628,7 +513,7 @@ async def go_to_background(message: Message, state: FSMContext):
 
 
 # =========================================================
-# БОЕВОЙ СТИЛЬ И ВОЗВАНИЯ (ОБРАБОТЧИКИ)
+# БОЕВОЙ СТИЛЬ (ОБРАБОТЧИК)
 # =========================================================
 
 @router.callback_query(lambda c: c.data.startswith("style_"))
@@ -641,58 +526,15 @@ async def select_fighting_style(callback: CallbackQuery, state: FSMContext):
         await callback.answer(f"✅ Выбран стиль: {style_name}")
         logger.info(f"[FLOW] Выбран боевой стиль: {style_name}")
     await callback.message.delete()
-    await go_to_invocations(callback.message, state)
-    await callback.answer()
-
-
-@router.callback_query(lambda c: c.data.startswith("inv_") and c.data not in ("inv_skip", "inv_continue"))
-async def select_invocation(callback: CallbackQuery, state: FSMContext):
-    inv_id = int(callback.data.replace("inv_", ""))
-    invocation = _inv_repo.get_by_id(inv_id)
-    inv_name = invocation.get('name') if invocation else None
-    if not inv_name:
-        await callback.answer("❌ Возвание не найдено")
-        return
-    data = await state.get_data()
-    selected = data.get("selected_invocations", [])
-    if inv_name in selected:
-        selected.remove(inv_name)
-        await callback.answer(f"❌ Возвание «{inv_name}» снято")
-    else:
-        if len(selected) >= 2:
-            await callback.answer("⚠️ Не больше двух возваний!", show_alert=True)
-            return
-        selected.append(inv_name)
-        await callback.answer(f"✅ Возвание «{inv_name}» добавлено")
-    await state.update_data(selected_invocations=selected)
-
-    keyboard = _create_invocations_keyboard(level=1, selected_names=selected)
-    if keyboard:
-        try:
-            await callback.message.edit_reply_markup(reply_markup=keyboard)
-        except Exception as e:
-            if "message is not modified" not in str(e):
-                logger.warning(f"Ошибка обновления клавиатуры: {e}")
-
-    if len(selected) == 2:
-        await callback.message.delete()
-        logger.info("[FLOW] Выбрано 2 возвания, переходим к следующему шагу")
-        await go_to_background(callback.message, state)
-    await callback.answer()
-
-
-@router.callback_query(lambda c: c.data == "inv_continue")
-async def continue_invocations(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
     await go_to_background(callback.message, state)
     await callback.answer()
 
 
 # =========================================================
-# ПРЕДЫСТОРИЯ
+# ПРЕДЫСТОРИЯ (без выбора снаряжения)
 # =========================================================
 
-@router.callback_query(lambda c: c.data.startswith("bg_") and not c.data.startswith("bg_equip_"))
+@router.callback_query(lambda c: c.data.startswith("bg_"))
 async def select_background(callback: CallbackQuery, state: FSMContext):
     background = callback.data.replace("bg_", "")
     await state.update_data(background=background)
@@ -709,10 +551,7 @@ async def select_background(callback: CallbackQuery, state: FSMContext):
         background_trait=bg_info.get('trait', 'Нет'),
         background_origin_feat=bg_info.get('origin_feat', '')
     )
-    await state.set_state(CreateCharacter.background_equipment_select)
 
-    equip_a = bg_info.get('equipment_a', 'Нет описания')[:120]
-    equip_b = bg_info.get('equipment_b', 'Нет описания')[:120]
     origin_feat = bg_info.get('origin_feat', '')
     origin_feat_text = f"✨ Черта происхождения: {origin_feat}\n\n" if origin_feat else ""
 
@@ -725,41 +564,10 @@ async def select_background(callback: CallbackQuery, state: FSMContext):
         f"🔧 Черта: {bg_info.get('trait', 'Нет')}\n"
         f"📚 Навыки: {', '.join(bg_info.get('skills', []))}\n"
         f"🛠️ Инструменты: {bg_info.get('tools', 'Нет')}\n\n"
-        f"Снаряжение от предыстории\n\n"
-        f"Выбери один стартовый набор:\n"
-        f"📦 Вариант А: {equip_a}\n\n"
-        f"🎒 Вариант Б: {equip_b}\n\n"
-        f"Нажми на кнопку с нужным вариантом.",
-        parse_mode=None,
-        reply_markup=_create_background_equipment_keyboard()
+        f"Теперь перейдём к расчёту характеристик и выбору расы.",
+        parse_mode=None
     )
-    await callback.answer()
-
-
-@router.callback_query(lambda c: c.data.startswith("bg_equip_"))
-async def select_background_equipment(callback: CallbackQuery, state: FSMContext):
-    equipment_choice = callback.data.replace("bg_equip_", "")
-    data = await state.get_data()
-    background = data.get("background")
-    if not background or background in ["equip_A", "equip_B", "equip_", "A", "B", None]:
-        logger.error(f"КРИТИЧЕСКАЯ ОШИБКА: background = '{background}'")
-        await callback.message.answer(
-            "❌ Ошибка: данные о предыстории потеряны.\nПожалуйста, начните создание заново: /start",
-            reply_markup=main_menu())
-        await state.clear()
-        return
-    await state.update_data(background_equipment_choice=equipment_choice)
     await calculate_and_show_stats(callback.message, state)
-    await callback.message.delete()
-    await callback.answer()
-
-
-@router.callback_query(lambda c: c.data == "back_to_background")
-async def back_to_background_list(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(CreateCharacter.background_select)
-    await callback.message.delete()
-    await callback.message.answer("Выбери предысторию заново:", parse_mode=None,
-                                  reply_markup=create_background_keyboard())
     await callback.answer()
 
 
@@ -846,7 +654,9 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
             await callback.message.answer_photo(photo=photo, caption=text, parse_mode=None)
         else:
             await callback.message.answer(text, parse_mode=None)
-        reply_markup = _create_subrace_keyboard(race)
+        # Простой выбор подрасы без клавиатуры пропуска? Используем старую _create_subrace_keyboard (она есть в keyboards, но без пропуска). Оставим как было.
+        from keyboards.character_keyboards import create_subrace_keyboard
+        reply_markup = create_subrace_keyboard(race)
         await callback.message.answer("Твой выбор:", reply_markup=reply_markup)
         await state.set_state(CreateCharacter.subrace_select)
     else:
@@ -937,12 +747,44 @@ async def set_backstory(message: Message, state: FSMContext):
         await message.answer("❌ История не помещается — максимум 2000 символов. Сократи немного.", reply_markup=cancel_kb())
         return
     await state.update_data(backstory=backstory)
-    await state.set_state(CreateCharacter.image_input)
+    await state.set_state(CreateCharacter.alignment_select)
     await message.answer(
-        f"📖 История сохранена!\n\n🖼️ Теперь портрет\n\nЗагрузи изображение (можно пропустить кнопкой «⏩ Пропустить»).",
+        f"📖 История сохранена!\n\n⚖️ Выбери мировоззрение своего персонажа:",
+        parse_mode=None,
+        reply_markup=_create_alignment_keyboard()
+    )
+
+
+# =========================================================
+# МИРОВОЗЗРЕНИЕ
+# =========================================================
+
+@router.callback_query(lambda c: c.data.startswith("alignment_"))
+async def select_alignment(callback: CallbackQuery, state: FSMContext):
+    alignment_value = callback.data.replace("alignment_", "")
+    # Преобразуем значение в читаемый текст
+    alignment_map = {
+        "lawful_good": "Законно-добрый",
+        "neutral_good": "Нейтрально-добрый",
+        "chaotic_good": "Хаотично-добрый",
+        "lawful_neutral": "Законно-нейтральный",
+        "neutral": "Нейтральный",
+        "chaotic_neutral": "Хаотично-нейтральный",
+        "lawful_evil": "Законно-злой",
+        "neutral_evil": "Нейтрально-злой",
+        "chaotic_evil": "Хаотично-злой"
+    }
+    alignment_name = alignment_map.get(alignment_value, "Нейтральный")
+    await state.update_data(alignment=alignment_name)
+    logger.info(f"[FLOW] Выбрано мировоззрение: {alignment_name}")
+    await callback.message.delete()
+    await state.set_state(CreateCharacter.image_input)
+    await callback.message.answer(
+        f"⚖️ Мировоззрение: {alignment_name}\n\n🖼️ Теперь портрет\n\nЗагрузи изображение (можно пропустить кнопкой «⏩ Пропустить»).",
         parse_mode=None,
         reply_markup=skip_kb()
     )
+    await callback.answer()
 
 
 # =========================================================
@@ -968,6 +810,8 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         data = await state.get_data()
         char_data = CharacterFinalizationService.prepare_character_data(data, message.from_user.id)
         char_data['image_file_id'] = image_file_id
+        char_data['origin_feat'] = data.get("background_origin_feat", "")
+        char_data['alignment'] = data.get("alignment", "Нейтральный")
 
         name = char_data['name']
         if not name:
@@ -979,22 +823,18 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         bg_skills = data.get("selected_skills_bg", [])
         all_skills = list(set(class_skills + bg_skills))
         char_data['selected_skills'] = all_skills
-        char_data['origin_feat'] = data.get("background_origin_feat", "")
 
-        # Сохраняем персонажа и получаем его ID
         char_id = CharacterFinalizationService.save_character(char_data)
         if not char_id:
             await message.answer("❌ Не удалось сохранить персонажа.", reply_markup=main_menu())
             await state.clear()
             return
 
-        # Формируем URL для Web App
         web_app_url = f"{WEBAPP_BASE_URL}/character/{char_id}"
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="📄 Открыть лист персонажа", web_app=WebAppInfo(url=web_app_url))]
         ])
 
-        # Короткое сообщение с основными характеристиками
         stats = char_data['stats']
         def mod(s): return (s - 10) // 2
         spells_preview = ""
@@ -1005,6 +845,8 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
                    f"📊 Характеристики: STR {stats['STR']} ({mod(stats['STR']):+d}), DEX {stats['DEX']} ({mod(stats['DEX']):+d}), "
                    f"CON {stats['CON']} ({mod(stats['CON']):+d}), INT {stats['INT']} ({mod(stats['INT']):+d}), "
                    f"WIS {stats['WIS']} ({mod(stats['WIS']):+d}), CHA {stats['CHA']} ({mod(stats['CHA']):+d}){spells_preview}\n\n"
+                   f"⚖️ Мировоззрение: {char_data['alignment']}\n"
+                   f"✨ Черта происхождения: {char_data['origin_feat'] if char_data['origin_feat'] else 'Нет'}\n\n"
                    f"Нажмите на кнопку, чтобы открыть полный лист.")
 
         if image_file_id:
@@ -1036,6 +878,7 @@ async def view_character(callback: CallbackQuery):
             f"🧝 Раса: {character.get('race_name', 'Неизвестно')}\n"
             f"⚔️ Класс: {character.get('class_name', 'Неизвестно')}\n"
             f"📜 Предыстория: {character.get('background_name', 'Нет')}\n"
+            f"⚖️ Мировоззрение: {character.get('alignment', 'Нейтральный')}\n"
             f"📊 Уровень: {character['level']}\n"
             f"❤️ HP: {character['hp']} | 🛡️ AC: {character['ac']}\n\n"
             f"Характеристики:\n"

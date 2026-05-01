@@ -37,11 +37,6 @@ class ProgressionService:
         return class_name in ["Воин", "Паладин", "Следопыт"]
 
     @staticmethod
-    def should_select_invocations(class_name: str) -> bool:
-        """Проверяет, нужно ли выбирать таинственные возвания (только Колдун)"""
-        return class_name == "Колдун"
-
-    @staticmethod
     async def go_to_spells(message: "Message", state: "FSMContext") -> None:
         """Переход к выбору заклинаний"""
         from services.spell_service import SpellSelectionService
@@ -57,24 +52,15 @@ class ProgressionService:
             styles = CharacterStatsService.get_fighting_styles_for_class(class_name)
             if not styles:
                 await message.answer(f"⚠️ Для класса {class_name} нет доступных боевых стилей.\n\nПереходим к следующему шагу...")
-                await ProgressionService.go_to_invocations(message, state)
+                await ProgressionService.go_to_background(message, state)
                 return
             # Здесь должен быть вызов создания клавиатуры и установки состояния
             await message.answer(f"⚔️ Выберите боевой стиль для {class_name}")
-        else:
-            await ProgressionService.go_to_invocations(message, state)
-
-    @staticmethod
-    async def go_to_invocations(message: "Message", state: "FSMContext") -> None:
-        """Переход к выбору возваний (заглушка)"""
-        data = await state.get_data()
-        class_name = data.get("class_name")
-        if ProgressionService.should_select_invocations(class_name):
-            await message.answer("🔮 Выберите таинственные возвания (до 2)")
         else:
             await ProgressionService.go_to_background(message, state)
 
     @staticmethod
     async def go_to_background(message: "Message", state: "FSMContext") -> None:
-        """Переход к выбору предыстории (заглушка)"""
-        await message.answer("📜 Выберите предысторию")
+        """Переход к выбору предыстории"""
+        from handlers.character_handlers import go_to_background as _go_to_background
+        await _go_to_background(message, state)

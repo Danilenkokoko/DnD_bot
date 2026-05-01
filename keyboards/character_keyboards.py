@@ -67,6 +67,7 @@ def create_class_keyboard() -> InlineKeyboardMarkup:
 
 
 def create_class_equipment_keyboard(class_name: str) -> Optional[InlineKeyboardMarkup]:
+    """Клавиатура выбора снаряжения класса (если несколько вариантов)"""
     equipment = get_class_equipment(class_name)
     if len(equipment) <= 1:
         return None
@@ -79,21 +80,6 @@ def create_class_equipment_keyboard(class_name: str) -> Optional[InlineKeyboardM
             text=f"📦 Вариант {choice}: {weapon}, {armor}",
             callback_data=f"equip_{choice}"
         )])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад к классам", callback_data="back_to_classes")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def create_subclass_keyboard(class_name: str) -> Optional[InlineKeyboardMarkup]:
-    subclasses = get_subclasses_for_class(class_name, level=1)
-    if not subclasses:
-        return None
-    buttons = []
-    for sub in subclasses:
-        buttons.append([InlineKeyboardButton(
-            text=f"📖 {sub['name']} — {sub['description'][:40]}...",
-            callback_data=f"subclass_{sub['id']}"
-        )])
-    buttons.append([InlineKeyboardButton(text="➡️ Пропустить", callback_data="subclass_skip")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к классам", callback_data="back_to_classes")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -140,22 +126,6 @@ def create_background_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def create_background_equipment_keyboard(background: str) -> InlineKeyboardMarkup:
-    from dnd_logic import get_background_by_name
-    bg_info = get_background_by_name(background)
-    if not bg_info:
-        return InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="❌ Ошибка", callback_data="cancel_creation")]]
-        )
-    equip_a = bg_info.get('equipment_a', 'Нет описания')[:60]
-    equip_b = bg_info.get('equipment_b', 'Нет описания')[:60]
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"📦 Вариант А: {equip_a}...", callback_data="bg_equip_A")],
-        [InlineKeyboardButton(text=f"🎒 Вариант Б: {equip_b}...", callback_data="bg_equip_B")],
-        [InlineKeyboardButton(text="⬅️ Назад к предыстории", callback_data="back_to_background")]
-    ])
-
-
 def create_race_keyboard() -> InlineKeyboardMarkup:
     races = get_race_list()
     buttons = []
@@ -176,6 +146,7 @@ def create_subrace_keyboard(race: str) -> Optional[InlineKeyboardMarkup]:
     buttons = []
     for subrace in subraces:
         buttons.append([InlineKeyboardButton(text=subrace, callback_data=f"subrace_{subrace}")])
+    # Кнопка пропуска подрасы (если игрок не хочет выбирать)
     buttons.append([InlineKeyboardButton(text="➡️ Пропустить", callback_data="subrace_skip")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к расам", callback_data="back_to_races")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -199,22 +170,29 @@ def create_fighting_style_keyboard(class_name: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def create_invocations_keyboard(level: int = 1, selected_count: int = 0) -> InlineKeyboardMarkup:
-    invocations = get_all_invocations(level)
-    if not invocations:
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="➡️ Пропустить", callback_data="inv_skip")],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")]
-        ])
+def create_alignment_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора мировоззрения"""
+    alignments = [
+        ("Законно-добрый", "lawful_good"),
+        ("Нейтрально-добрый", "neutral_good"),
+        ("Хаотично-добрый", "chaotic_good"),
+        ("Законно-нейтральный", "lawful_neutral"),
+        ("Нейтральный", "neutral"),
+        ("Хаотично-нейтральный", "chaotic_neutral"),
+        ("Законно-злой", "lawful_evil"),
+        ("Нейтрально-злой", "neutral_evil"),
+        ("Хаотично-злой", "chaotic_evil")
+    ]
     buttons = []
-    for inv in invocations[:8]:
-        emoji = "🔮" if inv['level_required'] == 1 else "🔷"
-        buttons.append([InlineKeyboardButton(text=f"{emoji} {inv['name']} (ур. {inv['level_required']})",
-                                             callback_data=f"inv_{inv['id']}")])
-    buttons.append([InlineKeyboardButton(text="➡️ Пропустить", callback_data="inv_skip")])
-    if selected_count > 0:
-        buttons.append([InlineKeyboardButton(text="✅ Продолжить", callback_data="inv_continue")])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_fighting")])
+    row = []
+    for name, value in alignments:
+        row.append(InlineKeyboardButton(text=name, callback_data=f"alignment_{value}"))
+        if len(row) == 3:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

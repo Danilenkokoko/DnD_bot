@@ -241,7 +241,6 @@ class CharacterStatsService:
 
         # Проверяем, нужно ли использовать Unarmored Defense
         if not armor_name and class_name in ["Варвар", "Монах"] and second_stat is not None:
-            # Валидируем вторую характеристику
             valid_second, _ = validate_ability_score(second_stat, "CON" if class_name == "Варвар" else "WIS")
             if not valid_second:
                 logger.warning(f"Невалидное значение second_stat {second_stat} для {class_name}, используем 10")
@@ -345,7 +344,8 @@ class CharacterFinalizationService:
         subrace = state_data.get('subrace')
         name = state_data.get('name')
         backstory = state_data.get('backstory', 'Нет истории')
-        background_equipment_choice = state_data.get('background_equipment_choice', 'A')
+        # background_equipment_choice удалён, так как снаряжение предыстории больше не используется
+        # оставлено только снаряжение класса
 
         stats = state_data.get('final_stats', {})
         if not stats:
@@ -380,7 +380,7 @@ class CharacterFinalizationService:
 
         selected_masteries = state_data.get('selected_masteries', [])
         selected_fighting_style = state_data.get('selected_fighting_style')
-        selected_invocations = state_data.get('selected_invocations', [])
+        selected_invocations = []  # больше не используется, оставлено пустым для совместимости
         selected_weapon = state_data.get('selected_weapon')
         selected_armor = state_data.get('selected_armor')
 
@@ -395,6 +395,10 @@ class CharacterFinalizationService:
 
         # Навыки от предыстории (будут объединены с навыками класса в финальном сохранении)
         bg_skills = background_data.get('skills', []) if background_data else []
+
+        # Origin feat и alignment
+        origin_feat = state_data.get('background_origin_feat', '')
+        alignment = state_data.get('alignment', 'Нейтральный')
 
         return {
             'user_id': user_id,
@@ -411,7 +415,6 @@ class CharacterFinalizationService:
             'hp': hp,
             'ac': ac,
             'backstory': backstory,
-            'background_equipment_choice': background_equipment_choice,
             'selected_spells': selected_spells,
             'selected_masteries': selected_masteries,
             'selected_fighting_style': selected_fighting_style,
@@ -419,6 +422,8 @@ class CharacterFinalizationService:
             'selected_weapon': selected_weapon,
             'selected_armor': selected_armor,
             'selected_skills_bg': bg_skills,
+            'origin_feat': origin_feat,
+            'alignment': alignment,
         }
 
     @staticmethod
@@ -430,7 +435,6 @@ class CharacterFinalizationService:
             'race_id': character_data.get('race_id'),
             'subrace_id': character_data.get('subrace_id'),
             'class_id': character_data.get('class_id'),
-            'subclass_id': None,
             'background_id': character_data.get('background_id'),
             'level': 1,
             'experience': 0,
@@ -445,9 +449,9 @@ class CharacterFinalizationService:
             'selected_spells': character_data.get('selected_spells', []),
             'selected_weapon': character_data.get('selected_weapon'),
             'selected_armor': character_data.get('selected_armor'),
-            'selected_equipment_choice': character_data.get('background_equipment_choice', 'A'),
             'backstory': character_data['backstory'],
             'image_file_id': character_data.get('image_file_id'),
-            'alignment': 'Нейтральное'
+            'origin_feat': character_data.get('origin_feat', ''),
+            'alignment': character_data.get('alignment', 'Нейтральный')
         }
         return _character_repo.create(repo_data)

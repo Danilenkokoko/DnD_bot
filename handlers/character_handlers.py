@@ -123,9 +123,11 @@ async def cmd_help(message: Message):
 async def create_character_start(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(CreateCharacter.class_select)
-    # Удаляем сообщение пользователя с кнопкой (убираем reply-клавиатуру)
-    await message.delete()
-    # Отправляем первое сообщение с inline-клавиатурой
+    # Отправляем временное сообщение с ReplyKeyboardRemove (непустой текст)
+    temp_msg = await message.answer("⌛", reply_markup=ReplyKeyboardRemove())
+    # Сразу удаляем его, чтобы не мешал
+    await temp_msg.delete()
+    # Отправляем основное сообщение с inline-клавиатурой
     msg = await message.answer(CLASS_SELECT_TITLE, reply_markup=create_class_keyboard())
     await state.update_data(last_bot_message_id=msg.message_id)
 

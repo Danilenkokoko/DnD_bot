@@ -14,11 +14,8 @@ from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
-# Connection pool
 _db_pool = None
 
-# Database configuration from environment
-# load_dotenv already called at top of file
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "dnd_bot")
@@ -27,7 +24,6 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
 
 def _init_pool():
-    """Initialize connection pool if not already created."""
     global _db_pool
     if _db_pool is None:
         try:
@@ -47,9 +43,10 @@ def _init_pool():
 
 @contextmanager
 def get_connection():
-    """Get a connection from the pool and automatically return it when done."""
+    """Get a connection from the pool, enable autocommit, and return it when done."""
     _init_pool()
     conn = _db_pool.getconn()
+    conn.autocommit = True   # <-- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ
     try:
         yield conn
     finally:

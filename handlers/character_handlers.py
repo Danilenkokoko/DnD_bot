@@ -14,6 +14,7 @@ from aiogram import F, Router
 from aiogram.types import Message, CallbackQuery, FSInputFile, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
+from pdf_generator import generate_pdf, convert_html_to_pdf
 
 from states.character_states import CreateCharacter
 from keyboards.character_keyboards import (
@@ -1025,13 +1026,21 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         html_file = generate_pdf(pdf_data, temp_file_path)  # generate_pdf возвращает путь к HTML
 
         if html_file and os.path.exists(html_file):
-            await message.answer_document(
-                FSInputFile(html_file, filename=f"{safe_name}_character_sheet.html"),
-                caption="📄 Лист персонажа (HTML) – нажмите на кнопку в файле или используйте печать браузера (Ctrl+P), чтобы сохранить как PDF."
-            )
+            pdf_path = temp_file_path.replace('.html', '.pdf')
+            if await convert_html_to_pdf(html_file, pdf_path):
+                await message.answer_document(
+                    FSInputFile(pdf_path, filename=f"{safe_name}_character_sheet.pdf"),
+                    caption="📄 Лист персонажа в формате PDF"
+                )
+                os.unlink(pdf_path)
+            else:
+                # Запасной вариант: отправить HTML
+                await message.answer_document(
+                    FSInputFile(html_file, filename=f"{safe_name}_character_sheet.html"),
+                    caption="⚠️ Не удалось создать PDF. Откройте HTML в браузере и сохраните как PDF."
+                )
         else:
-            logger.error(f"HTML не создан: {html_file}")
-            await message.answer("⚠️ Не удалось создать файл листа персонажа, но персонаж сохранён в базе!")
+            await message.answer("⚠️ Не удалось создать файл листа персонажа, но персонаж сохранён.")
 
         # Короткое сообщение с основными характеристиками
         def mod(s): return (s-10)//2

@@ -5,12 +5,9 @@ Database initialization and connection management.
 
 import os
 import logging
-from dotenv import load_dotenv
 import psycopg2
 from psycopg2 import pool, sql
 from typing import Dict, Any, List, Optional
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +19,8 @@ DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "DND_DB")
 DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "123")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
-
-_db_pool = None
 
 def get_connection():
     """Get a database connection from the pool."""
@@ -153,12 +148,12 @@ def init_db():
                 )
             """)
 
-            # Create equipment table (armor, weapons, etc)
+            # Create equipment table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS equipment (
                     id SERIAL PRIMARY KEY,
                     name VARCHAR(100) UNIQUE NOT NULL,
-                    type VARCHAR(50), -- weapon, armor, gear
+                    type VARCHAR(50),
                     subtype VARCHAR(50),
                     cost INTEGER,
                     weight REAL,
@@ -199,7 +194,7 @@ def init_db():
                 )
             """)
 
-            # Create invocations table (not used on level 1, but keep for future)
+            # Create invocations table (not used on level 1, kept for future)
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS invocations (
                     id SERIAL PRIMARY KEY,
@@ -210,7 +205,7 @@ def init_db():
                 )
             """)
 
-            # Create characters table (with new fields)
+            # Create characters table with new fields
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS characters (
                     id SERIAL PRIMARY KEY,
@@ -246,36 +241,36 @@ def init_db():
                 )
             """)
 
-            # Check if columns need to be added for existing tables (migrations)
-            # Add origin_feat if not exists
+            # Migrations: add missing columns if they don't exist
+            # Add origin_feat if missing
             cur.execute("""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name='characters' AND column_name='origin_feat'
             """)
             if not cur.fetchone():
                 cur.execute("ALTER TABLE characters ADD COLUMN origin_feat VARCHAR(100) DEFAULT ''")
-                logger.info("Added origin_feat column to characters table")
+                logger.info("Added origin_feat column to characters")
 
-            # Add alignment if not exists
+            # Add alignment if missing
             cur.execute("""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name='characters' AND column_name='alignment'
             """)
             if not cur.fetchone():
                 cur.execute("ALTER TABLE characters ADD COLUMN alignment VARCHAR(30) DEFAULT 'Нейтральный'")
-                logger.info("Added alignment column to characters table")
+                logger.info("Added alignment column to characters")
 
-            # Optionally drop equipment_choice if it exists (migration)
+            # Drop deprecated selected_equipment_choice if exists
             cur.execute("""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name='characters' AND column_name='selected_equipment_choice'
             """)
             if cur.fetchone():
                 cur.execute("ALTER TABLE characters DROP COLUMN selected_equipment_choice")
-                logger.info("Dropped selected_equipment_choice column (no longer used)")
+                logger.info("Dropped deprecated column selected_equipment_choice")
 
             conn.commit()
-            logger.info("Database initialized successfully")
+            logger.info("Database initialized and migrated successfully")
 
     except Exception as e:
         logger.error(f"Database initialization error: {e}")
@@ -283,6 +278,19 @@ def init_db():
         raise
     finally:
         return_connection(conn)
+
+
+def init_database():
+    """Legacy wrapper for init_db(), called by bot.py."""
+    logger.info("Initializing database (legacy wrapper)")
+    init_db()
+
+
+def migrate_database_v2():
+    """Explicit migration for new fields (kept for compatibility)."""
+    logger.info("Running migration v2 (already handled in init_db, but calling anyway)")
+    # The migration is now part of init_db, but we keep the function for compatibility
+    init_db()
 
 
 def get_user_characters(user_id: int) -> List[Dict[str, Any]]:

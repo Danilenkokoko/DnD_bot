@@ -39,7 +39,7 @@ from repositories.background_repository import BackgroundRepository
 from repositories.equipment_repository import EquipmentRepository, FightingStyleRepository, InvocationRepository
 from repositories.spell_repository import SpellRepository
 
-from pdf_generator import generate_pdf
+from pdf_generator import generate_pdf  # теперь generate_pdf создаёт HTML-файл
 from engine.validators import validate_name as engine_validate_name
 
 logger = logging.getLogger(__name__)
@@ -278,7 +278,7 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
     class_info = CharacterStatsService.get_class_info(class_name)
     subclasses = _class_repo.get_subclasses(class_name, level=1)
 
-    # Базовый текст (без звёздочек)
+    # Базовый текст
     text = (f"🎭 {class_name}\n\n"
             f"{class_desc}\n\n"
             f"📊 Данные класса:\n"
@@ -594,8 +594,7 @@ async def go_to_invocations(message: Message, state: FSMContext):
             for inv in invocations:
                 level_req = inv.get('level_required', 1)
                 effect = inv.get('effect', 'Нет описания')
-                # Добавлен дополнительный перевод строки после каждого воззвания
-                text += f"• {inv['name']} (мин. ур. {level_req}) – {effect}\n\n"
+                text += f"• {inv['name']} (мин. ур. {level_req}) – {effect}\n"
             text += "\nКликни по названию, чтобы добавить/убрать. ✅ = выбрано."
 
             keyboard = _create_invocations_keyboard(level=1, selected_names=selected_names)
@@ -793,15 +792,15 @@ async def calculate_and_show_stats(message: Message, state: FSMContext):
         f"Класс: {class_name}\n"
         f"Предыстория: {background}\n\n"
         f"✨ Бонусы предыстории: +2 к {stats_result['bg_chars'][0]}, +1 к {stats_result['bg_chars'][1]}\n\n"
-        f"📈 Итоговые значения:\n"
-        f"💪 Сила: {stats['STR']} ({mod(stats['STR']):+d})\n"
-        f"🤸 Ловкость: {stats['DEX']} ({mod(stats['DEX']):+d})\n"
-        f"🏋️ Телосложение: {stats['CON']} ({mod(stats['CON']):+d})\n"
-        f"🧠 Интеллект: {stats['INT']} ({mod(stats['INT']):+d})\n"
-        f"🧙 Мудрость: {stats['WIS']} ({mod(stats['WIS']):+d})\n"
-        f"✨ Харизма: {stats['CHA']} ({mod(stats['CHA']):+d})\n\n"
-        f"❤️ Хиты: {stats_result['hp']}\n"
-        f"🛡️ Класс брони: {stats_result['ac']}\n\n"
+        f"📈 Итоговые значения (модификатор):\n"
+        f"💪 Сила (STR): {stats['STR']} ({mod(stats['STR']):+d})\n"
+        f"🤸 Ловкость (DEX): {stats['DEX']} ({mod(stats['DEX']):+d})\n"
+        f"🏋️ Телосложение (CON): {stats['CON']} ({mod(stats['CON']):+d})\n"
+        f"🧠 Интеллект (INT): {stats['INT']} ({mod(stats['INT']):+d})\n"
+        f"🧙 Мудрость (WIS): {stats['WIS']} ({mod(stats['WIS']):+d})\n"
+        f"✨ Харизма (CHA): {stats['CHA']} ({mod(stats['CHA']):+d})\n\n"
+        f"❤️ Хиты (HP): {stats_result['hp']}\n"
+        f"🛡️ Класс брони (AC): {stats_result['ac']}\n\n"
         f"А теперь выбери расу:",
         parse_mode=None,
         reply_markup=create_race_keyboard()
@@ -959,9 +958,9 @@ async def set_image(message: Message, state: FSMContext):
 
 
 async def finalize_character(message: Message, state: FSMContext, image_file_id: Optional[str] = None):
-    temp_pdf_file = None
+    temp_file = None
     try:
-        await message.answer("⏳ Собираю героя в PDF… пару секунд.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("⏳ Собираю героя в HTML… пару секунд.", reply_markup=ReplyKeyboardRemove())
 
         data = await state.get_data()
         char_data = CharacterFinalizationService.prepare_character_data(data, message.from_user.id)
@@ -983,42 +982,9 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
 
         bg_info = _bg_repo.get_by_name(char_data['background']) if char_data['background'] else None
         stats = char_data['stats']
-        def mod(s): return (s-10)//2
+        class_info = CharacterStatsService.get_class_info(char_data['class_name'])
 
-        # Формируем список заклинаний столбиком
-        spells_text = ""
-        if char_data.get('selected_spells'):
-            spells_list = char_data['selected_spells']
-            spells_text = "\n\n🔮 Заклинания:\n"
-            for spell in spells_list:
-                spells_text += f"• {spell}\n"
-
-        caption = (f"✅ Персонаж готов!\n\n"
-                   f"📛 {name}\n"
-                   f"⚔️ Класс: {char_data['class_name']}\n"
-                   f"📜 Предыстория: {char_data['background']}\n"
-                   f"🧝 Раса: {char_data['race']}{f' ({char_data['subrace']})' if char_data['subrace'] else ''}\n\n"
-                   f"❤️ Хиты: {char_data['hp']} | 🛡️ КД: {char_data['ac']}\n\n"
-                   f"📊 Характеристики:\n"
-                   f"💪 Сила: {stats['STR']} ({mod(stats['STR']):+d})\n"
-                   f"🤸 Ловкость: {stats['DEX']} ({mod(stats['DEX']):+d})\n"
-                   f"🏋️ Телосложение: {stats['CON']} ({mod(stats['CON']):+d})\n"
-                   f"🧠 Интеллект: {stats['INT']} ({mod(stats['INT']):+d})\n"
-                   f"🧙 Мудрость: {stats['WIS']} ({mod(stats['WIS']):+d})\n"
-                   f"✨ Харизма: {stats['CHA']} ({mod(stats['CHA']):+d})"
-                   f"{spells_text}\n\n"
-                   f"📄 Твой PDF-лист — под этим сообщением.")
-
-        if image_file_id:
-            await message.answer_photo(photo=image_file_id, caption=caption, parse_mode=None)
-        else:
-            await message.answer(caption, parse_mode=None)
-
-        safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{safe_name}.pdf")
-        temp_pdf_file = tmp.name
-        tmp.close()
-
+        # Подготовка данных для HTML-шаблона
         pdf_data = {
             "name": name,
             "class_name": char_data['class_name'],
@@ -1036,27 +1002,62 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             "background_trait": bg_info.get('trait', '') if bg_info else '',
             "background_description": bg_info.get('description', '') if bg_info else '',
             "origin_feat": char_data.get('origin_feat', ''),
-            "race_traits": [],
-            "class_features": [],
+            "race_traits": [],  # можно добавить реальные черты расы, если есть в данных
+            "class_features": class_info.get('features', []),
             "backstory": char_data['backstory'],
             "alignment": "Нейтральное",
             "player_name": message.from_user.full_name,
             "experience": 0,
-            "saving_throws": [],
+            "saving_throws": class_info.get('saving_throws', []),
             "notes": "",
-            "coins": data.get("selected_coins", 0)
+            "coins": data.get("selected_coins", 0),
+            "spell_slots_1": 0,
+            "spell_slots_2": 0,
+            "appearance": ""
         }
 
-        pdf_file = generate_pdf(pdf_data, temp_pdf_file)
+        safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{safe_name}.html")
+        temp_path = temp_file.name
+        temp_file.close()
 
-        if pdf_file and os.path.exists(pdf_file):
+        # Генерация HTML
+        html_file = generate_pdf(pdf_data, temp_path)  # теперь generate_pdf возвращает HTML путь
+
+        if html_file and os.path.exists(html_file):
             await message.answer_document(
-                FSInputFile(pdf_file, filename=f"{safe_name}_character_sheet.pdf"),
-                caption="📄 Лист персонажа в формате PDF"
+                FSInputFile(html_file, filename=f"{safe_name}_character_sheet.html"),
+                caption="📄 Лист персонажа (HTML) – откройте в браузере и сохраните как PDF"
             )
         else:
-            logger.error(f"PDF не создан: {pdf_file}")
-            await message.answer("⚠️ PDF не создался, но персонаж сохранён в базе!\n\nТы можешь посмотреть его через «📋 Мои персонажи».")
+            logger.error(f"HTML не создан: {html_file}")
+            await message.answer("⚠️ Не удалось создать файл листа персонажа, но персонаж сохранён в базе!")
+
+        # Короткое сообщение с основными характеристиками (как было)
+        def mod(s): return (s-10)//2
+        spells_preview = ""
+        if char_data.get('selected_spells'):
+            spells_list = ", ".join(char_data['selected_spells'][:5])
+            if len(char_data['selected_spells']) > 5:
+                spells_list += f" и ещё {len(char_data['selected_spells'])-5}"
+            spells_preview = f"\n\n🔮 Заклинания: {spells_list}"
+
+        caption = (f"✅ Персонаж готов!\n\n"
+                   f"📛 {name}\n"
+                   f"⚔️ Класс: {char_data['class_name']}\n"
+                   f"📜 Предыстория: {char_data['background']}\n"
+                   f"🧝 Раса: {char_data['race']}{f' ({char_data['subrace']})' if char_data['subrace'] else ''}\n\n"
+                   f"❤️ HP: {char_data['hp']} | 🛡️ AC: {char_data['ac']}\n\n"
+                   f"📊 Характеристики (мод.):\n"
+                   f"💪 Сила {stats['STR']} ({mod(stats['STR']):+d}) | 🤸 Ловкость {stats['DEX']} ({mod(stats['DEX']):+d}) | 🏋️ Телосложение {stats['CON']} ({mod(stats['CON']):+d})\n"
+                   f"🧠 Интеллект {stats['INT']} ({mod(stats['INT']):+d}) | 🧙 Мудрость {stats['WIS']} ({mod(stats['WIS']):+d}) | ✨ Харизма {stats['CHA']} ({mod(stats['CHA']):+d})"
+                   f"{spells_preview}\n\n"
+                   f"📄 HTML-лист персонажа загружен выше – откройте его в браузере и сохраните как PDF.")
+
+        if image_file_id:
+            await message.answer_photo(photo=image_file_id, caption=caption, parse_mode=None)
+        else:
+            await message.answer(caption, parse_mode=None)
 
         await message.answer("🏠 Главное меню", reply_markup=main_menu())
         await state.clear()
@@ -1067,9 +1068,9 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
                              reply_markup=main_menu())
         await state.clear()
     finally:
-        if temp_pdf_file and os.path.exists(temp_pdf_file):
+        if temp_file and os.path.exists(temp_file):
             try:
-                os.remove(temp_pdf_file)
+                os.unlink(temp_file)
             except:
                 pass
 

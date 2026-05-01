@@ -711,7 +711,7 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         await state.clear()
 
     except Exception as e:
-        logger.error(f"Ошибка при создании персонажа: {e}", exc_info=True)
+        logger.error(f"Ошибка при создании персонажа: {name} {e}", exc_info=True)
         await message.answer(f"❌ Произошла ошибка: {str(e)[:200]}", reply_markup=main_menu())
         await state.clear()
 

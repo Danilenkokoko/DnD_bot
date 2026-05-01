@@ -5,9 +5,12 @@ Database initialization and connection management.
 
 import os
 import logging
+from dotenv import load_dotenv
 import psycopg2
 from psycopg2 import pool, sql
 from typing import Dict, Any, List, Optional
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +24,8 @@ DB_NAME = os.getenv("DB_NAME", "dnd_bot")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
+
+_db_pool = None
 
 def get_connection():
     """Get a database connection from the pool."""

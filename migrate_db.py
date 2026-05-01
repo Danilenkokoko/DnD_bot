@@ -8,9 +8,6 @@ Run this script once after updating the code.
 import logging
 from db import get_connection, return_connection
 
-from dotenv import load_dotenv
-load_dotenv()
-
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 

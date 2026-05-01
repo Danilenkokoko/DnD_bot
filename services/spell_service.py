@@ -21,7 +21,7 @@ from keyboards.character_keyboards import continue_kb_for_spells
 from states.character_states import CreateCharacter
 
 # Импортируем вспомогательные функции из character_handlers для удаления и отправки
-from handlers.character_handlers import send_new_from_callback, delete_previous, send_new
+from utils.message_utils import send_new_from_callback, delete_previous, send_new
 
 logger = logging.getLogger(__name__)
 

@@ -702,16 +702,16 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             origin_feat=char_data['origin_feat'] if char_data['origin_feat'] else 'Нет'
         )
 
-        await message.answer(caption, reply_markup=keyboard)
-
         if image_file_id:
-            await message.answer_photo(photo=image_file_id, caption="🏴‍☠️ Портрет персонажа", parse_mode=None)
+            await message.answer_photo(photo=image_file_id, caption=caption, reply_markup=keyboard, parse_mode=None)
+        else:
+            await message.answer(caption, reply_markup=keyboard, parse_mode=None)
 
         await message.answer(MENU_TITLE, reply_markup=main_menu())
         await state.clear()
 
     except Exception as e:
-        logger.error(f"Ошибка при создании персонажа: {name} {e}", exc_info=True)
+        logger.error(f"Ошибка при создании персонажа: {e}", exc_info=True)
         await message.answer(f"❌ Произошла ошибка: {str(e)[:200]}", reply_markup=main_menu())
         await state.clear()
 

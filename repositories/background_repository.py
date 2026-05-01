@@ -18,13 +18,12 @@ class BackgroundRepository(BaseRepository):
     def get_all(self) -> List[Dict[str, Any]]:
         """Возвращает список всех предысторий"""
         query = """
-            SELECT id, name, description, trait, skills, tools, equipment_a, equipment_b
+            SELECT id, name, description, trait, skills, tools, equipment_a, equipment_b, origin_feat
             FROM backgrounds
             ORDER BY name
         """
         rows = self._fetch_all(query)
         for row in rows:
-            # Десериализация skills
             if isinstance(row.get('skills'), str):
                 try:
                     row['skills'] = json.loads(row['skills'])
@@ -41,7 +40,7 @@ class BackgroundRepository(BaseRepository):
         """Возвращает предысторию по названию с десериализацией JSON полей"""
         query = """
             SELECT id, name, characteristic1, characteristic2, characteristic3,
-                   trait, skills, tools, equipment_a, equipment_b, description
+                   trait, skills, tools, equipment_a, equipment_b, description, origin_feat
             FROM backgrounds
             WHERE name = %s
         """

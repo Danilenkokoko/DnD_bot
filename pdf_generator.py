@@ -1,7 +1,8 @@
 # pdf_generator.py
 """
 HTML Generator Module for D&D Character Sheets
-Генерирует красивый HTML-лист персонажа в стиле D&D 5e с кнопкой для печати/сохранения PDF.
+Генерирует красивый HTML-лист персонажа в стиле D&D 5e с кнопкой для сохранения PDF.
+Конвертация в PDF не производится — пользователь сам сохраняет через браузер.
 """
 
 import os
@@ -9,14 +10,13 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
 from jinja2 import Environment, FileSystemLoader, TemplateError
-from playwright.async_api import async_playwright
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------------------
 # HTML-шаблон (ваш лист.html, адаптированный для Jinja2)
-# Добавлена кнопка "Сохранить PDF" в правом нижнем углу (плавающая)
+# ВНИМАНИЕ: в шаблоне добавлена плавающая кнопка "Сохранить как PDF"
 # ----------------------------------------------------------------------
 DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="ru">
@@ -65,7 +65,7 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
             padding: 28px 24px;
             isolation: isolate;
         }
-        /* Плавающая кнопка для печати */
+        /* Плавающая кнопка для сохранения PDF */
         .print-btn {
             position: fixed;
             bottom: 20px;
@@ -77,6 +77,7 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
             padding: 12px 24px;
             font-family: 'Cinzel', serif;
             font-size: 16px;
+            font-weight: bold;
             cursor: pointer;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             z-index: 1000;
@@ -548,13 +549,6 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
         <i class="fas fa-dice-d20"></i> D&D Character Sheet • {{ created_date }}
     </div>
 </div>
-<script>
-    // Добавляем запасной вариант для мобильных: если команда печати не поддерживается, показываем сообщение
-    if (typeof window.print !== 'function') {
-        var btn = document.querySelector('.print-btn');
-        if (btn) btn.style.display = 'none';
-    }
-</script>
 </body>
 </html>'''
 
@@ -663,8 +657,9 @@ def generate_character_html(character_data: Dict[str, Any]) -> str:
 
 def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
     """
-    Генерирует HTML-файл, но не PDF.
-    Возвращает путь к HTML-файлу (расширение .html).
+    Генерирует HTML-файл (расширение .html).
+    Принимает имя файла, оканчивающееся на .html (если .pdf, заменяет на .html).
+    Возвращает путь к созданному HTML-файлу.
     """
     try:
         html_content = generate_character_html(data)
@@ -677,38 +672,6 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"❌ Ошибка при сохранении HTML: {e}")
         return None
-
-# ----------------------------------------------------------------------
-# Конвертация HTML -> PDF через Playwright
-# ----------------------------------------------------------------------
-async def convert_html_to_pdf(html_path: str, pdf_path: str) -> bool:
-    """
-    Асинхронно конвертирует HTML-файл в PDF через Playwright (Chromium).
-    Возвращает True при успехе.
-    """
-    try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
-            # Используем file:// протокол для доступа к локальному файлу
-            await page.goto(f'file://{os.path.abspath(html_path)}', wait_until='networkidle')
-            # Генерируем PDF с настройками для A4 и фоновой печати
-            await page.pdf(
-                path=pdf_path,
-                format='A4',
-                print_background=True,
-                margin={'top': '1.5cm', 'bottom': '1.5cm', 'left': '1.5cm', 'right': '1.5cm'}
-            )
-            await browser.close()
-            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
-                logger.info(f"✅ PDF создан через Playwright: {pdf_path}")
-                return True
-            else:
-                logger.error(f"❌ PDF не создан или пуст: {pdf_path}")
-                return False
-    except Exception as e:
-        logger.error(f"❌ Ошибка конвертации через Playwright: {e}")
-        return False
 
 def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
     import time
@@ -726,7 +689,7 @@ def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
         logger.error(f"❌ Ошибка при очистке: {e}")
 
 if __name__ == "__main__":
-    # Тест (только HTML, PDF требует асинхронного вызова)
+    # Тест
     test_data = {
         "name": "Тестовый Герой",
         "class_name": "Воин",
@@ -757,6 +720,5 @@ if __name__ == "__main__":
     html_file = generate_pdf(test_data, "test_character.html")
     if html_file:
         print(f"✅ HTML создан: {html_file}")
-        # Асинхронную конвертацию здесь не вызываем, только в боте
     else:
         print("❌ Ошибка создания HTML")

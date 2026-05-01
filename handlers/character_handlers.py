@@ -14,7 +14,6 @@ from aiogram import F, Router
 from aiogram.types import Message, CallbackQuery, FSInputFile, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
-from pdf_generator import generate_pdf, convert_html_to_pdf
 
 from states.character_states import CreateCharacter
 from keyboards.character_keyboards import (
@@ -961,7 +960,7 @@ async def set_image(message: Message, state: FSMContext):
 async def finalize_character(message: Message, state: FSMContext, image_file_id: Optional[str] = None):
     temp_file_path = None
     try:
-        await message.answer("⏳ Собираю героя в HTML… пару секунд.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("⏳ Собираю героя… пару секунд.", reply_markup=ReplyKeyboardRemove())
 
         data = await state.get_data()
         char_data = CharacterFinalizationService.prepare_character_data(data, message.from_user.id)
@@ -1023,24 +1022,22 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         temp_file.close()
 
         # Генерация HTML
-        html_file = generate_pdf(pdf_data, temp_file_path)  # generate_pdf возвращает путь к HTML
+        html_file = generate_pdf(pdf_data, temp_file_path)
 
         if html_file and os.path.exists(html_file):
-            pdf_path = temp_file_path.replace('.html', '.pdf')
-            if await convert_html_to_pdf(html_file, pdf_path):
-                await message.answer_document(
-                    FSInputFile(pdf_path, filename=f"{safe_name}_character_sheet.pdf"),
-                    caption="📄 Лист персонажа в формате PDF"
+            await message.answer_document(
+                FSInputFile(html_file, filename=f"{safe_name}_character_sheet.html"),
+                caption=(
+                    "📄 Лист персонажа (HTML)\n\n"
+                    "⬇️ Чтобы сохранить как PDF:\n"
+                    "1️⃣ Откройте файл в браузере\n"
+                    "2️⃣ Нажмите кнопку «Сохранить как PDF» (в правом нижнем углу)\n"
+                    "3️⃣ Выберите «Сохранить как PDF» в диалоге печати"
                 )
-                os.unlink(pdf_path)
-            else:
-                # Запасной вариант: отправить HTML
-                await message.answer_document(
-                    FSInputFile(html_file, filename=f"{safe_name}_character_sheet.html"),
-                    caption="⚠️ Не удалось создать PDF. Откройте HTML в браузере и сохраните как PDF."
-                )
+            )
         else:
-            await message.answer("⚠️ Не удалось создать файл листа персонажа, но персонаж сохранён.")
+            logger.error(f"HTML не создан: {html_file}")
+            await message.answer("⚠️ Не удалось создать файл листа персонажа, но персонаж сохранён в базе!")
 
         # Короткое сообщение с основными характеристиками
         def mod(s): return (s-10)//2

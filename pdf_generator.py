@@ -492,7 +492,9 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
 </body>
 </html>'''
 
-# ---------- Вспомогательные функции ----------
+# ----------------------------------------------------------------------
+# Утилиты для шаблона (без изменений)
+# ----------------------------------------------------------------------
 def get_skill_ability(skill_name: str) -> str:
     skill_map = {
         "Акробатика": "DEX", "Атлетика": "STR", "Аркана": "INT",
@@ -518,6 +520,7 @@ def prepare_template_data(character_data: Dict[str, Any]) -> Dict[str, Any]:
     stats = character_data.get('stats', {})
     proficiency = character_data.get('proficiency_bonus', 2)
     skills_list = character_data.get('skills', [])
+
     skill_mods = {}
     for skill in all_skills:
         ability = get_skill_ability(skill)
@@ -565,24 +568,30 @@ def ensure_template_exists() -> bool:
         if not os.path.exists("templates"):
             os.makedirs("templates")
         template_path = "templates/character_sheet.html"
-        with open(template_path, 'w', encoding='utf-8') as f:
-            f.write(DEFAULT_HTML_TEMPLATE)
-        logger.info("📄 Шаблон character_sheet.html обновлён")
+        # Если шаблон не существует – создаём
+        if not os.path.exists(template_path):
+            with open(template_path, 'w', encoding='utf-8') as f:
+                f.write(DEFAULT_HTML_TEMPLATE)
+            logger.info("📄 Шаблон создан")
         return True
     except Exception as e:
-        logger.error(f"❌ Ошибка при создании шаблона: {e}")
+        logger.error(f"❌ Ошибка шаблона: {e}")
         return False
 
 def generate_character_html(character_data: Dict[str, Any]) -> str:
     if not ensure_template_exists():
-        raise RuntimeError("Не удалось создать шаблон")
+        raise RuntimeError("Шаблон не доступен")
     env = Environment(loader=FileSystemLoader("templates"), autoescape=True)
     template = env.get_template("character_sheet.html")
     data = prepare_template_data(character_data)
-    return template.render(**data)
+    try:
+        return template.render(**data)
+    except TemplateError as e:
+        logger.error(f"❌ Ошибка рендеринга: {e}")
+        raise
 
-async def convert_html_to_pdf(html_path: str, pdf_path: str) -> bool:
-    """Конвертирует HTML в PDF через wkhtmltopdf (синхронная обёртка)."""
+def convert_html_to_pdf(html_path: str, pdf_path: str) -> bool:
+    """Синхронная конвертация HTML в PDF через wkhtmltopdf."""
     try:
         options = {
             'page-size': 'A4',
@@ -596,34 +605,36 @@ async def convert_html_to_pdf(html_path: str, pdf_path: str) -> bool:
         }
         pdfkit.from_file(html_path, pdf_path, options=options)
         if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
-            logger.info(f"✅ PDF создан через wkhtmltopdf: {pdf_path}")
+            logger.info(f"✅ PDF создан: {pdf_path}")
             return True
         else:
-            logger.error(f"❌ PDF не создан или пуст: {pdf_path}")
+            logger.error(f"❌ PDF пуст: {pdf_path}")
             return False
     except Exception as e:
         logger.error(f"❌ Ошибка wkhtmltopdf: {e}")
         return False
 
 def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
-    """Генерирует HTML, затем конвертирует в PDF, возвращает путь к PDF."""
-    temp_html = filename.replace('.pdf', '.html')
+    """
+    Генерирует HTML и, если требуется, конвертирует в PDF.
+    Возвращает путь к конечному файлу (PDF или HTML).
+    """
+    temp_html = filename.replace('.pdf', '.html') if filename.endswith('.pdf') else filename + '.html'
     try:
         html_content = generate_character_html(data)
         with open(temp_html, 'w', encoding='utf-8') as f:
             f.write(html_content)
         logger.info(f"✅ HTML сохранён: {temp_html}")
 
-        if not filename.endswith('.pdf'):
+        if filename.endswith('.pdf'):
+            if convert_html_to_pdf(temp_html, filename):
+                os.unlink(temp_html)
+                return filename
+            else:
+                logger.error("Конвертация в PDF не удалась, отправляем HTML")
+                return temp_html
+        else:
             return temp_html
-
-        import asyncio
-        success = asyncio.run(convert_html_to_pdf(temp_html, filename))
-        if not success:
-            logger.error("Конвертация в PDF не удалась, возвращаем HTML")
-            return temp_html
-        os.unlink(temp_html)
-        return filename
     except Exception as e:
         logger.error(f"❌ Ошибка в generate_pdf: {e}")
         return None
@@ -638,6 +649,38 @@ def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
                 path = os.path.join(directory, fname)
                 if current_time - os.path.getmtime(path) > max_age_seconds:
                     os.remove(path)
-                    logger.info(f"🗑️ Удалён старый файл: {fname}")
+                    logger.info(f"🗑️ Удалён {fname}")
     except Exception as e:
         logger.error(f"❌ Ошибка очистки: {e}")
+
+if __name__ == "__main__":
+    # Тест (простейший)
+    test_data = {
+        "name": "Тест",
+        "class_name": "Воин",
+        "race": "Человек",
+        "level": 1,
+        "background": "Солдат",
+        "stats": {"STR": 16, "DEX": 14, "CON": 14, "INT": 10, "WIS": 12, "CHA": 10},
+        "hp": 12,
+        "ac": 16,
+        "speed": 30,
+        "skills": [],
+        "equipment": [],
+        "spells": [],
+        "proficiency_bonus": 2,
+        "saving_throws": [],
+        "race_traits": [],
+        "class_features": [],
+        "backstory": "",
+        "alignment": "",
+        "player_name": "",
+        "experience": 0,
+        "notes": "",
+        "coins": "",
+        "spell_slots_1": 0,
+        "spell_slots_2": 0,
+        "appearance": ""
+    }
+    res = generate_pdf(test_data, "test.pdf")
+    print("Результат:", res)

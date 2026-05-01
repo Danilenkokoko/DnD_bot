@@ -14,7 +14,6 @@ from aiogram import F, Router
 from aiogram.types import Message, CallbackQuery, FSInputFile, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
-from pdf_generator import generate_pdf, convert_html_to_pdf
 
 from states.character_states import CreateCharacter
 from keyboards.character_keyboards import (
@@ -40,7 +39,7 @@ from repositories.background_repository import BackgroundRepository
 from repositories.equipment_repository import EquipmentRepository, FightingStyleRepository, InvocationRepository
 from repositories.spell_repository import SpellRepository
 
-from pdf_generator import generate_pdf
+from pdf_generator import generate_pdf  # теперь generate_pdf создаёт HTML-файл
 from engine.validators import validate_name as engine_validate_name
 
 logger = logging.getLogger(__name__)
@@ -1026,25 +1025,9 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         html_file = generate_pdf(pdf_data, temp_file_path)  # generate_pdf возвращает путь к HTML
 
         if html_file and os.path.exists(html_file):
-            # Отправляем HTML
             await message.answer_document(
                 FSInputFile(html_file, filename=f"{safe_name}_character_sheet.html"),
-                caption="📄 Лист персонажа (HTML) – откройте в браузере и сохраните как PDF"
-            )
-            # Генерируем PDF и отправляем
-            pdf_path = temp_file_path.replace('.html', '.pdf')
-            if convert_html_to_pdf(html_file, pdf_path):
-                await message.answer_document(
-                    FSInputFile(pdf_path, filename=f"{safe_name}_character_sheet.pdf"),
-                    caption="📄 Лист персонажа (PDF) – готово для печати"
-                )
-                # Удаляем временный PDF
-                os.unlink(pdf_path)
-
-        if html_file and os.path.exists(html_file):
-            await message.answer_document(
-                FSInputFile(html_file, filename=f"{safe_name}_character_sheet.html"),
-                caption="📄 Лист персонажа (HTML) – откройте в браузере и сохраните как PDF"
+                caption="📄 Лист персонажа (HTML) – нажмите на кнопку в файле или используйте печать браузера (Ctrl+P), чтобы сохранить как PDF."
             )
         else:
             logger.error(f"HTML не создан: {html_file}")

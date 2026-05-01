@@ -1,8 +1,7 @@
 # pdf_generator.py
 """
 HTML Generator Module for D&D Character Sheets
-Генерирует красивый HTML-лист персонажа в стиле D&D 5e,
-а также умеет конвертировать HTML в PDF через WeasyPrint.
+Генерирует красивый HTML-лист персонажа в стиле D&D 5e с кнопкой для печати/сохранения PDF.
 """
 
 import os
@@ -10,14 +9,13 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
 from jinja2 import Environment, FileSystemLoader, TemplateError
-from weasyprint import HTML, CSS
-from weasyprint.text.fonts import FontConfiguration
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------------------
 # HTML-шаблон (ваш лист.html, адаптированный для Jinja2)
+# Добавлена кнопка "Сохранить PDF" в правом нижнем углу (плавающая)
 # ----------------------------------------------------------------------
 DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="ru">
@@ -65,6 +63,34 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
             box-shadow: 0 25px 40px -12px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,245,225,0.7);
             padding: 28px 24px;
             isolation: isolate;
+        }
+        /* Плавающая кнопка для печати */
+        .print-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--accent-dark);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 12px 24px;
+            font-family: 'Cinzel', serif;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform 0.2s;
+        }
+        .print-btn:hover {
+            transform: scale(1.05);
+        }
+        @media print {
+            .print-btn {
+                display: none;
+            }
         }
         .sheet::after {
             content: "🎲";
@@ -217,7 +243,6 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
             font-size: 15px;
             font-weight: 500;
         }
-        /* Навыки теперь в две колонки */
         .skills-list {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -389,12 +414,10 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
                 padding: 0.6in;
                 margin: 0;
             }
-            /* Запрет разрыва внутри коротких блоков */
             .stats-grid, .combat-stats, .basic-info, .saves-section, .skills-section {
                 break-inside: avoid;
                 page-break-inside: avoid;
             }
-            /* Длинные списки могут разрываться между элементами */
             .traits-list, .equipment-list, .spells-list {
                 break-inside: auto;
             }
@@ -402,7 +425,6 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
                 break-inside: avoid;
                 page-break-inside: avoid;
             }
-            /* Заголовок блока не отрывать от содержимого */
             .detail-title {
                 break-after: avoid;
                 page-break-after: avoid;
@@ -418,6 +440,9 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
     </style>
 </head>
 <body class="theme-{{ class_name | lower | replace(' ', '-') | replace('ё', 'е') }}">
+<button class="print-btn" onclick="window.print();">
+    <i class="fas fa-print"></i> Сохранить как PDF
+</button>
 <div class="sheet">
     <div class="corner corner-tl"></div>
     <div class="corner corner-tr"></div>
@@ -522,6 +547,13 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
         <i class="fas fa-dice-d20"></i> D&D Character Sheet • {{ created_date }}
     </div>
 </div>
+<script>
+    // Добавляем запасной вариант для мобильных: если команда печати не поддерживается, показываем сообщение
+    if (typeof window.print !== 'function') {
+        var btn = document.querySelector('.print-btn');
+        if (btn) btn.style.display = 'none';
+    }
+</script>
 </body>
 </html>'''
 
@@ -629,8 +661,12 @@ def generate_character_html(character_data: Dict[str, Any]) -> str:
         raise
 
 def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
+    """
+    Генерирует HTML-файл (расширение .html). Параметр filename должен оканчиваться на .html
+    """
     try:
         html_content = generate_character_html(data)
+        # Если передан .pdf, меняем на .html
         if filename.endswith('.pdf'):
             filename = filename[:-4] + '.html'
         with open(filename, 'w', encoding='utf-8') as f:
@@ -640,28 +676,6 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"❌ Ошибка при сохранении HTML: {e}")
         return None
-
-# ----------------------------------------------------------------------
-# Конвертация HTML -> PDF
-# ----------------------------------------------------------------------
-def convert_html_to_pdf(html_path: str, pdf_path: str) -> bool:
-    """
-    Конвертирует HTML-файл в PDF с помощью WeasyPrint.
-    Возвращает True при успехе.
-    """
-    try:
-        font_config = FontConfiguration()
-        css = CSS(string='@page { size: A4; margin: 1.5cm; }')
-        HTML(filename=html_path).write_pdf(pdf_path, stylesheets=[css], font_config=font_config)
-        if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
-            logger.info(f"✅ PDF успешно создан: {pdf_path}")
-            return True
-        else:
-            logger.error(f"❌ PDF не создан или пуст: {pdf_path}")
-            return False
-    except Exception as e:
-        logger.error(f"❌ Ошибка конвертации HTML в PDF: {e}")
-        return False
 
 def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
     import time
@@ -679,7 +693,7 @@ def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
         logger.error(f"❌ Ошибка при очистке: {e}")
 
 if __name__ == "__main__":
-    # Тестовый запуск
+    # Тест
     test_data = {
         "name": "Тестовый Герой",
         "class_name": "Воин",
@@ -710,10 +724,5 @@ if __name__ == "__main__":
     html_file = generate_pdf(test_data, "test_character.html")
     if html_file:
         print(f"✅ HTML создан: {html_file}")
-        pdf_file = html_file.replace('.html', '.pdf')
-        if convert_html_to_pdf(html_file, pdf_file):
-            print(f"✅ PDF создан: {pdf_file}")
-        else:
-            print("❌ Не удалось создать PDF")
     else:
         print("❌ Ошибка создания HTML")

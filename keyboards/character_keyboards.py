@@ -1,10 +1,10 @@
-# keyboards/character_keyboards.py (полный исправленный файл)
+# keyboards/character_keyboards.py
 """
 Клавиатуры для создания персонажа
 """
 
 from typing import Optional, List
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 
 from db import get_user_characters
 from dnd_logic import (
@@ -219,6 +219,7 @@ def create_invocations_keyboard(level: int = 1, selected_count: int = 0) -> Inli
 
 
 def create_character_list_keyboard(user_id: int) -> Optional[InlineKeyboardMarkup]:
+    """Старая клавиатура – только текстовый просмотр (для обратной совместимости)"""
     characters = get_user_characters(user_id)
     if not characters:
         return None
@@ -226,6 +227,31 @@ def create_character_list_keyboard(user_id: int) -> Optional[InlineKeyboardMarku
     for char in characters:
         buttons.append([InlineKeyboardButton(text=f"{char['name']} - {char['class_name']} ур.{char['level']}",
                                              callback_data=f"view_{char['id']}")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def create_character_list_with_webapp_keyboard(user_id: int, webapp_base_url: str) -> Optional[InlineKeyboardMarkup]:
+    """
+    Новая клавиатура списка персонажей с двумя кнопками:
+    - текстовый просмотр (сохраняет старый функционал)
+    - Web App (открывает красивый лист)
+    """
+    characters = get_user_characters(user_id)
+    if not characters:
+        return None
+    buttons = []
+    for char in characters:
+        # Кнопка текстового просмотра
+        text_btn = InlineKeyboardButton(
+            text=f"📄 {char['name']} - {char['class_name']} ур.{char['level']}",
+            callback_data=f"view_{char['id']}"
+        )
+        # Кнопка Web App
+        webapp_btn = InlineKeyboardButton(
+            text="🌐 Открыть лист",
+            web_app=WebAppInfo(url=f"{webapp_base_url}/character/{char['id']}")
+        )
+        buttons.append([text_btn, webapp_btn])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

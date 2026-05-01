@@ -19,6 +19,7 @@ from keyboards.character_keyboards import (
     create_class_keyboard,
     create_race_keyboard,
     create_background_keyboard,
+    create_character_list_with_webapp_keyboard,
     create_character_list_keyboard,
     create_delete_keyboard,
     create_skills_keyboard,
@@ -214,7 +215,10 @@ async def list_characters(message: Message):
     if not characters:
         await message.answer("📭 У тебя пока нет ни одного персонажа.\n\nНажми «🎲 Создать персонажа», чтобы исправить это.")
         return
-    await message.answer("📋 Твои персонажи (нажми на имя, чтобы посмотреть):", reply_markup=create_character_list_keyboard(message.from_user.id))
+    # Используем новую клавиатуру с двумя кнопками: текстовый просмотр + Web App
+    webapp_base_url = WEBAPP_BASE_URL
+    reply_markup = create_character_list_with_webapp_keyboard(message.from_user.id, webapp_base_url)
+    await message.answer("📋 Твои персонажи:", reply_markup=reply_markup)
 
 
 @router.message(F.text == "🗑 Удалить персонажа")

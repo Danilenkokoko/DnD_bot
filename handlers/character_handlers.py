@@ -39,7 +39,7 @@ from repositories.background_repository import BackgroundRepository
 from repositories.equipment_repository import EquipmentRepository, FightingStyleRepository, InvocationRepository
 from repositories.spell_repository import SpellRepository
 
-from pdf_generator import generate_pdf  # теперь generate_pdf создаёт HTML-файл
+from pdf_generator import generate_pdf
 from engine.validators import validate_name as engine_validate_name
 
 logger = logging.getLogger(__name__)
@@ -278,7 +278,6 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
     class_info = CharacterStatsService.get_class_info(class_name)
     subclasses = _class_repo.get_subclasses(class_name, level=1)
 
-    # Базовый текст
     text = (f"🎭 {class_name}\n\n"
             f"{class_desc}\n\n"
             f"📊 Данные класса:\n"
@@ -960,7 +959,7 @@ async def set_image(message: Message, state: FSMContext):
 async def finalize_character(message: Message, state: FSMContext, image_file_id: Optional[str] = None):
     temp_file_path = None
     try:
-        await message.answer("⏳ Собираю героя… пару секунд.", reply_markup=ReplyKeyboardRemove())
+        await message.answer("⏳ Создаю персонажа и генерирую PDF...", reply_markup=ReplyKeyboardRemove())
 
         data = await state.get_data()
         char_data = CharacterFinalizationService.prepare_character_data(data, message.from_user.id)
@@ -968,7 +967,7 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
 
         name = char_data['name']
         if not name:
-            await message.answer("❌ Что-то с именем — не сохранилось. Начни создание заново.", reply_markup=main_menu())
+            await message.answer("❌ Ошибка: имя не сохранено.", reply_markup=main_menu())
             await state.clear()
             return
 
@@ -978,13 +977,12 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         char_data['selected_skills'] = all_skills
         char_data['origin_feat'] = data.get("background_origin_feat", "")
 
-        char_id = CharacterFinalizationService.save_character(char_data)
+        CharacterFinalizationService.save_character(char_data)
 
         bg_info = _bg_repo.get_by_name(char_data['background']) if char_data['background'] else None
         stats = char_data['stats']
         class_info = CharacterStatsService.get_class_info(char_data['class_name'])
 
-        # Подготовка данных для HTML-шаблона
         pdf_data = {
             "name": name,
             "class_name": char_data['class_name'],
@@ -1017,49 +1015,31 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         }
 
         safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{safe_name}.html")
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{safe_name}.pdf")
         temp_file_path = temp_file.name
         temp_file.close()
 
-        # Генерация HTML
-        html_file = generate_pdf(pdf_data, temp_file_path)
+        result_file = generate_pdf(pdf_data, temp_file_path)
 
-        if html_file and os.path.exists(html_file):
+        if result_file and os.path.exists(result_file) and result_file.endswith('.pdf'):
             await message.answer_document(
-                FSInputFile(html_file, filename=f"{safe_name}_character_sheet.html"),
-                caption=(
-                    "📄 Лист персонажа (HTML)\n\n"
-                    "⬇️ Чтобы сохранить как PDF:\n"
-                    "1️⃣ Откройте файл в браузере\n"
-                    "2️⃣ Нажмите кнопку «Сохранить как PDF» (в правом нижнем углу)\n"
-                    "3️⃣ Выберите «Сохранить как PDF» в диалоге печати"
-                )
+                FSInputFile(result_file, filename=f"{safe_name}_character_sheet.pdf"),
+                caption="✅ Персонаж создан! Ваш PDF-лист готов."
             )
+            os.unlink(result_file)
         else:
-            logger.error(f"HTML не создан: {html_file}")
-            await message.answer("⚠️ Не удалось создать файл листа персонажа, но персонаж сохранён в базе!")
+            await message.answer("⚠️ Не удалось создать PDF-файл, но персонаж сохранён в базе.")
 
-        # Короткое сообщение с основными характеристиками
-        def mod(s): return (s-10)//2
+        # Краткое сообщение с характеристиками
+        def mod(s): return (s - 10) // 2
         spells_preview = ""
         if char_data.get('selected_spells'):
-            spells_list = ", ".join(char_data['selected_spells'][:5])
-            if len(char_data['selected_spells']) > 5:
-                spells_list += f" и ещё {len(char_data['selected_spells'])-5}"
-            spells_preview = f"\n\n🔮 Заклинания: {spells_list}"
-
-        caption = (f"✅ Персонаж готов!\n\n"
-                   f"📛 {name}\n"
-                   f"⚔️ Класс: {char_data['class_name']}\n"
-                   f"📜 Предыстория: {char_data['background']}\n"
-                   f"🧝 Раса: {char_data['race']}{f' ({char_data['subrace']})' if char_data['subrace'] else ''}\n\n"
-                   f"❤️ HP: {char_data['hp']} | 🛡️ AC: {char_data['ac']}\n\n"
-                   f"📊 Характеристики (мод.):\n"
-                   f"💪 Сила {stats['STR']} ({mod(stats['STR']):+d}) | 🤸 Ловкость {stats['DEX']} ({mod(stats['DEX']):+d}) | 🏋️ Телосложение {stats['CON']} ({mod(stats['CON']):+d})\n"
-                   f"🧠 Интеллект {stats['INT']} ({mod(stats['INT']):+d}) | 🧙 Мудрость {stats['WIS']} ({mod(stats['WIS']):+d}) | ✨ Харизма {stats['CHA']} ({mod(stats['CHA']):+d})"
-                   f"{spells_preview}\n\n"
-                   f"📄 HTML-лист персонажа загружен выше – откройте его в браузере и сохраните как PDF.")
-
+            spells_preview = f"\n🔮 Заклинания: {', '.join(char_data['selected_spells'][:5])}"
+        caption = (f"✅ Персонаж {name} ({char_data['class_name']}, {char_data['race']}) создан!\n"
+                   f"❤️ HP: {char_data['hp']} | 🛡️ AC: {char_data['ac']}\n"
+                   f"📊 Характеристики: STR {stats['STR']} ({mod(stats['STR']):+d}), DEX {stats['DEX']} ({mod(stats['DEX']):+d}), "
+                   f"CON {stats['CON']} ({mod(stats['CON']):+d}), INT {stats['INT']} ({mod(stats['INT']):+d}), "
+                   f"WIS {stats['WIS']} ({mod(stats['WIS']):+d}), CHA {stats['CHA']} ({mod(stats['CHA']):+d}){spells_preview}")
         if image_file_id:
             await message.answer_photo(photo=image_file_id, caption=caption, parse_mode=None)
         else:
@@ -1070,8 +1050,7 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
 
     except Exception as e:
         logger.error(f"Ошибка при создании персонажа: {e}", exc_info=True)
-        await message.answer(f"❌ Произошла ошибка: {str(e)[:200]}\n\nПерсонаж может быть сохранён, но PDF не создан.",
-                             reply_markup=main_menu())
+        await message.answer(f"❌ Произошла ошибка: {str(e)[:200]}", reply_markup=main_menu())
         await state.clear()
     finally:
         if temp_file_path and os.path.exists(temp_file_path):

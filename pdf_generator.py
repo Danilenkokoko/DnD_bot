@@ -1,23 +1,15 @@
 # pdf_generator.py
-"""
-HTML Generator Module for D&D Character Sheets
-Генерирует красивый HTML-лист персонажа в стиле D&D 5e с кнопкой для сохранения PDF.
-Конвертация в PDF не производится — пользователь сам сохраняет через браузер.
-"""
-
 import os
 import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
 from jinja2 import Environment, FileSystemLoader, TemplateError
+import pdfkit
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ----------------------------------------------------------------------
-# HTML-шаблон (ваш лист.html, адаптированный для Jinja2)
-# ВНИМАНИЕ: в шаблоне добавлена плавающая кнопка "Сохранить как PDF"
-# ----------------------------------------------------------------------
+# ---------- HTML-шаблон (полная версия) ----------
 DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -65,7 +57,6 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
             padding: 28px 24px;
             isolation: isolate;
         }
-        /* Плавающая кнопка для сохранения PDF */
         .print-btn {
             position: fixed;
             bottom: 20px;
@@ -86,14 +77,8 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
             gap: 8px;
             transition: transform 0.2s;
         }
-        .print-btn:hover {
-            transform: scale(1.05);
-        }
-        @media print {
-            .print-btn {
-                display: none;
-            }
-        }
+        .print-btn:hover { transform: scale(1.05); }
+        @media print { .print-btn { display: none; } }
         .sheet::after {
             content: "🎲";
             font-size: 200px;
@@ -403,48 +388,32 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
             .corner { width: 35px; height: 35px; }
             .sheet::after { font-size: 130px; bottom: 0; right: 0; }
         }
-        /* Печатная версия — логические разрывы страниц */
         @media print {
-            body {
-                background: white;
-                padding: 0;
-                margin: 0;
-            }
-            .sheet {
-                background: white;
-                box-shadow: none;
-                padding: 0.6in;
-                margin: 0;
-            }
+            body { background: white; padding: 0; margin: 0; }
+            .sheet { background: white; box-shadow: none; padding: 0.6in; margin: 0; }
             .stats-grid, .combat-stats, .basic-info, .saves-section, .skills-section {
-                break-inside: avoid;
-                page-break-inside: avoid;
+                break-inside: avoid; page-break-inside: avoid;
             }
-            .traits-list, .equipment-list, .spells-list {
-                break-inside: auto;
-            }
+            .traits-list, .equipment-list, .spells-list { break-inside: auto; }
             .traits-list li, .equipment-list li, .spell-item {
-                break-inside: avoid;
-                page-break-inside: avoid;
+                break-inside: avoid; page-break-inside: avoid;
             }
-            .detail-title {
-                break-after: avoid;
-                page-break-after: avoid;
-            }
-            .skill-row {
-                break-inside: avoid;
-            }
-            @page {
-                size: A4;
-                margin: 1.5cm;
-            }
+            .detail-title { break-after: avoid; page-break-after: avoid; }
+            .skill-row { break-inside: avoid; }
+            @page { size: A4; margin: 1.5cm; }
         }
     </style>
 </head>
 <body class="theme-{{ class_name | lower | replace(' ', '-') | replace('ё', 'е') }}">
-<button class="print-btn" onclick="window.print();">
-    <i class="fas fa-print"></i> Сохранить как PDF
-</button>
+<div style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+    <button class="print-btn" type="button" onclick="window.print();">
+        <i class="fas fa-print"></i> Сохранить как PDF
+    </button>
+    <div style="background: rgba(0,0,0,0.7); color: #ffdd99; padding: 6px 12px; border-radius: 20px; font-size: 12px; text-align: right; max-width: 260px;">
+        📱 На телефоне: откройте файл → меню (три точки) → «Печать» → «Сохранить как PDF»<br>
+        💻 На компьютере: Ctrl+P → «Сохранить как PDF»
+    </div>
+</div>
 <div class="sheet">
     <div class="corner corner-tl"></div>
     <div class="corner corner-tr"></div>
@@ -462,65 +431,46 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
     <div class="stats-grid">
         {% set stat_names = ["STR", "DEX", "CON", "INT", "WIS", "CHA"] %}
         {% for stat in stat_names %}
-        <div class="stat-card">
-            <div class="stat-name">{{ stat }}</div>
-            <div class="stat-score">{{ stats[stat] }}</div>
-            <div class="stat-mod">{{ (stats[stat] - 10) // 2 }}</div>
-        </div>
+        <div class="stat-card"><div class="stat-name">{{ stat }}</div><div class="stat-score">{{ stats[stat] }}</div><div class="stat-mod">{{ (stats[stat] - 10) // 2 }}</div></div>
         {% endfor %}
     </div>
     <div class="saves-skills">
         <div class="saves-section">
             <div class="section-title"><i class="fas fa-brain"></i> СПАСБРОСКИ</div>
             {% for save in ["STR", "DEX", "CON", "INT", "WIS", "CHA"] %}
-            <div class="save-row">
-                <span>{% if save in saving_throws %}✓{% else %}•{% endif %} {{ save }}</span>
-                <span>{% if save in saving_throws %}{{ (stats[save] - 10) // 2 + proficiency_bonus }}{% else %}{{ (stats[save] - 10) // 2 }}{% endif %}</span>
-            </div>
+            <div class="save-row"><span>{% if save in saving_throws %}✓{% else %}•{% endif %} {{ save }}</span><span>{% if save in saving_throws %}{{ (stats[save] - 10) // 2 + proficiency_bonus }}{% else %}{{ (stats[save] - 10) // 2 }}{% endif %}</span></div>
             {% endfor %}
         </div>
         <div class="skills-section">
             <div class="section-title"><i class="fas fa-feather-alt"></i> НАВЫКИ</div>
             <div class="skills-list">
                 {% for skill in all_skills %}
-                <div class="skill-row">
-                    <span>{% if skill in skills %}✓{% else %}•{% endif %} {{ skill }}</span>
-                    <span>{{ skill_mods[skill] }}</span>
-                </div>
+                <div class="skill-row"><span>{% if skill in skills %}✓{% else %}•{% endif %} {{ skill }}</span><span>{{ skill_mods[skill] }}</span></div>
                 {% endfor %}
             </div>
         </div>
     </div>
     <div class="combat-stats">
         <div class="combat-card"><div class="combat-label"><i class="fas fa-shield-halbed"></i> КЛАСС БРОНИ</div><div class="combat-value">{{ ac }}</div></div>
-        <div class="combat-card">
-            <div class="combat-label"><i class="fas fa-heartbeat"></i> ХИТЫ (HP)</div>
-            <div class="combat-value">{{ hp }}</div>
-            <div class="hp-bar"><div class="hp-fill"></div></div>
-        </div>
+        <div class="combat-card"><div class="combat-label"><i class="fas fa-heartbeat"></i> ХИТЫ (HP)</div><div class="combat-value">{{ hp }}</div><div class="hp-bar"><div class="hp-fill"></div></div></div>
         <div class="combat-card"><div class="combat-label"><i class="fas fa-wind"></i> СКОРОСТЬ</div><div class="combat-value">{{ speed }} фт.</div></div>
     </div>
     {% if race_traits or class_features or background_trait or origin_feat %}
     <div class="detail-section">
         <div class="detail-title"><i class="fas fa-gem"></i> ОСОБЕННОСТИ И УМЕНИЯ</div>
-        <div class="detail-content">
-            <ul class="traits-list">
-                {% for trait in race_traits %}<li><strong>Раса:</strong> {{ trait }}</li>{% endfor %}
-                {% for feature in class_features %}<li><strong>Класс:</strong> {{ feature }}</li>{% endfor %}
-                {% if background_trait %}<li><strong>Предыстория:</strong> {{ background_trait }}</li>{% endif %}
-                {% if origin_feat %}<li><strong>Черта происхождения:</strong> {{ origin_feat }}</li>{% endif %}
-            </ul>
-        </div>
+        <div class="detail-content"><ul class="traits-list">
+            {% for trait in race_traits %}<li><strong>Раса:</strong> {{ trait }}</li>{% endfor %}
+            {% for feature in class_features %}<li><strong>Класс:</strong> {{ feature }}</li>{% endfor %}
+            {% if background_trait %}<li><strong>Предыстория:</strong> {{ background_trait }}</li>{% endif %}
+            {% if origin_feat %}<li><strong>Черта происхождения:</strong> {{ origin_feat }}</li>{% endif %}
+        </ul></div>
     </div>
     {% endif %}
     <div class="detail-section">
         <div class="detail-title"><i class="fas fa-backpack"></i> СНАРЯЖЕНИЕ</div>
-        <div class="detail-content">
-            <ul class="equipment-list">
-                {% for item in equipment %}<li>{{ item }}</li>{% else %}<li>Нет снаряжения</li>{% endfor %}
-            </ul>
-            {% if coins %}<div style="margin-top: 12px;"><i class="fas fa-coins"></i> <strong>Монеты:</strong> {{ coins }}</div>{% endif %}
-        </div>
+        <div class="detail-content"><ul class="equipment-list">
+            {% for item in equipment %}<li>{{ item }}</li>{% else %}<li>Нет снаряжения</li>{% endfor %}
+        </ul>{% if coins %}<div style="margin-top: 12px;"><i class="fas fa-coins"></i> <strong>Монеты:</strong> {{ coins }}</div>{% endif %}</div>
     </div>
     <div class="detail-section">
         <div class="detail-title"><i class="fas fa-history"></i> ПРЕДЫСТОРИЯ</div>
@@ -532,29 +482,17 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
     {% if spells and spells|length > 0 %}
     <div class="spells-section">
         <div class="detail-title"><i class="fas fa-magic"></i> ЗАКЛИНАНИЯ</div>
-        <div class="spell-slots">
-            <div class="slot-level">1 уровень: {{ spell_slots_1 }} ячейки</div>
-            <div class="slot-level">2 уровень: {{ spell_slots_2 }} ячеек</div>
-        </div>
-        <div class="spells-list">
-            {% for spell in spells %}<div class="spell-item"><i class="fas fa-star-of-life"></i> {{ spell }}</div>{% endfor %}
-        </div>
+        <div class="spell-slots"><div class="slot-level">1 уровень: {{ spell_slots_1 }} ячейки</div><div class="slot-level">2 уровень: {{ spell_slots_2 }} ячеек</div></div>
+        <div class="spells-list">{% for spell in spells %}<div class="spell-item"><i class="fas fa-star-of-life"></i> {{ spell }}</div>{% endfor %}</div>
     </div>
     {% endif %}
-    <div class="notes-section">
-        <div class="detail-title"><i class="fas fa-pen-fancy"></i> ЗАМЕТКИ</div>
-        <div class="detail-content">{{ notes if notes else "—" }}</div>
-    </div>
-    <div class="footer">
-        <i class="fas fa-dice-d20"></i> D&D Character Sheet • {{ created_date }}
-    </div>
+    <div class="notes-section"><div class="detail-title"><i class="fas fa-pen-fancy"></i> ЗАМЕТКИ</div><div class="detail-content">{{ notes if notes else "—" }}</div></div>
+    <div class="footer"><i class="fas fa-dice-d20"></i> D&D Character Sheet • {{ created_date }}</div>
 </div>
 </body>
 </html>'''
 
-# ----------------------------------------------------------------------
-# Утилиты для шаблона
-# ----------------------------------------------------------------------
+# ---------- Вспомогательные функции ----------
 def get_skill_ability(skill_name: str) -> str:
     skill_map = {
         "Акробатика": "DEX", "Атлетика": "STR", "Аркана": "INT",
@@ -580,7 +518,6 @@ def prepare_template_data(character_data: Dict[str, Any]) -> Dict[str, Any]:
     stats = character_data.get('stats', {})
     proficiency = character_data.get('proficiency_bonus', 2)
     skills_list = character_data.get('skills', [])
-
     skill_mods = {}
     for skill in all_skills:
         ability = get_skill_ability(skill)
@@ -623,19 +560,14 @@ def prepare_template_data(character_data: Dict[str, Any]) -> Dict[str, Any]:
         'created_date': datetime.now().strftime("%d.%m.%Y")
     }
 
-# ----------------------------------------------------------------------
-# Работа с шаблоном
-# ----------------------------------------------------------------------
 def ensure_template_exists() -> bool:
     try:
         if not os.path.exists("templates"):
             os.makedirs("templates")
-            logger.info("📁 Создана папка templates")
         template_path = "templates/character_sheet.html"
-        if not os.path.exists(template_path):
-            with open(template_path, 'w', encoding='utf-8') as f:
-                f.write(DEFAULT_HTML_TEMPLATE)
-            logger.info("📄 Создан файл шаблона character_sheet.html")
+        with open(template_path, 'w', encoding='utf-8') as f:
+            f.write(DEFAULT_HTML_TEMPLATE)
+        logger.info("📄 Шаблон character_sheet.html обновлён")
         return True
     except Exception as e:
         logger.error(f"❌ Ошибка при создании шаблона: {e}")
@@ -647,30 +579,53 @@ def generate_character_html(character_data: Dict[str, Any]) -> str:
     env = Environment(loader=FileSystemLoader("templates"), autoescape=True)
     template = env.get_template("character_sheet.html")
     data = prepare_template_data(character_data)
+    return template.render(**data)
+
+async def convert_html_to_pdf(html_path: str, pdf_path: str) -> bool:
+    """Конвертирует HTML в PDF через wkhtmltopdf (синхронная обёртка)."""
     try:
-        html = template.render(**data)
-        logger.info(f"✅ HTML сгенерирован для {character_data.get('name', 'Unknown')}")
-        return html
-    except TemplateError as e:
-        logger.error(f"❌ Ошибка рендеринга шаблона: {e}")
-        raise
+        options = {
+            'page-size': 'A4',
+            'margin-top': '1.5cm',
+            'margin-right': '1.5cm',
+            'margin-bottom': '1.5cm',
+            'margin-left': '1.5cm',
+            'encoding': "UTF-8",
+            'no-outline': None,
+            'quiet': ''
+        }
+        pdfkit.from_file(html_path, pdf_path, options=options)
+        if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+            logger.info(f"✅ PDF создан через wkhtmltopdf: {pdf_path}")
+            return True
+        else:
+            logger.error(f"❌ PDF не создан или пуст: {pdf_path}")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Ошибка wkhtmltopdf: {e}")
+        return False
 
 def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
-    """
-    Генерирует HTML-файл (расширение .html).
-    Принимает имя файла, оканчивающееся на .html (если .pdf, заменяет на .html).
-    Возвращает путь к созданному HTML-файлу.
-    """
+    """Генерирует HTML, затем конвертирует в PDF, возвращает путь к PDF."""
+    temp_html = filename.replace('.pdf', '.html')
     try:
         html_content = generate_character_html(data)
-        if filename.endswith('.pdf'):
-            filename = filename[:-4] + '.html'
-        with open(filename, 'w', encoding='utf-8') as f:
+        with open(temp_html, 'w', encoding='utf-8') as f:
             f.write(html_content)
-        logger.info(f"✅ HTML сохранён: {filename}")
+        logger.info(f"✅ HTML сохранён: {temp_html}")
+
+        if not filename.endswith('.pdf'):
+            return temp_html
+
+        import asyncio
+        success = asyncio.run(convert_html_to_pdf(temp_html, filename))
+        if not success:
+            logger.error("Конвертация в PDF не удалась, возвращаем HTML")
+            return temp_html
+        os.unlink(temp_html)
         return filename
     except Exception as e:
-        logger.error(f"❌ Ошибка при сохранении HTML: {e}")
+        logger.error(f"❌ Ошибка в generate_pdf: {e}")
         return None
 
 def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
@@ -678,47 +633,11 @@ def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
     try:
         current_time = time.time()
         max_age_seconds = max_age_hours * 3600
-        for filename in os.listdir(directory):
-            if (filename.startswith("temp_") or filename.endswith("_character_sheet")) and (filename.endswith(".html") or filename.endswith(".pdf")):
-                filepath = os.path.join(directory, filename)
-                file_age = current_time - os.path.getmtime(filepath)
-                if file_age > max_age_seconds:
-                    os.remove(filepath)
-                    logger.info(f"🗑️ Удален старый файл: {filename}")
+        for fname in os.listdir(directory):
+            if (fname.startswith("temp_") or fname.endswith("_character_sheet")) and (fname.endswith(".html") or fname.endswith(".pdf")):
+                path = os.path.join(directory, fname)
+                if current_time - os.path.getmtime(path) > max_age_seconds:
+                    os.remove(path)
+                    logger.info(f"🗑️ Удалён старый файл: {fname}")
     except Exception as e:
-        logger.error(f"❌ Ошибка при очистке: {e}")
-
-if __name__ == "__main__":
-    # Тест
-    test_data = {
-        "name": "Тестовый Герой",
-        "class_name": "Воин",
-        "race": "Человек",
-        "level": 1,
-        "background": "Солдат",
-        "stats": {"STR": 16, "DEX": 14, "CON": 14, "INT": 10, "WIS": 12, "CHA": 10},
-        "hp": 12,
-        "ac": 16,
-        "speed": 30,
-        "skills": ["Атлетика", "Восприятие"],
-        "equipment": ["Длинный меч", "Кольчуга"],
-        "spells": [],
-        "proficiency_bonus": 2,
-        "saving_throws": ["STR", "CON"],
-        "race_traits": ["Универсальность человечества"],
-        "class_features": ["Второе дыхание", "Боевой стиль"],
-        "backstory": "Родился в семье солдата...",
-        "alignment": "Нейтральное",
-        "player_name": "Тестер",
-        "experience": 0,
-        "notes": "",
-        "coins": "50 ЗМ",
-        "spell_slots_1": 0,
-        "spell_slots_2": 0,
-        "appearance": ""
-    }
-    html_file = generate_pdf(test_data, "test_character.html")
-    if html_file:
-        print(f"✅ HTML создан: {html_file}")
-    else:
-        print("❌ Ошибка создания HTML")
+        logger.error(f"❌ Ошибка очистки: {e}")

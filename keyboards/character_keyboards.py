@@ -146,8 +146,7 @@ def create_subrace_keyboard(race: str) -> Optional[InlineKeyboardMarkup]:
     buttons = []
     for subrace in subraces:
         buttons.append([InlineKeyboardButton(text=subrace, callback_data=f"subrace_{subrace}")])
-    # Кнопка пропуска подрасы (если игрок не хочет выбирать)
-    buttons.append([InlineKeyboardButton(text="➡️ Пропустить", callback_data="subrace_skip")])
+    # Кнопка пропуска УДАЛЕНА — выбор подрасы обязателен
     buttons.append([InlineKeyboardButton(text="⬅️ Назад к расам", callback_data="back_to_races")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -165,13 +164,11 @@ def create_fighting_style_keyboard(class_name: str) -> InlineKeyboardMarkup:
             text=f"🛡️ {s['name']}: {s['description'][:50]}",
             callback_data=f"style_{s['id']}"
         )])
-    buttons.append([InlineKeyboardButton(text="➡️ Пропустить", callback_data="style_skip")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_spells")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def create_alignment_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора мировоззрения"""
     alignments = [
         ("Законно-добрый", "lawful_good"),
         ("Нейтрально-добрый", "neutral_good"),
@@ -184,14 +181,8 @@ def create_alignment_keyboard() -> InlineKeyboardMarkup:
         ("Хаотично-злой", "chaotic_evil")
     ]
     buttons = []
-    row = []
     for name, value in alignments:
-        row.append(InlineKeyboardButton(text=name, callback_data=f"alignment_{value}"))
-        if len(row) == 3:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
+        buttons.append([InlineKeyboardButton(text=name, callback_data=f"alignment_{value}")])
     buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 

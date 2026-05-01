@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 bot.py - D&D Character Creator Bot for D&D 5.5e (2024)
-Обновлённая версия с многослойной архитектурой
+Обновлённая версия с многослойной архитектурой и веб-сервером для Mini App.
 """
 
 import asyncio
 import logging
 import os
+import threading
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -19,6 +20,9 @@ from db import init_database, migrate_database_v2
 # Импортируем роутеры обработчиков
 from handlers.character_handlers import router as character_router
 from handlers.spell_handlers import router as spell_router
+
+# Импортируем функцию запуска веб-сервера
+from webapp import run_webapp
 
 # Настройка логирования
 logging.basicConfig(
@@ -59,6 +63,11 @@ async def main():
 
         bot_info = await bot.get_me()
         logger.info(f"✅ Бот: @{bot_info.username}")
+
+        # Запускаем веб-сервер для Mini App в отдельном потоке
+        web_thread = threading.Thread(target=run_webapp, daemon=True)
+        web_thread.start()
+        logger.info("✅ Веб-сервер для Mini App запущен на порту 8000")
 
         logger.info("🎲 БОТ ГОТОВ К РАБОТЕ!")
         await dp.start_polling(bot)

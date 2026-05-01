@@ -7,11 +7,10 @@
 import logging
 import os
 import re
-import tempfile
 from typing import Optional
 
 from aiogram import F, Router
-from aiogram.types import Message, CallbackQuery, FSInputFile, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, FSInputFile, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 
@@ -39,7 +38,6 @@ from repositories.background_repository import BackgroundRepository
 from repositories.equipment_repository import EquipmentRepository, FightingStyleRepository, InvocationRepository
 from repositories.spell_repository import SpellRepository
 
-from pdf_generator import generate_pdf
 from engine.validators import validate_name as engine_validate_name
 
 logger = logging.getLogger(__name__)
@@ -55,6 +53,9 @@ _fighting_repo = FightingStyleRepository()
 _inv_repo = InvocationRepository()
 _spell_repo = SpellRepository()
 _char_repo = CharacterRepository()
+
+# Базовый URL для Web App (из переменных окружения)
+WEBAPP_BASE_URL = os.getenv("WEBAPP_URL", "http://localhost:8000")
 
 
 # =========================================================
@@ -957,9 +958,8 @@ async def set_image(message: Message, state: FSMContext):
 
 
 async def finalize_character(message: Message, state: FSMContext, image_file_id: Optional[str] = None):
-    temp_file_path = None
     try:
-        await message.answer("⏳ Создаю персонажа и генерирую PDF...", reply_markup=ReplyKeyboardRemove())
+        await message.answer("⏳ Сохраняю персонажа...", reply_markup=ReplyKeyboardRemove())
 
         data = await state.get_data()
         char_data = CharacterFinalizationService.prepare_character_data(data, message.from_user.id)
@@ -977,60 +977,21 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         char_data['selected_skills'] = all_skills
         char_data['origin_feat'] = data.get("background_origin_feat", "")
 
-        CharacterFinalizationService.save_character(char_data)
+        # Сохраняем персонажа и получаем его ID
+        char_id = CharacterFinalizationService.save_character(char_data)
+        if not char_id:
+            await message.answer("❌ Не удалось сохранить персонажа.", reply_markup=main_menu())
+            await state.clear()
+            return
 
-        bg_info = _bg_repo.get_by_name(char_data['background']) if char_data['background'] else None
+        # Формируем URL для Web App
+        web_app_url = f"{WEBAPP_BASE_URL}/character/{char_id}"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📄 Открыть лист персонажа", web_app=WebAppInfo(url=web_app_url))]
+        ])
+
+        # Короткое сообщение с основными характеристиками
         stats = char_data['stats']
-        class_info = CharacterStatsService.get_class_info(char_data['class_name'])
-
-        pdf_data = {
-            "name": name,
-            "class_name": char_data['class_name'],
-            "race": f"{char_data['race']} ({char_data['subrace']})" if char_data['subrace'] else char_data['race'],
-            "level": 1,
-            "stats": stats,
-            "hp": char_data['hp'],
-            "ac": char_data['ac'],
-            "speed": 30,
-            "skills": all_skills,
-            "equipment": [item for item in [char_data['selected_weapon'], char_data['selected_armor']] if item],
-            "spells": char_data['selected_spells'],
-            "proficiency_bonus": CharacterStatsService.calculate_proficiency_bonus(1),
-            "background": char_data['background'],
-            "background_trait": bg_info.get('trait', '') if bg_info else '',
-            "background_description": bg_info.get('description', '') if bg_info else '',
-            "origin_feat": char_data.get('origin_feat', ''),
-            "race_traits": [],
-            "class_features": class_info.get('features', []),
-            "backstory": char_data['backstory'],
-            "alignment": "Нейтральное",
-            "player_name": message.from_user.full_name,
-            "experience": 0,
-            "saving_throws": class_info.get('saving_throws', []),
-            "notes": "",
-            "coins": data.get("selected_coins", 0),
-            "spell_slots_1": 0,
-            "spell_slots_2": 0,
-            "appearance": ""
-        }
-
-        safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{safe_name}.pdf")
-        temp_file_path = temp_file.name
-        temp_file.close()
-
-        result_file = generate_pdf(pdf_data, temp_file_path)
-
-        if result_file and os.path.exists(result_file) and result_file.endswith('.pdf'):
-            await message.answer_document(
-                FSInputFile(result_file, filename=f"{safe_name}_character_sheet.pdf"),
-                caption="✅ Персонаж создан! Ваш PDF-лист готов."
-            )
-            os.unlink(result_file)
-        else:
-            await message.answer("⚠️ Не удалось создать PDF-файл, но персонаж сохранён в базе.")
-
-        # Краткое сообщение с характеристиками
         def mod(s): return (s - 10) // 2
         spells_preview = ""
         if char_data.get('selected_spells'):
@@ -1039,11 +1000,13 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
                    f"❤️ HP: {char_data['hp']} | 🛡️ AC: {char_data['ac']}\n"
                    f"📊 Характеристики: STR {stats['STR']} ({mod(stats['STR']):+d}), DEX {stats['DEX']} ({mod(stats['DEX']):+d}), "
                    f"CON {stats['CON']} ({mod(stats['CON']):+d}), INT {stats['INT']} ({mod(stats['INT']):+d}), "
-                   f"WIS {stats['WIS']} ({mod(stats['WIS']):+d}), CHA {stats['CHA']} ({mod(stats['CHA']):+d}){spells_preview}")
+                   f"WIS {stats['WIS']} ({mod(stats['WIS']):+d}), CHA {stats['CHA']} ({mod(stats['CHA']):+d}){spells_preview}\n\n"
+                   f"Нажмите на кнопку, чтобы открыть полный лист.")
+
         if image_file_id:
-            await message.answer_photo(photo=image_file_id, caption=caption, parse_mode=None)
+            await message.answer_photo(photo=image_file_id, caption=caption, reply_markup=keyboard, parse_mode=None)
         else:
-            await message.answer(caption, parse_mode=None)
+            await message.answer(caption, reply_markup=keyboard, parse_mode=None)
 
         await message.answer("🏠 Главное меню", reply_markup=main_menu())
         await state.clear()
@@ -1052,12 +1015,6 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         logger.error(f"Ошибка при создании персонажа: {e}", exc_info=True)
         await message.answer(f"❌ Произошла ошибка: {str(e)[:200]}", reply_markup=main_menu())
         await state.clear()
-    finally:
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.unlink(temp_file_path)
-            except:
-                pass
 
 
 # =========================================================

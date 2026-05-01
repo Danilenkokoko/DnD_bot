@@ -13,6 +13,9 @@ from services.spell_service import SpellSelectionService
 from handlers.character_handlers import go_to_fighting_style
 from spell_selector import SpellSelector
 
+# Импорт строковых констант
+from strings import SPELL_NOT_COMPLETE_WARNING
+
 logger = logging.getLogger(__name__)
 
 router = Router()
@@ -22,7 +25,6 @@ router = Router()
 
 @router.callback_query(lambda c: c.data.startswith("cantrip_cat_"))
 async def show_cantrips_in_category(callback: CallbackQuery, state: FSMContext):
-    # Не удаляем, сервис отредактирует текущее сообщение
     await SpellSelectionService.show_cantrips_in_category(callback, state)
 
 
@@ -43,14 +45,12 @@ async def remove_cantrip(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(lambda c: c.data == "cantrip_back_list")
 async def back_to_cantrip_list(callback: CallbackQuery, state: FSMContext):
-    # Сервис отредактирует сообщение, не удаляем
     await SpellSelectionService.back_to_cantrip_list(callback, state)
     await callback.answer()
 
 
 @router.callback_query(lambda c: c.data == "cantrip_back_categories")
 async def back_to_cantrip_categories(callback: CallbackQuery, state: FSMContext):
-    # Здесь сервис отправляет новое сообщение (категории), поэтому удалим старое
     await callback.message.delete()
     await SpellSelectionService.back_to_cantrip_categories(callback, state)
     await callback.answer()
@@ -97,7 +97,7 @@ async def back_to_level1_categories(callback: CallbackQuery, state: FSMContext):
 async def continue_after_spells(message: Message, state: FSMContext):
     """Обработчик кнопки 'Продолжить' после выбора заклинаний"""
     logger.info("🔵 Кнопка 'Продолжить' нажата")
-    await message.delete()   # удаляем сообщение с кнопкой
+    await message.delete()
 
     current_state = await state.get_state()
     logger.info(f"Текущее состояние FSM: {current_state}")
@@ -109,7 +109,7 @@ async def continue_after_spells(message: Message, state: FSMContext):
         selector = SpellSelector.from_dict(selector_data)
 
         if selector.cantrip_state and selector.cantrip_state.remaining_count != 0:
-            await message.answer("⚠️ Вы не выбрали все заговоры. Пожалуйста, завершите выбор.")
+            await message.answer(SPELL_NOT_COMPLETE_WARNING)
             return
 
         if selector.level1_state and selector.level1_state.remaining_count != 0:

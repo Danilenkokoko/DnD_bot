@@ -20,7 +20,14 @@ from keyboards.spell_keyboards import (
 from keyboards.character_keyboards import continue_kb_for_spells
 from states.character_states import CreateCharacter
 
-# Импортируем вспомогательные функции из character_handlers для удаления и отправки
+# Импорт строковых констант
+from strings import (
+    CANTRIP_SELECTION_START, CANTRIP_CATEGORY_EMPTY, CANTRIP_LIST_TITLE,
+    CANTRIP_DETAIL_TEMPLATE, CANTRIP_STATUS_SELECTED, CANTRIP_STATUS_NOT_SELECTED,
+    LEVEL1_SPELL_SELECTION_START, LEVEL1_CATEGORY_EMPTY, LEVEL1_LIST_TITLE,
+    LEVEL1_DETAIL_TEMPLATE, LEVEL1_STATUS_SELECTED, LEVEL1_STATUS_NOT_SELECTED
+)
+
 from utils.message_utils import send_new_from_callback, delete_previous, send_new
 
 logger = logging.getLogger(__name__)
@@ -35,7 +42,6 @@ class SpellSelectionService:
     # ========== ЗАГОВОРЫ (CANTRIPS) ==========
     @staticmethod
     async def start_cantrips_selection(callback: CallbackQuery, state: FSMContext) -> None:
-        """Начинает выбор заговоров (вызывается из character_handlers после класса)"""
         data = await state.get_data()
         selector_data = data.get("spell_selector")
         class_name = data.get("class_name")
@@ -79,10 +85,11 @@ class SpellSelectionService:
             return
 
         await state.set_state(CreateCharacter.spells_cantrips_category)
-        text = (f"📖 Выбор заговоров\n\n"
-                f"Класс {selector.class_name} может выбрать {required} заговор(а).\n"
-                f"Осталось выбрать: {required - selected_count}\n\n"
-                f"Выбери категорию для просмотра заговоров:")
+        text = CANTRIP_SELECTION_START.format(
+            class_name=selector.class_name,
+            required=required,
+            remaining=required - selected_count
+        )
         await send_new_from_callback(callback, state, text,
                                      reply_markup=create_category_keyboard(categories, "cantrip", selected_count, required))
         await callback.answer()
@@ -103,11 +110,12 @@ class SpellSelectionService:
         await state.set_state(CreateCharacter.spells_cantrips_list)
 
         if not spells:
-            await send_new_from_callback(callback, state, f"📖 В категории {category} нет заговоров для этого класса.")
+            text = CANTRIP_CATEGORY_EMPTY.format(category=category)
+            await send_new_from_callback(callback, state, text)
             await callback.answer()
             return
 
-        text = f"📖 Категория: {category}\n\nВыбери заговор для просмотра:"
+        text = CANTRIP_LIST_TITLE.format(category=category)
         await send_new_from_callback(callback, state, text,
                                      reply_markup=create_spell_list_keyboard(spells, "cantrip", selected_spells, category))
         await callback.answer()
@@ -136,11 +144,15 @@ class SpellSelectionService:
         description = spell.get('description', 'Описание отсутствует')
         category = spell.get('category', 'Прочее')
         icon = get_category_icon(category)
+        status = CANTRIP_STATUS_SELECTED if is_selected else CANTRIP_STATUS_NOT_SELECTED
 
-        text = (f"{icon} {spell['name']}\n\n📖 Описание:\n{description}\n\n"
-                f"🏷️ Категория: {category}\n"
-                f"📊 Уровень: {spell.get('level', 0)} (заговор)\n\n"
-                f"{'✅ Уже выбран' if is_selected else '❌ Не выбран'}")
+        text = CANTRIP_DETAIL_TEMPLATE.format(
+            icon=icon,
+            spell_name=spell['name'],
+            description=description,
+            category=category,
+            status=status
+        )
         await send_new_from_callback(callback, state, text,
                                      reply_markup=create_spell_detail_keyboard(spell_id, spell['name'], "cantrip", is_selected, remaining))
         await callback.answer()
@@ -177,7 +189,7 @@ class SpellSelectionService:
                 await state.set_state(CreateCharacter.spells_cantrips_list)
                 spells = selector.get_cantrips_in_category(category)
                 selected_spells = selector.get_selected_cantrips()
-                text = f"📖 Категория: {category}\n\nВыбери заговор для просмотра:"
+                text = CANTRIP_LIST_TITLE.format(category=category)
                 await send_new_from_callback(callback, state, text,
                                              reply_markup=create_spell_list_keyboard(spells, "cantrip", selected_spells, category))
         await callback.answer()
@@ -206,7 +218,7 @@ class SpellSelectionService:
             await state.set_state(CreateCharacter.spells_cantrips_list)
             spells = selector.get_cantrips_in_category(category)
             selected_spells = selector.get_selected_cantrips()
-            text = f"📖 Категория: {category}\n\nВыбери заговор для просмотра:"
+            text = CANTRIP_LIST_TITLE.format(category=category)
             await send_new_from_callback(callback, state, text,
                                          reply_markup=create_spell_list_keyboard(spells, "cantrip", selected_spells, category))
         await callback.answer()
@@ -232,7 +244,7 @@ class SpellSelectionService:
         selector = SpellSelector.from_dict(selector_data)
         spells = selector.get_cantrips_in_category(category)
         selected_spells = selector.get_selected_cantrips()
-        text = f"📖 Категория: {category}\n\nВыбери заговор для просмотра:"
+        text = CANTRIP_LIST_TITLE.format(category=category)
         await send_new_from_callback(callback, state, text,
                                      reply_markup=create_spell_list_keyboard(spells, "cantrip", selected_spells, category))
         await callback.answer()
@@ -264,10 +276,11 @@ class SpellSelectionService:
             return
 
         await state.set_state(CreateCharacter.spells_level1_category)
-        text = (f"🔮 Выбор заклинаний 1 уровня\n\n"
-                f"Класс {selector.class_name} может выбрать {required} заклинание(й).\n"
-                f"Осталось выбрать: {required - selected_count}\n\n"
-                f"Выбери категорию для просмотра заклинаний:")
+        text = LEVEL1_SPELL_SELECTION_START.format(
+            class_name=selector.class_name,
+            required=required,
+            remaining=required - selected_count
+        )
         await send_new_from_callback(callback, state, text,
                                      reply_markup=create_category_keyboard(categories, "level1", selected_count, required))
         await callback.answer()
@@ -285,11 +298,12 @@ class SpellSelectionService:
         await state.set_state(CreateCharacter.spells_level1_list)
 
         if not spells:
-            await send_new_from_callback(callback, state, f"🔮 В категории {category} нет заклинаний 1 уровня для этого класса.")
+            text = LEVEL1_CATEGORY_EMPTY.format(category=category)
+            await send_new_from_callback(callback, state, text)
             await callback.answer()
             return
 
-        text = f"🔮 Категория: {category}\n\nВыбери заклинание для просмотра:"
+        text = LEVEL1_LIST_TITLE.format(category=category)
         await send_new_from_callback(callback, state, text,
                                      reply_markup=create_spell_list_keyboard(spells, "level1", selected_spells, category))
         await callback.answer()
@@ -315,11 +329,15 @@ class SpellSelectionService:
         description = spell.get('description', 'Описание отсутствует')
         category = spell.get('category', 'Прочее')
         icon = get_category_icon(category)
+        status = LEVEL1_STATUS_SELECTED if is_selected else LEVEL1_STATUS_NOT_SELECTED
 
-        text = (f"{icon} {spell['name']}\n\n📖 Описание:\n{description}\n\n"
-                f"🏷️ Категория: {category}\n"
-                f"📊 Уровень: {spell.get('level', 1)}\n\n"
-                f"{'✅ Уже выбрано' if is_selected else '❌ Не выбрано'}")
+        text = LEVEL1_DETAIL_TEMPLATE.format(
+            icon=icon,
+            spell_name=spell['name'],
+            description=description,
+            category=category,
+            status=status
+        )
         await send_new_from_callback(callback, state, text,
                                      reply_markup=create_spell_detail_keyboard(spell_id, spell['name'], "level1", is_selected, remaining))
         await callback.answer()
@@ -344,14 +362,13 @@ class SpellSelectionService:
             await state.update_data(spell_selector=selector.to_dict())
 
             if selector.level1_state and selector.level1_state.remaining_count == 0:
-                # Все заклинания выбраны → переходим к боевому стилю
                 from handlers.character_handlers import go_to_fighting_style
                 await go_to_fighting_style(callback, state)
             else:
                 await state.set_state(CreateCharacter.spells_level1_list)
                 spells = selector.get_level1_spells_in_category(category)
                 selected_spells = selector.get_selected_level1_spells()
-                text = f"🔮 Категория: {category}\n\nВыбери заклинание для просмотра:"
+                text = LEVEL1_LIST_TITLE.format(category=category)
                 await send_new_from_callback(callback, state, text,
                                              reply_markup=create_spell_list_keyboard(spells, "level1", selected_spells, category))
         await callback.answer()
@@ -377,7 +394,7 @@ class SpellSelectionService:
             await state.set_state(CreateCharacter.spells_level1_list)
             spells = selector.get_level1_spells_in_category(category)
             selected_spells = selector.get_selected_level1_spells()
-            text = f"🔮 Категория: {category}\n\nВыбери заклинание для просмотра:"
+            text = LEVEL1_LIST_TITLE.format(category=category)
             await send_new_from_callback(callback, state, text,
                                          reply_markup=create_spell_list_keyboard(spells, "level1", selected_spells, category))
         await callback.answer()
@@ -400,7 +417,7 @@ class SpellSelectionService:
         selector = SpellSelector.from_dict(selector_data)
         spells = selector.get_level1_spells_in_category(category)
         selected_spells = selector.get_selected_level1_spells()
-        text = f"🔮 Категория: {category}\n\nВыбери заклинание для просмотра:"
+        text = LEVEL1_LIST_TITLE.format(category=category)
         await send_new_from_callback(callback, state, text,
                                      reply_markup=create_spell_list_keyboard(spells, "level1", selected_spells, category))
         await callback.answer()

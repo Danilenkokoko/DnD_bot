@@ -169,6 +169,7 @@ def create_fighting_style_keyboard(class_name: str) -> InlineKeyboardMarkup:
 
 
 def create_alignment_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора мировоззрения (вертикальный список, каждая кнопка в отдельной строке)"""
     alignments = [
         ("Законно-добрый", "lawful_good"),
         ("Нейтрально-добрый", "neutral_good"),

@@ -2,14 +2,13 @@
 """
 Database initialization and connection management.
 """
-from dotenv import load_dotenv
-load_dotenv()
 
 import os
 import logging
 import psycopg2
-from psycopg2 import pool, sql
+from psycopg2 import pool, extras
 from typing import Dict, Any, List, Optional
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
@@ -17,16 +16,16 @@ logger = logging.getLogger(__name__)
 _db_pool = None
 
 # Database configuration from environment
+# load_dotenv already called at top of file
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "DND_DB")
+DB_NAME = os.getenv("DB_NAME", "dnd_bot")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
-print(f"Connecting with password: {'*' * len(DB_PASSWORD) if DB_PASSWORD else 'EMPTY'}")
 
-def get_connection():
-    """Get a database connection from the pool."""
+def _init_pool():
+    """Initialize connection pool if not already created."""
     global _db_pool
     if _db_pool is None:
         try:
@@ -42,20 +41,22 @@ def get_connection():
         except Exception as e:
             logger.error(f"Failed to create connection pool: {e}")
             raise
-    return _db_pool.getconn()
 
 
-def return_connection(conn):
-    """Return connection to the pool."""
-    global _db_pool
-    if _db_pool:
+@contextmanager
+def get_connection():
+    """Get a connection from the pool and automatically return it when done."""
+    _init_pool()
+    conn = _db_pool.getconn()
+    try:
+        yield conn
+    finally:
         _db_pool.putconn(conn)
 
 
 def init_db():
     """Initialize database tables if they don't exist."""
-    conn = get_connection()
-    try:
+    with get_connection() as conn:
         with conn.cursor() as cur:
             # Create races table
             cur.execute("""
@@ -275,13 +276,6 @@ def init_db():
             conn.commit()
             logger.info("Database initialized and migrated successfully")
 
-    except Exception as e:
-        logger.error(f"Database initialization error: {e}")
-        conn.rollback()
-        raise
-    finally:
-        return_connection(conn)
-
 
 def init_database():
     """Legacy wrapper for init_db(), called by bot.py."""
@@ -292,15 +286,13 @@ def init_database():
 def migrate_database_v2():
     """Explicit migration for new fields (kept for compatibility)."""
     logger.info("Running migration v2 (already handled in init_db, but calling anyway)")
-    # The migration is now part of init_db, but we keep the function for compatibility
     init_db()
 
 
 def get_user_characters(user_id: int) -> List[Dict[str, Any]]:
     """Get all characters for a user (simplified version, used by keyboards)."""
-    conn = get_connection()
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT c.id, c.name, c.level, cl.name as class_name
                 FROM characters c
@@ -309,15 +301,12 @@ def get_user_characters(user_id: int) -> List[Dict[str, Any]]:
                 ORDER BY c.id DESC
             """, (user_id,))
             return cur.fetchall()
-    finally:
-        return_connection(conn)
 
 
 def get_background_from_db(name: str) -> Optional[Dict[str, Any]]:
     """Fetch background data by name."""
-    conn = get_connection()
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT id, name, characteristic1, characteristic2, characteristic3,
                        trait, skills, tools, equipment_a, equipment_b, description, origin_feat
@@ -325,20 +314,15 @@ def get_background_from_db(name: str) -> Optional[Dict[str, Any]]:
                 WHERE name = %s
             """, (name,))
             return cur.fetchone()
-    finally:
-        return_connection(conn)
 
 
 def get_all_backgrounds_from_db() -> List[Dict[str, Any]]:
     """Fetch all backgrounds."""
-    conn = get_connection()
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT id, name
                 FROM backgrounds
                 ORDER BY name
             """)
             return cur.fetchall()
-    finally:
-        return_connection(conn)

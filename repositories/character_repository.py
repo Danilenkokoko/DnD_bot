@@ -4,8 +4,10 @@
 """
 
 import json
+import psycopg2
 from typing import List, Dict, Any, Optional
 from repositories.base_repository import BaseRepository
+from db import get_connection
 
 
 class CharacterRepository(BaseRepository):
@@ -17,33 +19,9 @@ class CharacterRepository(BaseRepository):
 
     def create(self, data: Dict[str, Any]) -> int:
         """
-        Создаёт нового персонажа.
-
-        Ожидаемые ключи в data:
-        - user_id
-        - name
-        - race_id (опционально)
-        - subrace_id (опционально)
-        - class_id (опционально)
-        - background_id (опционально)
-        - level
-        - experience
-        - stats (dict)
-        - hp
-        - ac
-        - speed
-        - selected_skills (list)
-        - selected_masteries (list)
-        - selected_fighting_style (опционально)
-        - selected_invocations (list, но больше не используется, оставлено для совместимости)
-        - selected_spells (list)
-        - selected_weapon (опционально)
-        - selected_armor (опционально)
-        - backstory
-        - image_file_id (опционально)
-        - origin_feat (str)
-        - alignment (str)
+        Создаёт нового персонажа и возвращает его ID.
         """
+        stats = data.get('stats', {})
         query = """
             INSERT INTO characters (
                 user_id, name, race_id, subrace_id, class_id, background_id,
@@ -62,8 +40,6 @@ class CharacterRepository(BaseRepository):
                       %s, %s, %s, %s)
             RETURNING id
         """
-
-        stats = data.get('stats', {})
         params = (
             data['user_id'],
             data['name'],
@@ -94,70 +70,77 @@ class CharacterRepository(BaseRepository):
             data.get('origin_feat', ''),
             data.get('alignment', 'Нейтральный')
         )
-        result = self._execute_insert(query, params)
-        return result
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, params)
+                result = cur.fetchone()
+                if result:
+                    return result[0]
+                else:
+                    raise Exception("Failed to insert character, no ID returned")
 
     def get_by_id(self, character_id: int, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
-        """Возвращает персонажа по ID, опционально проверяя принадлежность пользователю."""
-        query = """
-            SELECT
-                c.id, c.user_id, c.name, c.level, c.experience,
-                c.str, c.dex, c.con, c.int, c.wis, c.cha,
-                c.hp, c.ac, c.speed,
-                c.selected_skills, c.selected_masteries, c.selected_fighting_style,
-                c.selected_invocations, c.selected_spells,
-                c.selected_weapon, c.selected_armor,
-                c.backstory, c.image_file_id, c.origin_feat, c.alignment,
-                r.name as race_name,
-                s.name as subrace_name,
-                cl.name as class_name,
-                b.name as background_name
-            FROM characters c
-            LEFT JOIN races r ON c.race_id = r.id
-            LEFT JOIN subraces s ON c.subrace_id = s.id
-            LEFT JOIN classes cl ON c.class_id = cl.id
-            LEFT JOIN backgrounds b ON c.background_id = b.id
-            WHERE c.id = %s
-        """
-        params = [character_id]
-        if user_id is not None:
-            query += " AND c.user_id = %s"
-            params.append(user_id)
-
-        row = self._fetch_one(query, tuple(params))
-        if not row:
-            return None
-
-        return self._deserialize_character(row)
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                query = """
+                    SELECT
+                        c.id, c.user_id, c.name, c.level, c.experience,
+                        c.str, c.dex, c.con, c.int, c.wis, c.cha,
+                        c.hp, c.ac, c.speed,
+                        c.selected_skills, c.selected_masteries, c.selected_fighting_style,
+                        c.selected_invocations, c.selected_spells,
+                        c.selected_weapon, c.selected_armor,
+                        c.backstory, c.image_file_id, c.origin_feat, c.alignment,
+                        r.name as race_name,
+                        s.name as subrace_name,
+                        cl.name as class_name,
+                        b.name as background_name
+                    FROM characters c
+                    LEFT JOIN races r ON c.race_id = r.id
+                    LEFT JOIN subraces s ON c.subrace_id = s.id
+                    LEFT JOIN classes cl ON c.class_id = cl.id
+                    LEFT JOIN backgrounds b ON c.background_id = b.id
+                    WHERE c.id = %s
+                """
+                params = [character_id]
+                if user_id is not None:
+                    query += " AND c.user_id = %s"
+                    params.append(user_id)
+                cur.execute(query, params)
+                row = cur.fetchone()
+                if not row:
+                    return None
+                return self._deserialize_character(row)
 
     def get_by_user_id(self, user_id: int) -> List[Dict[str, Any]]:
-        """Возвращает всех персонажей пользователя."""
-        query = """
-            SELECT
-                c.id, c.user_id, c.name, c.level, c.experience,
-                c.str, c.dex, c.con, c.int, c.wis, c.cha,
-                c.hp, c.ac, c.speed,
-                c.selected_skills, c.selected_masteries, c.selected_fighting_style,
-                c.selected_invocations, c.selected_spells,
-                c.selected_weapon, c.selected_armor,
-                c.backstory, c.image_file_id, c.origin_feat, c.alignment,
-                r.name as race_name,
-                s.name as subrace_name,
-                cl.name as class_name,
-                b.name as background_name
-            FROM characters c
-            LEFT JOIN races r ON c.race_id = r.id
-            LEFT JOIN subraces s ON c.subrace_id = s.id
-            LEFT JOIN classes cl ON c.class_id = cl.id
-            LEFT JOIN backgrounds b ON c.background_id = b.id
-            WHERE c.user_id = %s
-            ORDER BY c.id DESC
-        """
-        rows = self._fetch_all(query, (user_id,))
-        return [self._deserialize_character(row) for row in rows]
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT
+                        c.id, c.user_id, c.name, c.level, c.experience,
+                        c.str, c.dex, c.con, c.int, c.wis, c.cha,
+                        c.hp, c.ac, c.speed,
+                        c.selected_skills, c.selected_masteries, c.selected_fighting_style,
+                        c.selected_invocations, c.selected_spells,
+                        c.selected_weapon, c.selected_armor,
+                        c.backstory, c.image_file_id, c.origin_feat, c.alignment,
+                        r.name as race_name,
+                        s.name as subrace_name,
+                        cl.name as class_name,
+                        b.name as background_name
+                    FROM characters c
+                    LEFT JOIN races r ON c.race_id = r.id
+                    LEFT JOIN subraces s ON c.subrace_id = s.id
+                    LEFT JOIN classes cl ON c.class_id = cl.id
+                    LEFT JOIN backgrounds b ON c.background_id = b.id
+                    WHERE c.user_id = %s
+                    ORDER BY c.id DESC
+                """, (user_id,))
+                rows = cur.fetchall()
+                return [self._deserialize_character(row) for row in rows]
 
     def update(self, character_id: int, user_id: int, data: Dict[str, Any]) -> bool:
-        """Обновляет данные персонажа."""
         set_clauses = []
         params = []
 
@@ -178,7 +161,6 @@ class CharacterRepository(BaseRepository):
         if not set_clauses:
             return False
 
-        # Можно также обновлять значения характеристик, если нужно
         stat_fields = ['str', 'dex', 'con', 'int', 'wis', 'cha']
         for stat in stat_fields:
             if stat in data:
@@ -187,15 +169,20 @@ class CharacterRepository(BaseRepository):
 
         query = f"UPDATE characters SET {', '.join(set_clauses)} WHERE id = %s AND user_id = %s"
         params.extend([character_id, user_id])
-        return self._execute_update(query, tuple(params))
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, params)
+                return cur.rowcount > 0
 
     def delete(self, character_id: int, user_id: int) -> bool:
-        """Удаляет персонажа."""
         query = "DELETE FROM characters WHERE id = %s AND user_id = %s"
-        return self._execute_delete(query, (character_id, user_id))
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (character_id, user_id))
+                return cur.rowcount > 0
 
     def _deserialize_character(self, row: Dict[str, Any]) -> Dict[str, Any]:
-        """Десериализует JSON поля персонажа."""
         for field in ['selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells']:
             if row.get(field):
                 if isinstance(row[field], str):

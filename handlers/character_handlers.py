@@ -41,6 +41,14 @@ from engine.validators import validate_name as engine_validate_name
 # Импорт строковых констант
 from strings import *
 
+def format_mod(mod_value: int) -> str:
+    if mod_value > 0:
+        return f"+{mod_value}"
+    elif mod_value < 0:
+        return str(mod_value)
+    else:
+        return "0"
+
 logger = logging.getLogger(__name__)
 
 router = Router()
@@ -115,6 +123,8 @@ async def cmd_help(message: Message):
 async def create_character_start(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(CreateCharacter.class_select)
+    # Убираем главную reply-клавиатуру
+    await message.answer("", reply_markup=ReplyKeyboardRemove())
     msg = await message.answer(CLASS_SELECT_TITLE, reply_markup=create_class_keyboard())
     await state.update_data(last_bot_message_id=msg.message_id)
 
@@ -491,12 +501,12 @@ async def calculate_and_show_stats(callback: CallbackQuery, state: FSMContext):
     text = STATS_RESULT_TEMPLATE.format(
         class_name=class_name,
         background=background,
-        STR=stats['STR'], mod_str=f"{mod(stats['STR']):+d}",
-        DEX=stats['DEX'], mod_dex=f"{mod(stats['DEX']):+d}",
-        CON=stats['CON'], mod_con=f"{mod(stats['CON']):+d}",
-        INT=stats['INT'], mod_int=f"{mod(stats['INT']):+d}",
-        WIS=stats['WIS'], mod_wis=f"{mod(stats['WIS']):+d}",
-        CHA=stats['CHA'], mod_cha=f"{mod(stats['CHA']):+d}",
+        STR=stats['STR'], mod_str=format_mod(mod(stats['STR'])),
+        DEX=stats['DEX'], mod_dex=format_mod(mod(stats['DEX'])),
+        CON=stats['CON'], mod_con=format_mod(mod(stats['CON'])),
+        INT=stats['INT'], mod_int=format_mod(mod(stats['INT'])),
+        WIS=stats['WIS'], mod_wis=format_mod(mod(stats['WIS'])),
+        CHA=stats['CHA'], mod_cha=format_mod(mod(stats['CHA'])),
         hp=stats_result['hp'],
         ac=stats_result['ac']
     )
@@ -678,12 +688,12 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             class_name=char_data['class_name'],
             hp=char_data['hp'],
             ac=char_data['ac'],
-            STR=stats['STR'], mod_str=f"{mod(stats['STR']):+d}",
-            DEX=stats['DEX'], mod_dex=f"{mod(stats['DEX']):+d}",
-            CON=stats['CON'], mod_con=f"{mod(stats['CON']):+d}",
-            INT=stats['INT'], mod_int=f"{mod(stats['INT']):+d}",
-            WIS=stats['WIS'], mod_wis=f"{mod(stats['WIS']):+d}",
-            CHA=stats['CHA'], mod_cha=f"{mod(stats['CHA']):+d}",
+            STR=stats['STR'], mod_str=format_mod(mod(stats['STR'])),
+            DEX=stats['DEX'], mod_dex=format_mod(mod(stats['DEX'])),
+            CON=stats['CON'], mod_con=format_mod(mod(stats['CON'])),
+            INT=stats['INT'], mod_int=format_mod(mod(stats['INT'])),
+            WIS=stats['WIS'], mod_wis=format_mod(mod(stats['WIS'])),
+            CHA=stats['CHA'], mod_cha=format_mod(mod(stats['CHA'])),
             spells_preview=spells_preview,
             alignment=char_data['alignment'],
             origin_feat=char_data['origin_feat'] if char_data['origin_feat'] else 'Нет'

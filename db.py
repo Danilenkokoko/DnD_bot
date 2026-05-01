@@ -21,6 +21,7 @@ DB_NAME = os.getenv("DB_NAME", "DND_DB")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
+print(f"Connecting with password: {'*' * len(DB_PASSWORD) if DB_PASSWORD else 'EMPTY'}")
 
 def get_connection():
     """Get a database connection from the pool."""

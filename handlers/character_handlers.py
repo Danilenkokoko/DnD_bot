@@ -39,7 +39,7 @@ from repositories.background_repository import BackgroundRepository
 from repositories.equipment_repository import EquipmentRepository, FightingStyleRepository, InvocationRepository
 from repositories.spell_repository import SpellRepository
 
-from pdf_generator import generate_pdf  # теперь generate_pdf создаёт HTML-файл
+from pdf_generator import generate_pdf
 from engine.validators import validate_name as engine_validate_name
 
 logger = logging.getLogger(__name__)
@@ -958,7 +958,7 @@ async def set_image(message: Message, state: FSMContext):
 
 
 async def finalize_character(message: Message, state: FSMContext, image_file_id: Optional[str] = None):
-    temp_file = None
+    temp_file_path = None
     try:
         await message.answer("⏳ Собираю героя в HTML… пару секунд.", reply_markup=ReplyKeyboardRemove())
 
@@ -1002,7 +1002,7 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             "background_trait": bg_info.get('trait', '') if bg_info else '',
             "background_description": bg_info.get('description', '') if bg_info else '',
             "origin_feat": char_data.get('origin_feat', ''),
-            "race_traits": [],  # можно добавить реальные черты расы, если есть в данных
+            "race_traits": [],
             "class_features": class_info.get('features', []),
             "backstory": char_data['backstory'],
             "alignment": "Нейтральное",
@@ -1018,11 +1018,11 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
 
         safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{safe_name}.html")
-        temp_path = temp_file.name
+        temp_file_path = temp_file.name
         temp_file.close()
 
         # Генерация HTML
-        html_file = generate_pdf(pdf_data, temp_path)  # теперь generate_pdf возвращает HTML путь
+        html_file = generate_pdf(pdf_data, temp_file_path)  # generate_pdf возвращает путь к HTML
 
         if html_file and os.path.exists(html_file):
             await message.answer_document(
@@ -1033,7 +1033,7 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             logger.error(f"HTML не создан: {html_file}")
             await message.answer("⚠️ Не удалось создать файл листа персонажа, но персонаж сохранён в базе!")
 
-        # Короткое сообщение с основными характеристиками (как было)
+        # Короткое сообщение с основными характеристиками
         def mod(s): return (s-10)//2
         spells_preview = ""
         if char_data.get('selected_spells'):
@@ -1068,9 +1068,9 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
                              reply_markup=main_menu())
         await state.clear()
     finally:
-        if temp_file and os.path.exists(temp_file):
+        if temp_file_path and os.path.exists(temp_file_path):
             try:
-                os.unlink(temp_file)
+                os.unlink(temp_file_path)
             except:
                 pass
 

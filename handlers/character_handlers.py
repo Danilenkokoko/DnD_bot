@@ -124,7 +124,7 @@ async def create_character_start(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(CreateCharacter.class_select)
     # Убираем главную reply-клавиатуру
-    await message.answer("", reply_markup=ReplyKeyboardRemove())
+    await message.answer(" ", reply_markup=ReplyKeyboardRemove())
     msg = await message.answer(CLASS_SELECT_TITLE, reply_markup=create_class_keyboard())
     await state.update_data(last_bot_message_id=msg.message_id)
 

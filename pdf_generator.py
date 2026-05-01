@@ -9,6 +9,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, Optional
 from jinja2 import Environment, FileSystemLoader, TemplateError
+from playwright.async_api import async_playwright
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -662,11 +663,11 @@ def generate_character_html(character_data: Dict[str, Any]) -> str:
 
 def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
     """
-    Генерирует HTML-файл (расширение .html). Параметр filename должен оканчиваться на .html
+    Генерирует HTML-файл, но не PDF.
+    Возвращает путь к HTML-файлу (расширение .html).
     """
     try:
         html_content = generate_character_html(data)
-        # Если передан .pdf, меняем на .html
         if filename.endswith('.pdf'):
             filename = filename[:-4] + '.html'
         with open(filename, 'w', encoding='utf-8') as f:
@@ -676,6 +677,38 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"❌ Ошибка при сохранении HTML: {e}")
         return None
+
+# ----------------------------------------------------------------------
+# Конвертация HTML -> PDF через Playwright
+# ----------------------------------------------------------------------
+async def convert_html_to_pdf(html_path: str, pdf_path: str) -> bool:
+    """
+    Асинхронно конвертирует HTML-файл в PDF через Playwright (Chromium).
+    Возвращает True при успехе.
+    """
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
+            # Используем file:// протокол для доступа к локальному файлу
+            await page.goto(f'file://{os.path.abspath(html_path)}', wait_until='networkidle')
+            # Генерируем PDF с настройками для A4 и фоновой печати
+            await page.pdf(
+                path=pdf_path,
+                format='A4',
+                print_background=True,
+                margin={'top': '1.5cm', 'bottom': '1.5cm', 'left': '1.5cm', 'right': '1.5cm'}
+            )
+            await browser.close()
+            if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+                logger.info(f"✅ PDF создан через Playwright: {pdf_path}")
+                return True
+            else:
+                logger.error(f"❌ PDF не создан или пуст: {pdf_path}")
+                return False
+    except Exception as e:
+        logger.error(f"❌ Ошибка конвертации через Playwright: {e}")
+        return False
 
 def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
     import time
@@ -693,7 +726,7 @@ def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
         logger.error(f"❌ Ошибка при очистке: {e}")
 
 if __name__ == "__main__":
-    # Тест
+    # Тест (только HTML, PDF требует асинхронного вызова)
     test_data = {
         "name": "Тестовый Герой",
         "class_name": "Воин",
@@ -724,5 +757,6 @@ if __name__ == "__main__":
     html_file = generate_pdf(test_data, "test_character.html")
     if html_file:
         print(f"✅ HTML создан: {html_file}")
+        # Асинхронную конвертацию здесь не вызываем, только в боте
     else:
         print("❌ Ошибка создания HTML")

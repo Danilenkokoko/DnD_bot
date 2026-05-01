@@ -1,13 +1,14 @@
 # pdf_generator.py
 """
 HTML Generator Module for D&D Character Sheets
-Генерирует красивый HTML-лист персонажа в стиле D&D 5e.
+Генерирует красивый HTML-лист персонажа в стиле D&D 5e,
+а также умеет конвертировать HTML в PDF через WeasyPrint.
 """
 
 import os
 import logging
-from typing import Dict, Any, Optional
 from datetime import datetime
+from typing import Dict, Any, Optional
 from jinja2 import Environment, FileSystemLoader, TemplateError
 from weasyprint import HTML, CSS
 from weasyprint.text.fonts import FontConfiguration
@@ -15,7 +16,9 @@ from weasyprint.text.fonts import FontConfiguration
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ----------------------------------------------------------------------
 # HTML-шаблон (ваш лист.html, адаптированный для Jinja2)
+# ----------------------------------------------------------------------
 DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -356,12 +359,53 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
             .corner { width: 35px; height: 35px; }
             .sheet::after { font-size: 130px; bottom: 0; right: 0; }
         }
+        /* Печатная версия — логические разрывы страниц */
         @media print {
-            body { background: white; padding: 0; }
-            .sheet { box-shadow: none; background: white; padding: 0.2in; }
-            .sheet::after, .corner { display: none; }
-            .combat-card, .stat-card { border-bottom: 1px solid #aaa; }
-            .detail-title { background: #ddd; color: black; }
+            body {
+                background: white;
+                padding: 0;
+                margin: 0;
+            }
+            .sheet {
+                background: white;
+                box-shadow: none;
+                padding: 0.2in;
+                margin: 0;
+                page-break-after: avoid;
+                break-inside: avoid;
+            }
+            .detail-section, .spells-section, .notes-section {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+            .detail-title {
+                background: #ddd;
+                color: black;
+                page-break-after: avoid;
+                break-after: avoid;
+            }
+            .detail-content {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+            .traits-list, .equipment-list {
+                break-inside: auto;
+            }
+            .traits-list li, .equipment-list li {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+            .spells-list {
+                break-inside: auto;
+            }
+            .spell-item {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+            .stats-grid, .saves-skills, .combat-stats, .basic-info {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
         }
     </style>
 </head>
@@ -471,39 +515,25 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
 </body>
 </html>'''
 
-
+# ----------------------------------------------------------------------
+# Утилиты для шаблона
+# ----------------------------------------------------------------------
 def get_skill_ability(skill_name: str) -> str:
-    """Возвращает характеристику для навыка (русские названия)"""
     skill_map = {
-        "Акробатика": "DEX",
-        "Атлетика": "STR",
-        "Аркана": "INT",
-        "Восприятие": "WIS",
-        "Выживание": "WIS",
-        "Выступление": "CHA",
-        "Запугивание": "CHA",
-        "История": "INT",
-        "Ловкость рук": "DEX",
-        "Медицина": "WIS",
-        "Обман": "CHA",
-        "Обращение с животными": "WIS",
-        "Природа": "INT",
-        "Проницательность": "WIS",
-        "Расследование": "INT",
-        "Религия": "INT",
-        "Скрытность": "DEX",
-        "Тайная магия": "INT",
+        "Акробатика": "DEX", "Атлетика": "STR", "Аркана": "INT",
+        "Восприятие": "WIS", "Выживание": "WIS", "Выступление": "CHA",
+        "Запугивание": "CHA", "История": "INT", "Ловкость рук": "DEX",
+        "Медицина": "WIS", "Обман": "CHA", "Обращение с животными": "WIS",
+        "Природа": "INT", "Проницательность": "WIS", "Расследование": "INT",
+        "Религия": "INT", "Скрытность": "DEX", "Тайная магия": "INT",
         "Убеждение": "CHA"
     }
     return skill_map.get(skill_name, "WIS")
 
-
 def calculate_modifier(stat_value: int) -> int:
     return (stat_value - 10) // 2
 
-
 def prepare_template_data(character_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Подготавливает данные для шаблона: вычисляет модификаторы навыков, добавляет списки."""
     all_skills = [
         "Акробатика", "Атлетика", "Аркана", "Восприятие", "Выживание",
         "Выступление", "Запугивание", "История", "Ловкость рук", "Медицина",
@@ -556,9 +586,10 @@ def prepare_template_data(character_data: Dict[str, Any]) -> Dict[str, Any]:
         'created_date': datetime.now().strftime("%d.%m.%Y")
     }
 
-
+# ----------------------------------------------------------------------
+# Работа с шаблоном
+# ----------------------------------------------------------------------
 def ensure_template_exists() -> bool:
-    """Создаёт папку templates и файл шаблона, если их нет."""
     try:
         if not os.path.exists("templates"):
             os.makedirs("templates")
@@ -573,11 +604,7 @@ def ensure_template_exists() -> bool:
         logger.error(f"❌ Ошибка при создании шаблона: {e}")
         return False
 
-
 def generate_character_html(character_data: Dict[str, Any]) -> str:
-    """
-    Генерирует HTML-строку листа персонажа на основе шаблона.
-    """
     if not ensure_template_exists():
         raise RuntimeError("Не удалось создать шаблон")
     env = Environment(loader=FileSystemLoader("templates"), autoescape=True)
@@ -591,11 +618,7 @@ def generate_character_html(character_data: Dict[str, Any]) -> str:
         logger.error(f"❌ Ошибка рендеринга шаблона: {e}")
         raise
 
-
 def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
-    """
-    Генерирует HTML-файл (замена старого PDF). Расширение файла должно быть .html.
-    """
     try:
         html_content = generate_character_html(data)
         if filename.endswith('.pdf'):
@@ -608,23 +631,9 @@ def generate_pdf(data: Dict[str, Any], filename: str) -> Optional[str]:
         logger.error(f"❌ Ошибка при сохранении HTML: {e}")
         return None
 
-
-def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
-    """Очистка старых HTML и PDF файлов (для совместимости)."""
-    import time
-    try:
-        current_time = time.time()
-        max_age_seconds = max_age_hours * 3600
-        for filename in os.listdir(directory):
-            if (filename.startswith("temp_") or filename.endswith("_character_sheet")) and (filename.endswith(".html") or filename.endswith(".pdf")):
-                filepath = os.path.join(directory, filename)
-                file_age = current_time - os.path.getmtime(filepath)
-                if file_age > max_age_seconds:
-                    os.remove(filepath)
-                    logger.info(f"🗑️ Удален старый файл: {filename}")
-    except Exception as e:
-        logger.error(f"❌ Ошибка при очистке: {e}")
-
+# ----------------------------------------------------------------------
+# Конвертация HTML -> PDF
+# ----------------------------------------------------------------------
 def convert_html_to_pdf(html_path: str, pdf_path: str) -> bool:
     """
     Конвертирует HTML-файл в PDF с помощью WeasyPrint.
@@ -644,39 +653,57 @@ def convert_html_to_pdf(html_path: str, pdf_path: str) -> bool:
         logger.error(f"❌ Ошибка конвертации HTML в PDF: {e}")
         return False
 
+def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
+    import time
+    try:
+        current_time = time.time()
+        max_age_seconds = max_age_hours * 3600
+        for filename in os.listdir(directory):
+            if (filename.startswith("temp_") or filename.endswith("_character_sheet")) and (filename.endswith(".html") or filename.endswith(".pdf")):
+                filepath = os.path.join(directory, filename)
+                file_age = current_time - os.path.getmtime(filepath)
+                if file_age > max_age_seconds:
+                    os.remove(filepath)
+                    logger.info(f"🗑️ Удален старый файл: {filename}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка при очистке: {e}")
 
 if __name__ == "__main__":
+    # Тест
     test_data = {
-        "name": "Арагорн",
-        "class_name": "Следопыт",
+        "name": "Тестовый Герой",
+        "class_name": "Воин",
         "race": "Человек",
-        "level": 3,
-        "background": "Стражник",
-        "background_trait": "Бдительный",
-        "background_description": "Вы прошли через множество сражений...",
-        "origin_feat": "Бдительный",
-        "backstory": "Родился в семье лесничих...",
-        "stats": {"STR": 16, "DEX": 14, "CON": 15, "INT": 12, "WIS": 13, "CHA": 11},
-        "hp": 32,
+        "level": 1,
+        "background": "Солдат",
+        "stats": {"STR": 16, "DEX": 14, "CON": 14, "INT": 10, "WIS": 12, "CHA": 10},
+        "hp": 12,
         "ac": 16,
         "speed": 30,
-        "alignment": "Добрый",
-        "player_name": "Иван",
-        "experience": 900,
-        "proficiency_bonus": 2,
-        "saving_throws": ["STR", "DEX"],
-        "skills": ["Атлетика", "Выживание", "Восприятие"],
-        "race_traits": ["Универсальность человечества", "+1 ко всем характеристикам"],
-        "class_features": ["Боевой стиль: Стрельба", "Первобытное чутьё", "Избранный враг: Звери"],
-        "equipment": ["Длинный лук", "20 стрел", "Кожаная броня", "Два кинжала"],
-        "coins": "50 ЗМ",
-        "notes": "Ищет доказательства...",
+        "skills": ["Атлетика", "Восприятие"],
+        "equipment": ["Длинный меч", "Кольчуга"],
         "spells": [],
+        "proficiency_bonus": 2,
+        "saving_throws": ["STR", "CON"],
+        "race_traits": ["Универсальность человечества"],
+        "class_features": ["Второе дыхание", "Боевой стиль"],
+        "backstory": "Родился в семье солдата...",
+        "alignment": "Нейтральное",
+        "player_name": "Тестер",
+        "experience": 0,
+        "notes": "",
+        "coins": "50 ЗМ",
         "spell_slots_1": 0,
-        "spell_slots_2": 0
+        "spell_slots_2": 0,
+        "appearance": ""
     }
-    result = generate_pdf(test_data, "test_character.html")
-    if result:
-        print(f"✅ HTML успешно создан: {result}")
+    html_file = generate_pdf(test_data, "test_character.html")
+    if html_file:
+        print(f"✅ HTML создан: {html_file}")
+        pdf_file = html_file.replace('.html', '.pdf')
+        if convert_html_to_pdf(html_file, pdf_file):
+            print(f"✅ PDF создан: {pdf_file}")
+        else:
+            print("❌ Не удалось создать PDF")
     else:
-        print("❌ Ошибка при создании HTML")
+        print("❌ Ошибка создания HTML")

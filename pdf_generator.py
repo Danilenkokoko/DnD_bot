@@ -209,10 +209,26 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
             color: var(--text-dark);
         }
         .section-title i { margin-right: 8px; color: var(--accent); }
-        .save-row, .skill-row {
+        .save-row {
             display: flex;
             justify-content: space-between;
             padding: 6px 0;
+            border-bottom: 1px dotted #cfbc9a;
+            font-size: 15px;
+            font-weight: 500;
+        }
+        /* Навыки теперь в две колонки */
+        .skills-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 4px 12px;
+        }
+        .skill-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            break-inside: avoid;
+            page-break-inside: avoid;
             border-bottom: 1px dotted #cfbc9a;
             font-size: 15px;
             font-weight: 500;
@@ -351,6 +367,7 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
             .sheet { padding: 18px 16px; }
             .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
             .saves-skills { grid-template-columns: 1fr; gap: 18px; }
+            .skills-list { grid-template-columns: 1fr; }
             .combat-stats { grid-template-columns: 1fr; gap: 12px; }
             .basic-info { grid-template-columns: 1fr; gap: 12px; }
             .stat-score { font-size: 28px; }
@@ -369,42 +386,33 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
             .sheet {
                 background: white;
                 box-shadow: none;
-                padding: 0.2in;
+                padding: 0.6in;
                 margin: 0;
-                page-break-after: avoid;
-                break-inside: avoid;
             }
-            .detail-section, .spells-section, .notes-section {
+            /* Запрет разрыва внутри коротких блоков */
+            .stats-grid, .combat-stats, .basic-info, .saves-section, .skills-section {
                 break-inside: avoid;
                 page-break-inside: avoid;
             }
+            /* Длинные списки могут разрываться между элементами */
+            .traits-list, .equipment-list, .spells-list {
+                break-inside: auto;
+            }
+            .traits-list li, .equipment-list li, .spell-item {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+            /* Заголовок блока не отрывать от содержимого */
             .detail-title {
-                background: #ddd;
-                color: black;
-                page-break-after: avoid;
                 break-after: avoid;
+                page-break-after: avoid;
             }
-            .detail-content {
+            .skill-row {
                 break-inside: avoid;
-                page-break-inside: avoid;
             }
-            .traits-list, .equipment-list {
-                break-inside: auto;
-            }
-            .traits-list li, .equipment-list li {
-                break-inside: avoid;
-                page-break-inside: avoid;
-            }
-            .spells-list {
-                break-inside: auto;
-            }
-            .spell-item {
-                break-inside: avoid;
-                page-break-inside: avoid;
-            }
-            .stats-grid, .saves-skills, .combat-stats, .basic-info {
-                break-inside: avoid;
-                page-break-inside: avoid;
+            @page {
+                size: A4;
+                margin: 1.5cm;
             }
         }
     </style>
@@ -446,12 +454,14 @@ DEFAULT_HTML_TEMPLATE = '''<!DOCTYPE html>
         </div>
         <div class="skills-section">
             <div class="section-title"><i class="fas fa-feather-alt"></i> НАВЫКИ</div>
-            {% for skill in all_skills %}
-            <div class="skill-row">
-                <span>{% if skill in skills %}✓{% else %}•{% endif %} {{ skill }}</span>
-                <span>{{ skill_mods[skill] }}</span>
+            <div class="skills-list">
+                {% for skill in all_skills %}
+                <div class="skill-row">
+                    <span>{% if skill in skills %}✓{% else %}•{% endif %} {{ skill }}</span>
+                    <span>{{ skill_mods[skill] }}</span>
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
     </div>
     <div class="combat-stats">
@@ -669,7 +679,7 @@ def cleanup_old_pdfs(directory: str = ".", max_age_hours: int = 24):
         logger.error(f"❌ Ошибка при очистке: {e}")
 
 if __name__ == "__main__":
-    # Тест
+    # Тестовый запуск
     test_data = {
         "name": "Тестовый Герой",
         "class_name": "Воин",

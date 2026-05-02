@@ -306,6 +306,11 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
     skill_choices = class_info.get('skill_choices', 2)
     selected_skills = user_data.get("selected_class_skills", [])
 
+    logger.info(f"handle_skills_selection: data={callback.data}, state={await state.get_state()}")
+    user_data = await state.get_data()
+    logger.info(
+        f"selected_skills={user_data.get('selected_class_skills')}, skill_choices={class_info.get('skill_choices')}")
+
     if data == "class_skills_ready":
         if len(selected_skills) == skill_choices:
             await state.update_data(selected_class_skills=selected_skills)

@@ -21,18 +21,12 @@ from strings import (
     BTN_SKILLS_READY, BTN_SKILLS_READY_DISABLED, BTN_BACK_TO_RACES,
     BTN_BACK_TO_SPELLS, BTN_STYLE_SKIP, BTN_ALIGNMENT_NAMES,
     BTN_VIEW_CHAR, BTN_WEBAPP_CHAR, BTN_DELETE_ITEM, BTN_CANCEL_DELETE,
-    BTN_CATEGORY, BTN_SPELL_LIST_ITEM, BTN_BACK_TO_CATEGORIES,
-    BTN_REMOVE_SPELL, BTN_ADD_SPELL, BTN_BACK_TO_LIST, BTN_REMAINING_COUNT,
     BTN_DRUID_ORDER_GUIDE, BTN_DRUID_ORDER_GUARDIAN,
     BTN_CLERIC_ORDER_PROTECTOR, BTN_CLERIC_ORDER_MIRACLE,
     BTN_WARLOCK_PACT_TOME, BTN_WARLOCK_PACT_BLADE, BTN_WARLOCK_PACT_CHAIN,
     BTN_WARLOCK_PACT_SHADOW_ARMOR, BTN_WARLOCK_PACT_ARCANE_MIND
 )
 
-
-# =========================================================
-# REPLY KEYBOARDS
-# =========================================================
 
 def main_menu() -> ReplyKeyboardMarkup:
     keyboard = [
@@ -64,10 +58,6 @@ def continue_kb_for_spells() -> ReplyKeyboardMarkup:
         resize_keyboard=True
     )
 
-
-# =========================================================
-# INLINE KEYBOARDS
-# =========================================================
 
 def create_class_keyboard() -> InlineKeyboardMarkup:
     classes = get_class_list()
@@ -189,9 +179,8 @@ def create_alignment_keyboard() -> InlineKeyboardMarkup:
 
 
 # =========================================================
-# НОВЫЕ КЛАВИАТУРЫ ДЛЯ ДОПОЛНИТЕЛЬНЫХ ВЫБОРОВ
+# КЛАВИАТУРЫ ДЛЯ ОРДЕНОВ, ДОГОВОРОВ И Т.Д.
 # =========================================================
-
 def create_druid_order_keyboard() -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text=BTN_DRUID_ORDER_GUIDE, callback_data="druid_order_guide")],
@@ -223,19 +212,20 @@ def create_warlock_pact_keyboard() -> InlineKeyboardMarkup:
 
 
 # =========================================================
-# КЛАВИАТУРЫ ДЛЯ ПЛУТА (ЭКСПЕРТИЗА, ЯЗЫК) – ПОКА ЗАГОТОВКИ
+# КЛАВИАТУРЫ ДЛЯ ПЛУТА
 # =========================================================
-def create_rogue_expertise_keyboard(available_skills: List[str]) -> InlineKeyboardMarkup:
-    """Клавиатура для выбора двух навыков для экспертности (до 2)."""
+def create_rogue_expertise_keyboard(skills: List[str], selected: List[str] = None) -> InlineKeyboardMarkup:
+    if selected is None:
+        selected = []
     buttons = []
-    for skill in available_skills:
-        buttons.append([InlineKeyboardButton(text=skill, callback_data=f"rogue_expertise_{skill}")])
+    for skill in skills:
+        check = "✅ " if skill in selected else "🔘 "
+        buttons.append([InlineKeyboardButton(text=f"{check}{skill}", callback_data=f"rogue_expertise_{skill}")])
     buttons.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def create_rogue_language_keyboard(languages: List[str]) -> InlineKeyboardMarkup:
-    """Клавиатура для выбора дополнительного языка."""
     buttons = []
     row = []
     for i, lang in enumerate(languages):
@@ -250,7 +240,6 @@ def create_rogue_language_keyboard(languages: List[str]) -> InlineKeyboardMarkup
 # =========================================================
 # КЛАВИАТУРЫ ДЛЯ ПРОСМОТРА И УДАЛЕНИЯ ПЕРСОНАЖЕЙ
 # =========================================================
-
 def create_character_list_keyboard(user_id: int) -> Optional[InlineKeyboardMarkup]:
     characters = get_user_characters(user_id)
     if not characters:

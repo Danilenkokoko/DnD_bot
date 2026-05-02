@@ -84,13 +84,21 @@ class SpellSelectionService:
             if cleric_order == "miracle":
                 extra_cantrips = 1
         elif class_name == "Следопыт":
+            # У следопыта нет заговоров, заклинания 1 уровня – 2 шт. + автоматическая Метка охотника
             auto_level1.append("Метка охотника")
 
         spell_counts = _class_repo.get_spell_counts(class_name)
         base_cantrips = spell_counts.get('cantrips', 0)
         base_level1 = spell_counts.get('level1', 0)
+
+        # Волшебник: увеличиваем количество заклинаний 1 уровня до 6
         if class_name == "Волшебник":
             base_level1 = 6
+
+        # Следопыт: заклинаний 1 уровня должно быть 2 (если в БД не задано)
+        if class_name == "Следопыт":
+            base_level1 = 2
+
         cantrips_required = base_cantrips + extra_cantrips
         level1_required = base_level1
 
@@ -110,7 +118,10 @@ class SpellSelectionService:
         if not selector:
             await callback.answer("❌ Ошибка инициализации выбора заклинаний", show_alert=True)
             return
-        selector.cantrip_state.required_count = cantrips_required
+        if selector.cantrip_state:
+            selector.cantrip_state.required_count = cantrips_required
+        if selector.level1_state:
+            selector.level1_state.required_count = level1_required
         await state.update_data(spell_selector=selector.to_dict())
 
         categories = selector.get_cantrip_categories()
@@ -277,21 +288,36 @@ class SpellSelectionService:
         if not selector:
             await callback.answer("❌ Ошибка инициализации выбора заклинаний", show_alert=True)
             return
+
+        # Применяем автоматические заклинания (уже добавлены в state)
         auto_level1 = data.get("auto_level1", [])
         for spell in auto_level1:
             if spell not in selector.get_selected_level1_spells():
                 selector.add_level1_spell(spell)
         await state.update_data(spell_selector=selector.to_dict())
+
+        # Устанавливаем требуемое количество заклинаний
+        base_level1 = _class_repo.get_spell_counts(class_name).get('level1', 0)
+        if class_name == "Волшебник":
+            base_level1 = 6
+        if class_name == "Следопыт":
+            base_level1 = 2
+        if selector.level1_state:
+            selector.level1_state.required_count = base_level1
+            await state.update_data(spell_selector=selector.to_dict())
+
         if not selector.has_level1_spells:
             from handlers.character_handlers import go_to_fighting_style
             await go_to_fighting_style(callback, state)
             return
+
         categories = selector.get_level1_categories()
         selected_count, required = selector.get_level1_progress()
         if not categories:
             from handlers.character_handlers import go_to_fighting_style
             await go_to_fighting_style(callback, state)
             return
+
         await state.set_state(CreateCharacter.spells_level1_category)
         text = LEVEL1_SPELL_SELECTION_START.format(
             class_name=selector.class_name,

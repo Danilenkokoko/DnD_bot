@@ -29,7 +29,9 @@ from keyboards.character_keyboards import (
     create_fighting_style_keyboard,
     create_druid_order_keyboard,
     create_cleric_order_keyboard,
-    create_warlock_pact_keyboard
+    create_warlock_pact_keyboard,
+    create_rogue_expertise_keyboard,
+    create_rogue_language_keyboard
 )
 
 from services.character_service import CharacterStatsService, CharacterFinalizationService
@@ -41,6 +43,7 @@ from repositories.class_repository import ClassRepository
 from repositories.background_repository import BackgroundRepository
 from repositories.equipment_repository import EquipmentRepository, FightingStyleRepository
 from repositories.spell_repository import SpellRepository
+from db import get_connection
 
 from engine.validators import validate_name as engine_validate_name
 
@@ -132,6 +135,20 @@ async def show_cleric_order_selection(callback: CallbackQuery, state: FSMContext
 async def show_warlock_pact_selection(callback: CallbackQuery, state: FSMContext):
     text = "🔮 Выбери свой договор:\n\n• Договор гримуара – книга теней\n• Договор клинка – призыв оружия\n• Договор цепи – улучшенный фамильяр\n• Доспех теней – бесплатный «Доспех мага»\n• Мистический разум – преимущество на концентрацию"
     await send_new_from_callback(callback, state, text, reply_markup=create_warlock_pact_keyboard())
+
+async def handle_rogue_extras(callback: CallbackQuery, state: FSMContext):
+    """Показывает выбор навыков для экспертности и языка для плута."""
+    data = await state.get_data()
+    # Получаем список навыков, выбранных классом (хранятся в selected_class_skills)
+    class_skills = data.get("selected_class_skills", [])
+    if not class_skills:
+        # Если почему-то нет, можно взять из БД навыки плута
+        class_info = _class_repo.get_by_name("Плут")
+        class_skills = class_info.get('skills', []) if class_info else []
+    await state.update_data(available_skills_for_expertise=class_skills, rogue_expertise_selected=[])
+    await state.set_state(CreateCharacter.rogue_expertise_select)
+    text = "🎭 Выбери два навыка для экспертности (удвоенный бонус мастерства):"
+    await send_new_from_callback(callback, state, text, reply_markup=create_rogue_expertise_keyboard(class_skills, []))
 
 # =========================================================
 # КОМАНДЫ
@@ -227,9 +244,6 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
     elif class_name == "Колдун":
         await state.set_state(CreateCharacter.warlock_pact_select)
         await show_warlock_pact_selection(callback, state)
-    elif class_name == "Плут":
-        # Сначала навыки, потом экспертиза и язык
-        await proceed_to_skills(callback, state)
     else:
         await proceed_to_skills(callback, state)
     await callback.answer()
@@ -295,8 +309,12 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
     if data == "class_skills_ready":
         if len(selected_skills) == skill_choices:
             await state.update_data(selected_class_skills=selected_skills)
-            await state.set_state(CreateCharacter.class_equipment_select)
-            await show_class_equipment(callback, state)
+            # После выбора навыков, если класс Плут, переходим к дополнительным шагам
+            if class_name == "Плут":
+                await handle_rogue_extras(callback, state)
+            else:
+                await state.set_state(CreateCharacter.class_equipment_select)
+                await show_class_equipment(callback, state)
             await callback.answer(SKILLS_SUCCESS)
         else:
             await callback.answer(SKILLS_ERROR_WRONG_COUNT.format(skill_choices=skill_choices, selected=len(selected_skills)), show_alert=True)
@@ -322,6 +340,48 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
             await callback.answer(SKILLS_ERROR_GENERIC, show_alert=True)
         await callback.answer()
         return
+
+# =========================================================
+# ОБРАБОТЧИКИ ДЛЯ ПЛУТА (ЭКСПЕРТИЗА И ЯЗЫК)
+# =========================================================
+@router.callback_query(CreateCharacter.rogue_expertise_select, lambda c: c.data.startswith("rogue_expertise_"))
+async def select_rogue_expertise(callback: CallbackQuery, state: FSMContext):
+    skill = callback.data.replace("rogue_expertise_", "")
+    data = await state.get_data()
+    selected = data.get("rogue_expertise_selected", [])
+    if skill in selected:
+        selected.remove(skill)
+        await callback.answer(f"❌ {skill} убран из экспертности")
+    else:
+        if len(selected) >= 2:
+            await callback.answer("❌ Нельзя выбрать больше двух навыков", show_alert=True)
+            return
+        selected.append(skill)
+        await callback.answer(f"✅ {skill} добавлен в экспертность")
+    await state.update_data(rogue_expertise_selected=selected)
+    available = data.get("available_skills_for_expertise", [])
+    keyboard = create_rogue_expertise_keyboard(available, selected)
+    await callback.message.edit_reply_markup(reply_markup=keyboard)
+    if len(selected) == 2:
+        # Сохраняем выбранные навыки в state
+        await state.update_data(rogue_expertise=selected)
+        await state.set_state(CreateCharacter.rogue_language_select)
+        # Получаем список языков из БД
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT name FROM languages ORDER BY name")
+                languages = [row[0] for row in cur.fetchall()]
+        text = "🗣️ Выбери дополнительный язык (кроме Воровского жаргона):"
+        await send_new_from_callback(callback, state, text, reply_markup=create_rogue_language_keyboard(languages))
+    await callback.answer()
+
+@router.callback_query(CreateCharacter.rogue_language_select, lambda c: c.data.startswith("rogue_lang_"))
+async def select_rogue_language(callback: CallbackQuery, state: FSMContext):
+    language = callback.data.replace("rogue_lang_", "")
+    await state.update_data(rogue_extra_language=language)
+    await callback.answer(f"✅ Выбран язык: {language}")
+    await state.set_state(CreateCharacter.class_equipment_select)
+    await show_class_equipment(callback, state)
 
 # =========================================================
 # ШАГ 3: ВЫБОР СНАРЯЖЕНИЯ КЛАССА

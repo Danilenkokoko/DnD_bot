@@ -39,30 +39,28 @@ _class_repo = ClassRepository()
 class SpellSelectionService:
     """Сервис управления выбором заклинаний"""
 
-    # ========== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ДЛЯ РЕДАКТИРОВАНИЯ ==========
     @staticmethod
-    async def _edit_main(callback: CallbackQuery, state: FSMContext, text: str, reply_markup=None):
+    async def _ensure_selector(state: FSMContext, class_name: str = None) -> Optional[SpellSelector]:
+        """Гарантирует наличие селектора в состоянии. Возвращает селектор или None."""
         data = await state.get_data()
-        chat_id = data.get('edit_chat_id')
-        msg_id = data.get('edit_message_id')
-        if chat_id and msg_id:
-            await callback.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=msg_id,
-                text=text,
-                reply_markup=reply_markup,
-                parse_mode=None
-            )
-        else:
-            await callback.message.edit_text(text, reply_markup=reply_markup)
+        selector_data = data.get("spell_selector")
+        if not selector_data:
+            if not class_name:
+                class_name = data.get("class_name")
+            if not class_name:
+                logger.error("Не удалось определить class_name для создания селектора")
+                return None
+            selector = SpellSelector(class_name)
+            await state.update_data(spell_selector=selector.to_dict())
+            logger.info(f"Создан новый SpellSelector для класса {class_name}")
+            return selector
+        return SpellSelector.from_dict(selector_data)
 
     # ========== ЗАГОВОРЫ (CANTRIPS) ==========
     @staticmethod
     async def start_cantrips_selection(callback: CallbackQuery, state: FSMContext) -> None:
         data = await state.get_data()
-        selector_data = data.get("spell_selector")
         class_name = data.get("class_name")
-
         class_info = _class_repo.get_by_name(class_name)
         is_spellcaster = class_info.get('is_spellcaster', False) if class_info else False
         if not is_spellcaster:
@@ -74,12 +72,10 @@ class SpellSelectionService:
         auto_cantrips = []
         auto_level1 = []
         extra_cantrips = 0
-
         if class_name == "Артефактор":
             auto_cantrips.append("Починка")
         elif class_name == "Друид":
             auto_level1.append("Разговор с животными")
-            # Проверяем, выбран ли орден Ведун
             druid_order = data.get("druid_order")
             if druid_order == "guide":
                 extra_cantrips = 1
@@ -88,49 +84,37 @@ class SpellSelectionService:
             if cleric_order == "miracle":
                 extra_cantrips = 1
         elif class_name == "Следопыт":
-            # Следопыт не имеет заговоров, но имеет автоматическое заклинание
             auto_level1.append("Метка охотника")
 
-        # Получаем базовые количества из БД
         spell_counts = _class_repo.get_spell_counts(class_name)
         base_cantrips = spell_counts.get('cantrips', 0)
         base_level1 = spell_counts.get('level1', 0)
-
-        # Для волшебника увеличиваем количество заклинаний 1 уровня до 6
         if class_name == "Волшебник":
             base_level1 = 6
-
-        # Применяем дополнительные заговоры от орденов
         cantrips_required = base_cantrips + extra_cantrips
         level1_required = base_level1
 
-        # Если нет ни заговоров, ни заклинаний – переходим дальше
         if cantrips_required == 0 and level1_required == 0:
             from handlers.character_handlers import go_to_fighting_style
             await go_to_fighting_style(callback, state)
             return
-
-        # Если есть только заклинания 1 уровня – сразу к ним
         if cantrips_required == 0 and level1_required > 0:
             await SpellSelectionService.start_level1_selection(callback, state)
             return
 
-        # Сохраняем автоматические заклинания в state
+        # Сохраняем авто-списки в state
         await state.update_data(auto_cantrips=auto_cantrips, auto_level1=auto_level1)
 
-        # Создаём или обновляем селектор
-        if not selector_data:
-            selector = SpellSelector(class_name)
-        else:
-            selector = SpellSelector.from_dict(selector_data)
-
-        # Если уже есть выбранные заклинания, добавляем автоматические (чтобы они не предлагались)
-        # Устанавливаем требуемое количество заговоров
+        # Создаём селектор
+        selector = await SpellSelectionService._ensure_selector(state, class_name)
+        if not selector:
+            await callback.answer("❌ Ошибка инициализации выбора заклинаний", show_alert=True)
+            return
         selector.cantrip_state.required_count = cantrips_required
+        await state.update_data(spell_selector=selector.to_dict())
 
         categories = selector.get_cantrip_categories()
         selected_count, required = selector.get_cantrip_progress()
-
         if not categories:
             from handlers.character_handlers import go_to_fighting_style
             await go_to_fighting_style(callback, state)
@@ -149,27 +133,22 @@ class SpellSelectionService:
     @staticmethod
     async def show_cantrips_in_category(callback: CallbackQuery, state: FSMContext) -> None:
         category = callback.data.replace("cantrip_cat_", "")
-        data = await state.get_data()
-        selector_data = data.get("spell_selector", {})
-        if not selector_data:
+        selector = await SpellSelectionService._ensure_selector(state)
+        if not selector:
             await callback.answer("❌ Ошибка: данные о заклинаниях не найдены", show_alert=True)
             return
-        selector = SpellSelector.from_dict(selector_data)
+        data = await state.get_data()
         auto_cantrips = data.get("auto_cantrips", [])
-
-        # Фильтруем заклинания: исключаем автоматические
-        all_spells = selector.get_cantrips_in_category(category)
-        spells = [s for s in all_spells if s['name'] not in auto_cantrips]
+        spells = selector.get_cantrips_in_category(category)
+        spells = [s for s in spells if s['name'] not in auto_cantrips]
         selected_spells = selector.get_selected_cantrips()
         await state.update_data(current_category=category)
         await state.set_state(CreateCharacter.spells_cantrips_list)
-
         if not spells:
             text = CANTRIP_CATEGORY_EMPTY.format(category=category)
             await send_new_from_callback(callback, state, text)
             await callback.answer()
             return
-
         text = CANTRIP_LIST_TITLE.format(category=category)
         await send_new_from_callback(callback, state, text,
                                      reply_markup=create_spell_list_keyboard(spells, "cantrip", selected_spells, category))
@@ -182,12 +161,10 @@ class SpellSelectionService:
         if not spell:
             await callback.answer("❌ Заговор не найден")
             return
-        data = await state.get_data()
-        selector_data = data.get("spell_selector", {})
-        if not selector_data:
+        selector = await SpellSelectionService._ensure_selector(state)
+        if not selector:
             await callback.answer("❌ Ошибка: данные о заклинаниях не найдены", show_alert=True)
             return
-        selector = SpellSelector.from_dict(selector_data)
         is_selected = spell['name'] in selector.get_selected_cantrips()
         remaining = selector.cantrip_state.remaining_count if selector.cantrip_state else 0
         await state.update_data(current_spell_id=spell_id, current_spell_name=spell['name'])
@@ -209,12 +186,11 @@ class SpellSelectionService:
 
     @staticmethod
     async def add_cantrip(callback: CallbackQuery, state: FSMContext) -> None:
-        data = await state.get_data()
-        selector_data = data.get("spell_selector", {})
-        if not selector_data:
+        selector = await SpellSelectionService._ensure_selector(state)
+        if not selector:
             await callback.answer("❌ Ошибка: данные о заклинаниях не найдены", show_alert=True)
             return
-        selector = SpellSelector.from_dict(selector_data)
+        data = await state.get_data()
         spell_name = data.get("current_spell_name")
         category = data.get("current_category")
         if not spell_name:
@@ -232,7 +208,6 @@ class SpellSelectionService:
                     await go_to_fighting_style(callback, state)
             else:
                 await state.set_state(CreateCharacter.spells_cantrips_list)
-                # Снова фильтруем автоматические заклинания
                 auto_cantrips = data.get("auto_cantrips", [])
                 spells = selector.get_cantrips_in_category(category)
                 spells = [s for s in spells if s['name'] not in auto_cantrips]
@@ -242,16 +217,13 @@ class SpellSelectionService:
                                              reply_markup=create_spell_list_keyboard(spells, "cantrip", selected_spells, category))
         await callback.answer()
 
-    # Аналогично метод remove_cantrip (опущен для краткости, но должен быть аналогичным)
     @staticmethod
     async def remove_cantrip(callback: CallbackQuery, state: FSMContext) -> None:
-        # Реализация аналогична add_cantrip, но с удалением
-        data = await state.get_data()
-        selector_data = data.get("spell_selector", {})
-        if not selector_data:
+        selector = await SpellSelectionService._ensure_selector(state)
+        if not selector:
             await callback.answer("❌ Ошибка: данные о заклинаниях не найдены", show_alert=True)
             return
-        selector = SpellSelector.from_dict(selector_data)
+        data = await state.get_data()
         spell_name = data.get("current_spell_name")
         category = data.get("current_category")
         if not spell_name:
@@ -283,12 +255,10 @@ class SpellSelectionService:
         if not category:
             await SpellSelectionService.start_cantrips_selection(callback, state)
             return
-        await state.set_state(CreateCharacter.spells_cantrips_list)
-        selector_data = data.get("spell_selector", {})
-        if not selector_data:
+        selector = await SpellSelectionService._ensure_selector(state)
+        if not selector:
             await callback.answer("❌ Ошибка: данные о заклинаниях не найдены", show_alert=True)
             return
-        selector = SpellSelector.from_dict(selector_data)
         auto_cantrips = data.get("auto_cantrips", [])
         spells = selector.get_cantrips_in_category(category)
         spells = [s for s in spells if s['name'] not in auto_cantrips]
@@ -302,47 +272,26 @@ class SpellSelectionService:
     @staticmethod
     async def start_level1_selection(callback: CallbackQuery, state: FSMContext) -> None:
         data = await state.get_data()
-        selector_data = data.get("spell_selector")
         class_name = data.get("class_name")
-
-        # Применяем автоматические заклинания и корректировку количества
+        selector = await SpellSelectionService._ensure_selector(state, class_name)
+        if not selector:
+            await callback.answer("❌ Ошибка инициализации выбора заклинаний", show_alert=True)
+            return
         auto_level1 = data.get("auto_level1", [])
-        extra_cantrips = 0
-        # Для волшебника количество заклинаний 1 уровня уже установлено в start_cantrips_selection,
-        # но здесь мы должны убедиться, что селектор имеет правильное значение required_count.
-        # Если selector ещё не создан – создаём.
-        if not selector_data:
-            selector = SpellSelector(class_name)
-        else:
-            selector = SpellSelector.from_dict(selector_data)
-
-        # Устанавливаем количество заклинаний 1 уровня (с учётом возможных изменений)
-        base_level1 = _class_repo.get_spell_counts(class_name).get('level1', 0)
-        if class_name == "Волшебник":
-            base_level1 = 6
-        # Для следопыта base_level1 = 2 (из БД) – оно уже такое, но нужно убедиться, что не учитывается "Метка охотника"
-        # "Метка охотника" добавляется автоматически, поэтому required_count не изменяем.
-        if selector.level1_state:
-            selector.level1_state.required_count = base_level1
-
-        # Добавляем автоматические заклинания в список выбранных, чтобы они не предлагались
         for spell in auto_level1:
             if spell not in selector.get_selected_level1_spells():
-                selector.add_level1_spell(spell)  # просто добавление в список
+                selector.add_level1_spell(spell)
         await state.update_data(spell_selector=selector.to_dict())
-
         if not selector.has_level1_spells:
             from handlers.character_handlers import go_to_fighting_style
             await go_to_fighting_style(callback, state)
             return
-
         categories = selector.get_level1_categories()
         selected_count, required = selector.get_level1_progress()
         if not categories:
             from handlers.character_handlers import go_to_fighting_style
             await go_to_fighting_style(callback, state)
             return
-
         await state.set_state(CreateCharacter.spells_level1_category)
         text = LEVEL1_SPELL_SELECTION_START.format(
             class_name=selector.class_name,
@@ -356,21 +305,22 @@ class SpellSelectionService:
     @staticmethod
     async def show_level1_in_category(callback: CallbackQuery, state: FSMContext) -> None:
         category = callback.data.replace("level1_cat_", "")
+        selector = await SpellSelectionService._ensure_selector(state)
+        if not selector:
+            await callback.answer("❌ Ошибка: данные о заклинаниях не найдены", show_alert=True)
+            return
         data = await state.get_data()
-        selector_data = data.get("spell_selector", {})
-        selector = SpellSelector.from_dict(selector_data)
-
+        auto_level1 = data.get("auto_level1", [])
         spells = selector.get_level1_spells_in_category(category)
+        spells = [s for s in spells if s['name'] not in auto_level1]
         selected_spells = selector.get_selected_level1_spells()
         await state.update_data(current_category=category)
         await state.set_state(CreateCharacter.spells_level1_list)
-
         if not spells:
             text = LEVEL1_CATEGORY_EMPTY.format(category=category)
             await send_new_from_callback(callback, state, text)
             await callback.answer()
             return
-
         text = LEVEL1_LIST_TITLE.format(category=category)
         await send_new_from_callback(callback, state, text,
                                      reply_markup=create_spell_list_keyboard(spells, "level1", selected_spells, category))
@@ -383,22 +333,18 @@ class SpellSelectionService:
         if not spell:
             await callback.answer("❌ Заклинание не найдено")
             return
-
-        data = await state.get_data()
-        selector_data = data.get("spell_selector", {})
-        selector = SpellSelector.from_dict(selector_data)
-
+        selector = await SpellSelectionService._ensure_selector(state)
+        if not selector:
+            await callback.answer("❌ Ошибка: данные о заклинаниях не найдены", show_alert=True)
+            return
         is_selected = spell['name'] in selector.get_selected_level1_spells()
         remaining = selector.level1_state.remaining_count if selector.level1_state else 0
-
         await state.update_data(current_spell_id=spell_id, current_spell_name=spell['name'])
         await state.set_state(CreateCharacter.spells_level1_detail)
-
         description = spell.get('description', 'Описание отсутствует')
         category = spell.get('category', 'Прочее')
         icon = get_category_icon(category)
         status = LEVEL1_STATUS_SELECTED if is_selected else LEVEL1_STATUS_NOT_SELECTED
-
         text = LEVEL1_DETAIL_TEMPLATE.format(
             icon=icon,
             spell_name=spell['name'],
@@ -412,29 +358,28 @@ class SpellSelectionService:
 
     @staticmethod
     async def add_level1_spell(callback: CallbackQuery, state: FSMContext) -> None:
+        selector = await SpellSelectionService._ensure_selector(state)
+        if not selector:
+            await callback.answer("❌ Ошибка: данные о заклинаниях не найдены", show_alert=True)
+            return
         data = await state.get_data()
-        selector_data = data.get("spell_selector", {})
-        selector = SpellSelector.from_dict(selector_data)
-
         spell_name = data.get("current_spell_name")
         category = data.get("current_category")
-
         if not spell_name:
             await callback.answer("❌ Ошибка: название заклинания не найдено")
             return
-
         success, msg = selector.add_level1_spell(spell_name)
         await callback.answer(msg, show_alert=not success)
-
         if success:
             await state.update_data(spell_selector=selector.to_dict())
-
             if selector.level1_state and selector.level1_state.remaining_count == 0:
                 from handlers.character_handlers import go_to_fighting_style
                 await go_to_fighting_style(callback, state)
             else:
                 await state.set_state(CreateCharacter.spells_level1_list)
+                auto_level1 = data.get("auto_level1", [])
                 spells = selector.get_level1_spells_in_category(category)
+                spells = [s for s in spells if s['name'] not in auto_level1]
                 selected_spells = selector.get_selected_level1_spells()
                 text = LEVEL1_LIST_TITLE.format(category=category)
                 await send_new_from_callback(callback, state, text,
@@ -443,24 +388,24 @@ class SpellSelectionService:
 
     @staticmethod
     async def remove_level1_spell(callback: CallbackQuery, state: FSMContext) -> None:
+        selector = await SpellSelectionService._ensure_selector(state)
+        if not selector:
+            await callback.answer("❌ Ошибка: данные о заклинаниях не найдены", show_alert=True)
+            return
         data = await state.get_data()
-        selector_data = data.get("spell_selector", {})
-        selector = SpellSelector.from_dict(selector_data)
-
         spell_name = data.get("current_spell_name")
         category = data.get("current_category")
-
         if not spell_name:
             await callback.answer("❌ Ошибка: название заклинания не найдено")
             return
-
         success, msg = selector.remove_level1_spell(spell_name)
         await callback.answer(msg)
-
         if success:
             await state.update_data(spell_selector=selector.to_dict())
             await state.set_state(CreateCharacter.spells_level1_list)
+            auto_level1 = data.get("auto_level1", [])
             spells = selector.get_level1_spells_in_category(category)
+            spells = [s for s in spells if s['name'] not in auto_level1]
             selected_spells = selector.get_selected_level1_spells()
             text = LEVEL1_LIST_TITLE.format(category=category)
             await send_new_from_callback(callback, state, text,
@@ -479,11 +424,13 @@ class SpellSelectionService:
         if not category:
             await SpellSelectionService.start_level1_selection(callback, state)
             return
-
-        await state.set_state(CreateCharacter.spells_level1_list)
-        selector_data = data.get("spell_selector", {})
-        selector = SpellSelector.from_dict(selector_data)
+        selector = await SpellSelectionService._ensure_selector(state)
+        if not selector:
+            await callback.answer("❌ Ошибка: данные о заклинаниях не найдены", show_alert=True)
+            return
+        auto_level1 = data.get("auto_level1", [])
         spells = selector.get_level1_spells_in_category(category)
+        spells = [s for s in spells if s['name'] not in auto_level1]
         selected_spells = selector.get_selected_level1_spells()
         text = LEVEL1_LIST_TITLE.format(category=category)
         await send_new_from_callback(callback, state, text,

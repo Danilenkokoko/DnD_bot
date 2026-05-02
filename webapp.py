@@ -10,10 +10,8 @@ from typing import Dict, Any, List
 from fastapi import FastAPI, HTTPException, Path
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Path
-from fastapi.responses import HTMLResponse
 from jinja2 import Template
+from dotenv import load_dotenv
 
 # Репозитории
 from repositories.character_repository import CharacterRepository
@@ -128,7 +126,6 @@ def format_extra_features(char: Dict[str, Any]) -> List[str]:
         hp_reserve = char.get("level", 1) * 5
         features.append(PALADIN_LAY_ON_HANDS.format(hp_reserve=hp_reserve))
     elif class_name == "Плут":
-        # Урон коварной атаки для 1 уровня – 1к6, растёт с уровнем (можно динамически)
         features.append(ROGUE_SNEAK_ATTACK.format(damage_dice="1к6"))
         features.append(ROGUE_THIEVES_CANT)
     elif class_name == "Следопыт":
@@ -173,6 +170,25 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     # Дополнительные особенности (ордены, договоры, экспертиза и т.д.)
     extra_features = format_extra_features(char)
 
+    # Вычисляем модификаторы навыков (упрощённо)
+    skill_mods = {}
+    for skill in skills:
+        # Определяем базовую характеристику для навыка (упрощённо)
+        base_stat = "DEX"
+        if skill in ["Атлетика"]:
+            base_stat = "STR"
+        elif skill in ["Анализ", "Знание магии", "История", "Исследование", "Природа", "Религия"]:
+            base_stat = "INT"
+        elif skill in ["Внимательность", "Выживание", "Медицина", "Обращение с животными", "Проницательность"]:
+            base_stat = "WIS"
+        elif skill in ["Выступление", "Запугивание", "Обман", "Убеждение"]:
+            base_stat = "CHA"
+        mod = (stats[base_stat] - 10) // 2
+        # Если навык входит в список владений (спасброски или экспертность – упрощённо)
+        if skill in saving_throws:
+            mod += 2
+        skill_mods[skill] = f"{mod:+d}"
+
     return {
         "name": char["name"],
         "class_name": class_name,
@@ -189,12 +205,18 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "speed": char.get("speed", 30),
         "alignment": char.get("alignment", "Нейтральное"),
         "experience": char.get("experience", 0),
-        "proficiency_bonus": 2,  # можно вычислить по уровню, но для 1-го уровня 2
+        "proficiency_bonus": 2,
         "saving_throws": saving_throws,
         "skills": skills,
         "equipment": [char.get("selected_weapon"), char.get("selected_armor")] if char.get("selected_weapon") or char.get("selected_armor") else [],
         "spells": all_spells,
         "extra_features": extra_features,
+        "skill_mods": skill_mods,
+        "all_skills": skills,
+        "race_traits": [],
+        "class_features": [],
+        "appearance": "",
+        "created_date": "недавно",
     }
 
 # ------------------------------------------------------------------
@@ -688,15 +710,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 async def character_sheet(char_id: int = Path(..., title="ID персонажа")):
     try:
         data = get_character_data(char_id)
-        # Добавляем в data необходимые для шаблона переменные, если их нет
-        data.setdefault("all_skills", data.get("skills", []))
-        data.setdefault("skill_mods", {})
-        data.setdefault("race_traits", [])
-        data.setdefault("class_features", [])
-        data.setdefault("appearance", "")
-        data.setdefault("created_date", "недавно")
-        data.setdefault("extra_features", [])
-
         template = Template(HTML_TEMPLATE)
         html = template.render(**data)
         return HTMLResponse(content=html)

@@ -2,7 +2,7 @@
 import json
 import psycopg2
 from typing import List, Dict, Any, Optional
-from psycopg2.extras import Json, RealDictCursor
+from psycopg2.extras import RealDictCursor
 from repositories.base_repository import BaseRepository
 from db import get_connection
 
@@ -37,6 +37,17 @@ class CharacterRepository(BaseRepository):
                       %s, %s, %s, %s)
             RETURNING id
         """
+        # Для jsonb-полей -> преобразуем в JSON-строку
+        selected_skills = json.dumps(data.get('selected_skills', []))
+        selected_masteries = json.dumps(data.get('selected_masteries', []))
+        selected_invocations = json.dumps(data.get('selected_invocations', []))
+        selected_spells = json.dumps(data.get('selected_spells', []))
+        # Для полей типа ARRAY -> передаём список (psycopg2 преобразует в массив)
+        rogue_expertise = data.get('rogue_expertise', [])
+        auto_spells = data.get('auto_spells', [])
+        pact_tome_cantrips = data.get('pact_tome_cantrips', [])
+        pact_tome_rituals = data.get('pact_tome_rituals', [])
+
         params = (
             data['user_id'],
             data['name'],
@@ -55,11 +66,11 @@ class CharacterRepository(BaseRepository):
             data.get('hp', 0),
             data.get('ac', 10),
             data.get('speed', 30),
-            Json(data.get('selected_skills', [])),
-            Json(data.get('selected_masteries', [])),
+            selected_skills,
+            selected_masteries,
             data.get('selected_fighting_style'),
-            Json(data.get('selected_invocations', [])),
-            Json(data.get('selected_spells', [])),
+            selected_invocations,
+            selected_spells,
             data.get('selected_weapon'),
             data.get('selected_armor'),
             data.get('backstory', ''),
@@ -69,11 +80,11 @@ class CharacterRepository(BaseRepository):
             data.get('druid_order'),
             data.get('cleric_order'),
             data.get('warlock_pact'),
-            Json(data.get('rogue_expertise', [])),
+            rogue_expertise,
             data.get('rogue_extra_language'),
-            Json(data.get('auto_spells', [])),
-            Json(data.get('pact_tome_cantrips', [])),
-            Json(data.get('pact_tome_rituals', [])),
+            auto_spells,
+            pact_tome_cantrips,
+            pact_tome_rituals,
             data.get('pact_blade_weapon')
         )
         with get_connection() as conn:
@@ -164,9 +175,12 @@ class CharacterRepository(BaseRepository):
         for field in allowed_fields:
             if field in data:
                 set_clauses.append(f"{field} = %s")
-                if field in ('selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells',
-                             'rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals'):
-                    params.append(Json(data[field] if data[field] is not None else []))
+                # Для jsonb-полей
+                if field in ('selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells'):
+                    params.append(json.dumps(data[field] if data[field] is not None else []))
+                # Для полей типа ARRAY
+                elif field in ('rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals'):
+                    params.append(data[field] if data[field] is not None else [])
                 else:
                     params.append(data[field])
         if not set_clauses:
@@ -191,11 +205,9 @@ class CharacterRepository(BaseRepository):
                 return cur.rowcount > 0
 
     def _deserialize_character(self, row: Dict[str, Any]) -> Dict[str, Any]:
-        # Для jsonb-полей psycopg2 возвращает уже десериализованные объекты (списки или dict).
-        # Но если вдруг они пришли как строки, преобразуем.
-        json_fields = ['selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells',
-                       'rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals']
-        for field in json_fields:
+        """Преобразует JSONB-поля из строк в списки, если они ещё не распарсены."""
+        jsonb_fields = ['selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells']
+        for field in jsonb_fields:
             val = row.get(field)
             if isinstance(val, str):
                 try:
@@ -203,5 +215,10 @@ class CharacterRepository(BaseRepository):
                 except:
                     row[field] = []
             elif val is None:
+                row[field] = []
+        # Поля-массивы уже должны быть списками, но на всякий случай:
+        array_fields = ['rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals']
+        for field in array_fields:
+            if row.get(field) is None:
                 row[field] = []
         return row

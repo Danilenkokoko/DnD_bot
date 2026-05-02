@@ -12,7 +12,7 @@ from db import get_connection
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def check_db():

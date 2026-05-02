@@ -2,15 +2,16 @@
 """
 Database initialization and connection management.
 """
-from dotenv import load_dotenv
 import os
 import logging
 import psycopg2
 from psycopg2 import pool, extras
 from typing import Dict, Any, List, Optional
 from contextlib import contextmanager
+from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv()  # <-- загружаем переменные окружения из .env
+
 logger = logging.getLogger(__name__)
 
 _db_pool = None

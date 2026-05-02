@@ -61,9 +61,14 @@ class SpellSelectionService:
     async def start_cantrips_selection(callback: CallbackQuery, state: FSMContext) -> None:
         data = await state.get_data()
         class_name = data.get("class_name")
+        logger.info(f"🔍 start_cantrips_selection: class_name = {class_name}")
+
         class_info = _class_repo.get_by_name(class_name)
         is_spellcaster = class_info.get('is_spellcaster', False) if class_info else False
+        logger.info(f"🔍 is_spellcaster = {is_spellcaster}")
+
         if not is_spellcaster:
+            logger.info("Класс не заклинатель, переходим к боевому стилю")
             from handlers.character_handlers import go_to_fighting_style
             await go_to_fighting_style(callback, state)
             return
@@ -72,6 +77,7 @@ class SpellSelectionService:
         auto_cantrips = []
         auto_level1 = []
         extra_cantrips = 0
+
         if class_name == "Артефактор":
             auto_cantrips.append("Починка")
         elif class_name == "Друид":
@@ -84,62 +90,37 @@ class SpellSelectionService:
             if cleric_order == "miracle":
                 extra_cantrips = 1
         elif class_name == "Следопыт":
-            # У следопыта нет заговоров, заклинания 1 уровня – 2 шт. + автоматическая Метка охотника
             auto_level1.append("Метка охотника")
 
         spell_counts = _class_repo.get_spell_counts(class_name)
         base_cantrips = spell_counts.get('cantrips', 0)
         base_level1 = spell_counts.get('level1', 0)
 
+        logger.info(f"🔍 base_cantrips = {base_cantrips}, base_level1 = {base_level1}")
+
         # Волшебник: увеличиваем количество заклинаний 1 уровня до 6
         if class_name == "Волшебник":
             base_level1 = 6
 
-        # Следопыт: заклинаний 1 уровня должно быть 2 (если в БД не задано)
+        # Следопыт: заклинаний 1 уровня должно быть 2
         if class_name == "Следопыт":
             base_level1 = 2
 
         cantrips_required = base_cantrips + extra_cantrips
         level1_required = base_level1
 
+        logger.info(f"🔍 cantrips_required = {cantrips_required}, level1_required = {level1_required}")
+
         if cantrips_required == 0 and level1_required == 0:
+            logger.info("Нет ни заговоров, ни заклинаний, переходим к боевому стилю")
             from handlers.character_handlers import go_to_fighting_style
             await go_to_fighting_style(callback, state)
             return
+
         if cantrips_required == 0 and level1_required > 0:
+            logger.info("Нет заговоров, но есть заклинания 1 уровня → start_level1_selection")
             await SpellSelectionService.start_level1_selection(callback, state)
             return
-
-        # Сохраняем авто-списки в state
-        await state.update_data(auto_cantrips=auto_cantrips, auto_level1=auto_level1)
-
-        # Создаём селектор
-        selector = await SpellSelectionService._ensure_selector(state, class_name)
-        if not selector:
-            await callback.answer("❌ Ошибка инициализации выбора заклинаний", show_alert=True)
-            return
-        if selector.cantrip_state:
-            selector.cantrip_state.required_count = cantrips_required
-        if selector.level1_state:
-            selector.level1_state.required_count = level1_required
-        await state.update_data(spell_selector=selector.to_dict())
-
-        categories = selector.get_cantrip_categories()
-        selected_count, required = selector.get_cantrip_progress()
-        if not categories:
-            from handlers.character_handlers import go_to_fighting_style
-            await go_to_fighting_style(callback, state)
-            return
-
-        await state.set_state(CreateCharacter.spells_cantrips_category)
-        text = CANTRIP_SELECTION_START.format(
-            class_name=selector.class_name,
-            required=required,
-            remaining=required - selected_count
-        )
-        await send_new_from_callback(callback, state, text,
-                                     reply_markup=create_category_keyboard(categories, "cantrip", selected_count, required))
-        await callback.answer()
 
     @staticmethod
     async def show_cantrips_in_category(callback: CallbackQuery, state: FSMContext) -> None:

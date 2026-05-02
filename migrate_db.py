@@ -1,10 +1,13 @@
 # migrate_add_class_features.py
 import os
-import logging
+import sys
 from dotenv import load_dotenv
-from db import get_connection
 
-load_dotenv()  # загружаем переменные из .env
+# Загружаем .env до любого импорта, который использует переменные окружения
+load_dotenv()
+
+import logging
+from db import get_connection
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

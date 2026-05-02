@@ -1,11 +1,10 @@
 # migrate_add_class_features.py
-"""
-Миграция для добавления новых полей в таблицу characters и вспомогательных таблиц.
-Запускается однократно после обновления кода.
-"""
-
+import os
 import logging
+from dotenv import load_dotenv
 from db import get_connection
+
+load_dotenv()  # загружаем переменные из .env
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -75,10 +74,10 @@ def run_migration():
                 cur.execute("ALTER TABLE characters ADD COLUMN alignment VARCHAR(30) DEFAULT 'Нейтральный'")
                 logger.info("✅ Добавлена колонка alignment")
 
-            # 5. Удалить устаревшую колонку selected_equipment_choice
+            # 5. Удалить устаревшую колонку, если есть
             if 'selected_equipment_choice' in existing:
                 cur.execute("ALTER TABLE characters DROP COLUMN selected_equipment_choice")
-                logger.info("✅ Удалена колонка selected_equipment_choice")
+                logger.info("✅ Удалена устаревшая колонка selected_equipment_choice")
 
             conn.commit()
             logger.info("🎉 Миграция успешно завершена")

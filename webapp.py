@@ -11,6 +11,9 @@ from fastapi import FastAPI, HTTPException, Path
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Path
+from fastapi.responses import HTMLResponse
+from jinja2 import Template
 
 # Репозитории
 from repositories.character_repository import CharacterRepository
@@ -687,19 +690,22 @@ from pdf_generator import generate_character_html
 async def character_sheet(char_id: int = Path(..., title="ID персонажа")):
     try:
         data = get_character_data(char_id)
-        # Передаём в шаблон дополнительные переменные для совместимости
-        data["all_skills"] = data["skills"]  # для цикла в шаблоне
-        data["skill_mods"] = {skill: f"{((data['stats'][skill[:3]] - 10)//2) + (2 if skill in data['saving_throws'] else 0)}" for skill in data["skills"]}  # упрощённо
-        data["race_traits"] = []  # можно добавить из репозитория рас
-        data["class_features"] = []
-        data["appearance"] = ""
-        data["created_date"] = "недавно"
-        html = generate_character_html(data)  # можно заменить на рендеринг через Jinja2, но пока оставим как есть
+        # Добавляем в data необходимые для шаблона переменные, если их нет
+        data.setdefault("all_skills", data.get("skills", []))
+        data.setdefault("skill_mods", {})
+        data.setdefault("race_traits", [])
+        data.setdefault("class_features", [])
+        data.setdefault("appearance", "")
+        data.setdefault("created_date", "недавно")
+        data.setdefault("extra_features", [])
+
+        template = Template(HTML_TEMPLATE)
+        html = template.render(**data)
         return HTMLResponse(content=html)
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Ошибка рендеринга страницы: {e}")
+        logger.error(f"Ошибка рендеринга страницы: {e}", exc_info=True)
         return HTMLResponse(content=f"<h1>Ошибка</h1><p>{str(e)}</p>", status_code=500)
 
 

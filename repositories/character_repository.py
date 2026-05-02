@@ -64,11 +64,11 @@ class CharacterRepository(BaseRepository):
             data.get('hp', 0),
             data.get('ac', 10),
             data.get('speed', 30),
-            json.dumps(data.get('selected_skills', [])),
-            json.dumps(data.get('selected_masteries', [])),
+            data.get('selected_skills', []),
+            data.get('selected_masteries', []),
             data.get('selected_fighting_style'),
-            json.dumps(data.get('selected_invocations', [])),
-            json.dumps(data.get('selected_spells', [])),
+            data.get('selected_invocations', []),
+            data.get('selected_spells', []),
             data.get('selected_weapon'),
             data.get('selected_armor'),
             data.get('backstory', ''),
@@ -78,11 +78,11 @@ class CharacterRepository(BaseRepository):
             data.get('druid_order'),
             data.get('cleric_order'),
             data.get('warlock_pact'),
-            json.dumps(data.get('rogue_expertise', [])),
+            data.get('rogue_expertise', []),
             data.get('rogue_extra_language'),
-            json.dumps(data.get('auto_spells', [])),
-            json.dumps(data.get('pact_tome_cantrips', [])),
-            json.dumps(data.get('pact_tome_rituals', [])),
+            data.get('auto_spells', []),
+            data.get('pact_tome_cantrips', []),
+            data.get('pact_tome_rituals', []),
             data.get('pact_blade_weapon')
         )
         with get_connection() as conn:
@@ -174,9 +174,10 @@ class CharacterRepository(BaseRepository):
         for field in allowed_fields:
             if field in data:
                 set_clauses.append(f"{field} = %s")
+                # Для массивов передаём список (psycopg2 преобразует сам)
                 if field in ('selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells',
                              'rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals'):
-                    params.append(json.dumps(data[field]))
+                    params.append(data[field] if data[field] is not None else [])
                 else:
                     params.append(data[field])
         if not set_clauses:
@@ -201,18 +202,21 @@ class CharacterRepository(BaseRepository):
                 return cur.rowcount > 0
 
     def _deserialize_character(self, row: Dict[str, Any]) -> Dict[str, Any]:
-        """Десериализует JSON поля персонажа."""
+        """Десериализует JSON поля персонажа (если они сохранены как текст, иначе оставляет как есть)."""
         json_fields = ['selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells',
                        'rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals']
         for field in json_fields:
-            if row.get(field):
-                if isinstance(row[field], str):
-                    try:
-                        row[field] = json.loads(row[field])
-                    except:
-                        row[field] = []
-                elif not isinstance(row[field], list):
+            val = row.get(field)
+            if val is None:
+                row[field] = []
+            elif isinstance(val, str):
+                # Если сохранено как JSON строка, пытаемся распарсить
+                try:
+                    row[field] = json.loads(val)
+                except:
                     row[field] = []
+            elif isinstance(val, list):
+                row[field] = val
             else:
                 row[field] = []
         return row

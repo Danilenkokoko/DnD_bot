@@ -1,30 +1,42 @@
 # webapp.py
 """
 Веб-сервер для отображения листа персонажа (Telegram Mini App)
+Обновлён для отображения всех новых классовых особенностей.
 """
 
 import os
-import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 from fastapi import FastAPI, HTTPException, Path
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-# Репозитории (переиспользуем существующие)
+# Репозитории
 from repositories.character_repository import CharacterRepository
 from repositories.class_repository import ClassRepository
 from repositories.background_repository import BackgroundRepository
 from repositories.race_repository import RaceRepository
 
-load_dotenv()
+from strings import (
+    DRUID_ORDER_GUIDE_DESC, DRUID_ORDER_GUARDIAN_DESC,
+    CLERIC_ORDER_PROTECTOR_DESC, CLERIC_ORDER_MIRACLE_DESC,
+    WARLOCK_PACT_TOME_DESC, WARLOCK_PACT_BLADE_DESC, WARLOCK_PACT_CHAIN_DESC,
+    WARLOCK_PACT_SHADOW_ARMOR_DESC, WARLOCK_PACT_ARCANE_MIND_DESC,
+    FEATURE_MENDING, FEATURE_BARDIC_INSPIRATION, FEATURE_RAGE,
+    FEATURE_UNARMORED_DEFENSE_BARBARIAN, FEATURE_SECOND_WIND,
+    FEATURE_WIZARD_SPELLS, FEATURE_RITUAL_CASTER, FEATURE_ARCANE_RECOVERY,
+    FEATURE_DRUIDIC_LANGUAGE, FEATURE_SPEAK_WITH_ANIMALS,
+    MONK_MARTIAL_ARTS, PALADIN_LAY_ON_HANDS,
+    ROGUE_SNEAK_ATTACK, ROGUE_THIEVES_CANT, ROGUE_EXPERTISE, ROGUE_EXTRA_LANGUAGE,
+    RANGER_HUNTERS_MARK, SORCERER_MAGIC_RELEASE
+)
 
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="D&D Character Sheet Viewer")
 
-# Разрешаем CORS для dev (можно убрать в проде)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -33,11 +45,154 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Инициализация репозиториев
 _char_repo = CharacterRepository()
 _class_repo = ClassRepository()
 _bg_repo = BackgroundRepository()
 _race_repo = RaceRepository()
+
+
+def format_extra_features(char: Dict[str, Any]) -> List[str]:
+    """Формирует список дополнительных особенностей персонажа."""
+    features = []
+
+    # 1. Орден друида
+    druid_order = char.get("druid_order")
+    if druid_order:
+        if druid_order == "guide":
+            features.append(DRUID_ORDER_GUIDE_DESC)
+        elif druid_order == "guardian":
+            features.append(DRUID_ORDER_GUARDIAN_DESC)
+
+    # 2. Орден жреца
+    cleric_order = char.get("cleric_order")
+    if cleric_order:
+        if cleric_order == "protector":
+            features.append(CLERIC_ORDER_PROTECTOR_DESC)
+        elif cleric_order == "miracle":
+            features.append(CLERIC_ORDER_MIRACLE_DESC)
+
+    # 3. Договор колдуна
+    warlock_pact = char.get("warlock_pact")
+    if warlock_pact == "tome":
+        features.append(WARLOCK_PACT_TOME_DESC)
+        pact_cantrips = char.get("pact_tome_cantrips", [])
+        pact_rituals = char.get("pact_tome_rituals", [])
+        if pact_cantrips:
+            features.append(f"• Заговоры Книги теней: {', '.join(pact_cantrips)}")
+        if pact_rituals:
+            features.append(f"• Ритуалы Книги теней: {', '.join(pact_rituals)}")
+    elif warlock_pact == "blade":
+        features.append(WARLOCK_PACT_BLADE_DESC)
+        blade_weapon = char.get("pact_blade_weapon")
+        if blade_weapon:
+            features.append(f"• Оружие договора: {blade_weapon}")
+    elif warlock_pact == "chain":
+        features.append(WARLOCK_PACT_CHAIN_DESC)
+    elif warlock_pact == "shadow_armor":
+        features.append(WARLOCK_PACT_SHADOW_ARMOR_DESC)
+    elif warlock_pact == "arcane_mind":
+        features.append(WARLOCK_PACT_ARCANE_MIND_DESC)
+
+    # 4. Плут: экспертиза и язык
+    rogue_expertise = char.get("rogue_expertise", [])
+    if rogue_expertise:
+        features.append(ROGUE_EXPERTISE.format(skills=", ".join(rogue_expertise)))
+    rogue_lang = char.get("rogue_extra_language")
+    if rogue_lang:
+        features.append(ROGUE_EXTRA_LANGUAGE.format(language=rogue_lang))
+
+    # 5. Особенности из strings.py (добавляем по классу)
+    class_name = char.get("class_name")
+    if class_name == "Артефактор":
+        features.append(FEATURE_MENDING)
+    elif class_name == "Бард":
+        features.append(FEATURE_BARDIC_INSPIRATION)
+    elif class_name == "Варвар":
+        features.append(FEATURE_RAGE)
+        features.append(FEATURE_UNARMORED_DEFENSE_BARBARIAN)
+    elif class_name == "Воин":
+        features.append(FEATURE_SECOND_WIND)
+    elif class_name == "Волшебник":
+        features.append(FEATURE_WIZARD_SPELLS)
+        features.append(FEATURE_RITUAL_CASTER)
+        features.append(FEATURE_ARCANE_RECOVERY)
+    elif class_name == "Друид":
+        features.append(FEATURE_DRUIDIC_LANGUAGE)
+        features.append(FEATURE_SPEAK_WITH_ANIMALS)
+    elif class_name == "Монах":
+        features.append(MONK_MARTIAL_ARTS)
+    elif class_name == "Паладин":
+        hp_reserve = char.get("level", 1) * 5
+        features.append(PALADIN_LAY_ON_HANDS.format(hp_reserve=hp_reserve))
+    elif class_name == "Плут":
+        # Урон коварной атаки для 1 уровня – 1к6, растёт с уровнем (можно динамически)
+        features.append(ROGUE_SNEAK_ATTACK.format(damage_dice="1к6"))
+        features.append(ROGUE_THIEVES_CANT)
+    elif class_name == "Следопыт":
+        features.append(RANGER_HUNTERS_MARK)
+    elif class_name == "Чародей":
+        features.append(SORCERER_MAGIC_RELEASE)
+
+    return features
+
+
+def get_character_data(char_id: int) -> Dict[str, Any]:
+    char = _char_repo.get_by_id(char_id)
+    if not char:
+        raise HTTPException(status_code=404, detail="Персонаж не найден")
+
+    stats = {
+        "STR": char.get("str", 10),
+        "DEX": char.get("dex", 10),
+        "CON": char.get("con", 10),
+        "INT": char.get("int", 10),
+        "WIS": char.get("wis", 10),
+        "CHA": char.get("cha", 10),
+    }
+
+    skills = char.get("selected_skills", [])
+    class_name = char.get("class_name") or "Без класса"
+    race_name = char.get("race_name") or "Неизвестно"
+    background_name = char.get("background_name") or "Нет"
+
+    class_info = _class_repo.get_by_name(class_name) or {}
+    saving_throws = class_info.get("saving_throws", [])
+    background_info = _bg_repo.get_by_name(background_name) or {}
+    background_trait = background_info.get("trait", "")
+    background_description = background_info.get("description", "")
+    origin_feat = background_info.get("origin_feat", "")
+
+    # Собираем все заклинания: выбранные + автоматические
+    selected_spells = char.get("selected_spells", [])
+    auto_spells = char.get("auto_spells", [])
+    all_spells = list(set(selected_spells + auto_spells))
+
+    # Дополнительные особенности (ордены, договоры, экспертиза и т.д.)
+    extra_features = format_extra_features(char)
+
+    return {
+        "name": char["name"],
+        "class_name": class_name,
+        "race": race_name,
+        "level": char.get("level", 1),
+        "background": background_name,
+        "background_trait": background_trait,
+        "background_description": background_description,
+        "origin_feat": origin_feat,
+        "backstory": char.get("backstory", ""),
+        "stats": stats,
+        "hp": char.get("hp", 0),
+        "ac": char.get("ac", 10),
+        "speed": char.get("speed", 30),
+        "alignment": char.get("alignment", "Нейтральное"),
+        "experience": char.get("experience", 0),
+        "proficiency_bonus": 2,  # можно вычислить по уровню, но для 1-го уровня 2
+        "saving_throws": saving_throws,
+        "skills": skills,
+        "equipment": [char.get("selected_weapon"), char.get("selected_armor")] if char.get("selected_weapon") or char.get("selected_armor") else [],
+        "spells": all_spells,
+        "extra_features": extra_features,
+    }
 
 # ------------------------------------------------------------------
 # HTML-шаблон (можно вынести в отдельный файл, но для простоты здесь)
@@ -528,79 +683,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 from pdf_generator import generate_character_html
 
 
-def get_character_data(char_id: int) -> Dict[str, Any]:
-    """Возвращает данные персонажа, готовые для рендеринга HTML."""
-    char = _char_repo.get_by_id(char_id)  # get_by_id без проверки user_id (открытый доступ)
-    if not char:
-        raise HTTPException(status_code=404, detail="Персонаж не найден")
-
-    # Преобразуем в формат, ожидаемый шаблоном
-    stats = {
-        "STR": char.get("str", 10),
-        "DEX": char.get("dex", 10),
-        "CON": char.get("con", 10),
-        "INT": char.get("int", 10),
-        "WIS": char.get("wis", 10),
-        "CHA": char.get("cha", 10),
-    }
-
-    # Навыки – десериализованы в репозитории
-    skills = char.get("selected_skills", [])
-
-    # Класс и прочее
-    class_name = char.get("class_name") or "Без класса"
-    race_name = char.get("race_name") or "Неизвестно"
-    background_name = char.get("background_name") or "Нет"
-
-    # Для удобства получим полную информацию о классе (спасброски, особенности)
-    class_info = _class_repo.get_by_name(class_name) or {}
-    saving_throws = class_info.get("saving_throws", [])
-    class_features = []  # можно загрузить реальные умения
-
-    background_info = _bg_repo.get_by_name(background_name) or {}
-    background_trait = background_info.get("trait", "")
-    background_description = background_info.get("description", "")
-    origin_feat = background_info.get("origin_feat", "")  # если есть в БД
-
-    return {
-        "name": char["name"],
-        "class_name": class_name,
-        "race": race_name,
-        "level": char.get("level", 1),
-        "background": background_name,
-        "background_trait": background_trait,
-        "background_description": background_description,
-        "origin_feat": origin_feat,
-        "backstory": char.get("backstory", ""),
-        "stats": stats,
-        "hp": char.get("hp", 0),
-        "ac": char.get("ac", 10),
-        "speed": char.get("speed", 30),
-        "alignment": char.get("alignment", "Нейтральное"),
-        "player_name": "",  # можно взять из user_id, но не обязательно
-        "experience": char.get("experience", 0),
-        "proficiency_bonus": 2,  # можно рассчитать по уровню
-        "saving_throws": saving_throws,
-        "skills": skills,
-        "race_traits": [],  # можно добавить из репозитория рас
-        "class_features": class_features,
-        "equipment": [char.get("selected_weapon"), char.get("selected_armor")] if char.get(
-            "selected_weapon") or char.get("selected_armor") else [],
-        "coins": "",  # не хранится, можно добавить
-        "spells": char.get("selected_spells", []),
-        "spell_slots_1": 0,
-        "spell_slots_2": 0,
-        "notes": "",
-        "appearance": ""
-    }
-
-
 @app.get("/character/{char_id}", response_class=HTMLResponse)
 async def character_sheet(char_id: int = Path(..., title="ID персонажа")):
-    """Возвращает HTML-страницу листа персонажа."""
     try:
         data = get_character_data(char_id)
-        html = generate_character_html(data)  # используем существующую функцию
+        # Передаём в шаблон дополнительные переменные для совместимости
+        data["all_skills"] = data["skills"]  # для цикла в шаблоне
+        data["skill_mods"] = {skill: f"{((data['stats'][skill[:3]] - 10)//2) + (2 if skill in data['saving_throws'] else 0)}" for skill in data["skills"]}  # упрощённо
+        data["race_traits"] = []  # можно добавить из репозитория рас
+        data["class_features"] = []
+        data["appearance"] = ""
+        data["created_date"] = "недавно"
+        html = generate_character_html(data)  # можно заменить на рендеринг через Jinja2, но пока оставим как есть
         return HTMLResponse(content=html)
     except HTTPException:
         raise
@@ -609,7 +703,6 @@ async def character_sheet(char_id: int = Path(..., title="ID персонажа"
         return HTMLResponse(content=f"<h1>Ошибка</h1><p>{str(e)}</p>", status_code=500)
 
 
-# Запуск сервера (будет вызван из bot.py)
 def run_webapp():
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

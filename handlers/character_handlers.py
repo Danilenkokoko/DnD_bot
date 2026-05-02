@@ -293,6 +293,13 @@ async def select_warlock_pact(callback: CallbackQuery, state: FSMContext):
 # =========================================================
 @router.callback_query(CreateCharacter.skills_select, lambda c: c.data.startswith("class_skill_toggle_") or c.data == "class_skills_ready" or c.data == "class_skills_info")
 async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
+    logger.info(f"handle_skills_selection: data={callback.data}, state={await state.get_state()}")
+    user_data = await state.get_data()
+    class_name = user_data.get("class_name")
+    class_info = _class_repo.get_by_name(class_name)
+    skill_choices = class_info.get('skill_choices', 2) if class_info else 2
+    selected_skills = user_data.get("selected_class_skills", [])
+    logger.info(f"selected_skills={selected_skills}, skill_choices={skill_choices}")
     data = callback.data
     user_data = await state.get_data()
     class_name = user_data.get("class_name")
@@ -306,10 +313,7 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
     skill_choices = class_info.get('skill_choices', 2)
     selected_skills = user_data.get("selected_class_skills", [])
 
-    logger.info(f"handle_skills_selection: data={callback.data}, state={await state.get_state()}")
-    user_data = await state.get_data()
-    logger.info(
-        f"selected_skills={user_data.get('selected_class_skills')}, skill_choices={class_info.get('skill_choices')}")
+
 
     if data == "class_skills_ready":
         if len(selected_skills) == skill_choices:

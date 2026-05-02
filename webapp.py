@@ -683,8 +683,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </html>
 """
 
-from pdf_generator import generate_character_html
-
 
 @app.get("/character/{char_id}", response_class=HTMLResponse)
 async def character_sheet(char_id: int = Path(..., title="ID персонажа")):

@@ -22,7 +22,7 @@ from repositories.equipment_repository import EquipmentRepository, FightingStyle
 from repositories.spell_repository import SpellRepository
 from repositories.character_repository import CharacterRepository
 
-# Для обратной совместимости (временные импорты) - будет удалено после полного перехода
+# Для обратной совместимости (временные импорты)
 from dnd_logic import get_class_starting_stats
 
 logger = logging.getLogger(__name__)
@@ -166,10 +166,6 @@ class CharacterStatsService:
         background_name: str,
         base_stats_dict: Optional[Dict[str, int]] = None
     ) -> Dict[str, Any]:
-        """
-        Рассчитывает финальные характеристики, используя engine и репозитории.
-        ВНИМАНИЕ: Расовые бонусы НЕ применяются (согласно D&D 5.5e 2024).
-        """
         class_primary = _class_repo.get_primary_stats(class_name)
         background_stats = _background_repo.get_characteristics(background_name)
 
@@ -188,9 +184,6 @@ class CharacterStatsService:
             background_stats=background_stats
         )
         final_stats = bonuses.apply_to(base_stats)
-
-        # Расовые бонусы не применяются
-
         return {
             'stats': final_stats.to_str_dict(),
             'bonuses': bonuses.to_str_dict(),
@@ -206,17 +199,14 @@ class CharacterStatsService:
         use_average: bool = True
     ) -> int:
         hit_die = _class_repo.get_hit_die(class_name)
-
         valid, msg = validate_level(level)
         if not valid:
             logger.warning(f"Невалидный уровень {level}: {msg}, используем уровень 1")
             level = 1
-
         valid, msg = validate_ability_score(constitution, "CON")
         if not valid:
             logger.warning(f"Невалидное значение CON {constitution}: {msg}, используем 10")
             constitution = 10
-
         method = HpCalculationMethod.AVERAGE if use_average else HpCalculationMethod.MAX
         hp = calculate_hp_at_level(hit_die, constitution, level, method)
         return max(1, hp)
@@ -229,17 +219,10 @@ class CharacterStatsService:
         class_name: Optional[str] = None,
         second_stat: Optional[int] = None
     ) -> int:
-        """
-        Рассчитывает AC персонажа.
-        Если броня не указана и класс Варвар или Монах, использует Unarmored Defense.
-        Для Варвара second_stat = CON, для Монаха second_stat = WIS.
-        """
         valid, msg = validate_ability_score(dexterity, "DEX")
         if not valid:
             logger.warning(f"Невалидное значение DEX {dexterity}: {msg}, используем 10")
             dexterity = 10
-
-        # Проверяем, нужно ли использовать Unarmored Defense
         if not armor_name and class_name in ["Варвар", "Монах"] and second_stat is not None:
             valid_second, _ = validate_ability_score(second_stat, "CON" if class_name == "Варвар" else "WIS")
             if not valid_second:
@@ -249,8 +232,6 @@ class CharacterStatsService:
             if has_shield:
                 ac += 2
             return ac
-
-        # Стандартный расчёт
         if armor_name:
             ac = calculate_ac_with_armor(dexterity, armor_name, has_shield)
         else:
@@ -267,7 +248,6 @@ class CharacterStatsService:
     def format_stats_display(stats: Dict[str, int]) -> str:
         def modifier(stat_value: int) -> int:
             return hp_calculate_modifier(stat_value)
-
         return (f"💪 STR: {stats['STR']} ({modifier(stats['STR']):+d})\n"
                 f"🤸 DEX: {stats['DEX']} ({modifier(stats['DEX']):+d})\n"
                 f"🏋️ CON: {stats['CON']} ({modifier(stats['CON']):+d})\n"
@@ -280,7 +260,6 @@ class CharacterStatsService:
         valid, msg = validate_all_ability_scores(stats)
         if not valid:
             return False, [msg]
-
         errors = []
         for stat, value in stats.items():
             valid, msg = validate_ability_score(value, stat)
@@ -297,24 +276,20 @@ class CharacterStatsService:
     ) -> Dict[str, Any]:
         if base_stats_dict is None:
             base_stats_dict = get_class_starting_stats(class_name, equipment_choice)
-
         stats_result = CharacterStatsService.calculate_stats(
             class_name=class_name,
             background_name=background,
             base_stats_dict=base_stats_dict
         )
-
         final_stats = stats_result['stats']
         constitution = final_stats.get('CON', 10)
         dexterity = final_stats.get('DEX', 10)
-
         hp = CharacterStatsService.calculate_hp(class_name, constitution, level=1)
         ac = CharacterStatsService.calculate_ac(dexterity, armor_name=None, class_name=class_name,
                                                  second_stat=constitution if class_name == "Варвар" else final_stats.get('WIS', 10))
         proficiency_bonus = CharacterStatsService.calculate_proficiency_bonus(1)
         stats_text = CharacterStatsService.format_stats_display(final_stats)
         bg_chars = stats_result['background_stats']
-
         return {
             'stats': final_stats,
             'stats_text': stats_text,
@@ -344,9 +319,6 @@ class CharacterFinalizationService:
         subrace = state_data.get('subrace')
         name = state_data.get('name')
         backstory = state_data.get('backstory', 'Нет истории')
-        # background_equipment_choice удалён, так как снаряжение предыстории больше не используется
-        # оставлено только снаряжение класса
-
         stats = state_data.get('final_stats', {})
         if not stats:
             stats = state_data.get('stats', {})
@@ -380,7 +352,7 @@ class CharacterFinalizationService:
 
         selected_masteries = state_data.get('selected_masteries', [])
         selected_fighting_style = state_data.get('selected_fighting_style')
-        selected_invocations = []  # больше не используется, оставлено пустым для совместимости
+        selected_invocations = state_data.get('selected_invocations', [])
         selected_weapon = state_data.get('selected_weapon')
         selected_armor = state_data.get('selected_armor')
 
@@ -388,17 +360,27 @@ class CharacterFinalizationService:
         dexterity = stats.get('DEX', 10)
         constitution = stats.get('CON', 10)
         wisdom = stats.get('WIS', 10)
-
         hp = CharacterStatsService.calculate_hp(class_name, constitution, level=1)
         ac = CharacterStatsService.calculate_ac(dexterity, selected_armor, False, class_name,
                                                  constitution if class_name == "Варвар" else wisdom)
 
-        # Навыки от предыстории (будут объединены с навыками класса в финальном сохранении)
+        # Навыки от предыстории
         bg_skills = background_data.get('skills', []) if background_data else []
 
-        # Origin feat и alignment
+        # Origin feat и alignment (уже есть)
         origin_feat = state_data.get('background_origin_feat', '')
         alignment = state_data.get('alignment', 'Нейтральный')
+
+        # НОВЫЕ ПОЛЯ
+        druid_order = state_data.get('druid_order')
+        cleric_order = state_data.get('cleric_order')
+        warlock_pact = state_data.get('warlock_pact')
+        rogue_expertise = state_data.get('rogue_expertise', [])
+        rogue_extra_language = state_data.get('rogue_extra_language')
+        auto_spells = state_data.get('auto_spells', [])
+        pact_tome_cantrips = state_data.get('pact_tome_cantrips', [])
+        pact_tome_rituals = state_data.get('pact_tome_rituals', [])
+        pact_blade_weapon = state_data.get('pact_blade_weapon')
 
         return {
             'user_id': user_id,
@@ -424,6 +406,16 @@ class CharacterFinalizationService:
             'selected_skills_bg': bg_skills,
             'origin_feat': origin_feat,
             'alignment': alignment,
+            # Новые поля
+            'druid_order': druid_order,
+            'cleric_order': cleric_order,
+            'warlock_pact': warlock_pact,
+            'rogue_expertise': rogue_expertise,
+            'rogue_extra_language': rogue_extra_language,
+            'auto_spells': auto_spells,
+            'pact_tome_cantrips': pact_tome_cantrips,
+            'pact_tome_rituals': pact_tome_rituals,
+            'pact_blade_weapon': pact_blade_weapon,
         }
 
     @staticmethod
@@ -452,6 +444,16 @@ class CharacterFinalizationService:
             'backstory': character_data['backstory'],
             'image_file_id': character_data.get('image_file_id'),
             'origin_feat': character_data.get('origin_feat', ''),
-            'alignment': character_data.get('alignment', 'Нейтральный')
+            'alignment': character_data.get('alignment', 'Нейтральный'),
+            # Новые поля
+            'druid_order': character_data.get('druid_order'),
+            'cleric_order': character_data.get('cleric_order'),
+            'warlock_pact': character_data.get('warlock_pact'),
+            'rogue_expertise': character_data.get('rogue_expertise', []),
+            'rogue_extra_language': character_data.get('rogue_extra_language'),
+            'auto_spells': character_data.get('auto_spells', []),
+            'pact_tome_cantrips': character_data.get('pact_tome_cantrips', []),
+            'pact_tome_rituals': character_data.get('pact_tome_rituals', []),
+            'pact_blade_weapon': character_data.get('pact_blade_weapon'),
         }
         return _character_repo.create(repo_data)

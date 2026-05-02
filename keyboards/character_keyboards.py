@@ -22,7 +22,11 @@ from strings import (
     BTN_BACK_TO_SPELLS, BTN_STYLE_SKIP, BTN_ALIGNMENT_NAMES,
     BTN_VIEW_CHAR, BTN_WEBAPP_CHAR, BTN_DELETE_ITEM, BTN_CANCEL_DELETE,
     BTN_CATEGORY, BTN_SPELL_LIST_ITEM, BTN_BACK_TO_CATEGORIES,
-    BTN_REMOVE_SPELL, BTN_ADD_SPELL, BTN_BACK_TO_LIST, BTN_REMAINING_COUNT
+    BTN_REMOVE_SPELL, BTN_ADD_SPELL, BTN_BACK_TO_LIST, BTN_REMAINING_COUNT,
+    BTN_DRUID_ORDER_GUIDE, BTN_DRUID_ORDER_GUARDIAN,
+    BTN_CLERIC_ORDER_PROTECTOR, BTN_CLERIC_ORDER_MIRACLE,
+    BTN_WARLOCK_PACT_TOME, BTN_WARLOCK_PACT_BLADE, BTN_WARLOCK_PACT_CHAIN,
+    BTN_WARLOCK_PACT_SHADOW_ARMOR, BTN_WARLOCK_PACT_ARCANE_MIND
 )
 
 
@@ -79,7 +83,6 @@ def create_class_keyboard() -> InlineKeyboardMarkup:
 
 
 def create_class_equipment_keyboard(class_name: str) -> Optional[InlineKeyboardMarkup]:
-    """Клавиатура выбора снаряжения класса (если несколько вариантов)"""
     equipment = get_class_equipment(class_name)
     if len(equipment) <= 1:
         return None
@@ -88,7 +91,6 @@ def create_class_equipment_keyboard(class_name: str) -> Optional[InlineKeyboardM
         choice = eq.get('choice', 'A')
         weapon = eq.get('weapon', 'нет оружия')
         armor = eq.get('armor', 'нет брони')
-        # Используем константу, но подставляем значения
         text = BTN_EQUIP_OPTION.format(choice=choice, weapon=weapon, armor=armor)
         buttons.append([InlineKeyboardButton(text=text, callback_data=f"equip_{choice}")])
     buttons.append([InlineKeyboardButton(text=BTN_BACK_TO_CLASSES, callback_data="back_to_classes")])
@@ -101,7 +103,6 @@ def create_skills_keyboard(
     selected_skills: List[str]
 ) -> InlineKeyboardMarkup:
     buttons = []
-    # Кнопка счётчика выбранных навыков
     counter_text = BTN_SELECTED_COUNT.format(selected=len(selected_skills), max=max_choices)
     buttons.append([InlineKeyboardButton(text=counter_text, callback_data="class_skills_info")])
     for skill in skills:
@@ -149,7 +150,6 @@ def create_subrace_keyboard(race: str) -> Optional[InlineKeyboardMarkup]:
     buttons = []
     for subrace in subraces:
         buttons.append([InlineKeyboardButton(text=subrace, callback_data=f"subrace_{subrace}")])
-    # Кнопка пропуска отсутствует, только назад к расам
     buttons.append([InlineKeyboardButton(text=BTN_BACK_TO_RACES, callback_data="back_to_races")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -170,7 +170,6 @@ def create_fighting_style_keyboard(class_name: str) -> InlineKeyboardMarkup:
 
 
 def create_alignment_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора мировоззрения (вертикальный список, каждая кнопка в отдельной строке)"""
     alignments = [
         (BTN_ALIGNMENT_NAMES["lawful_good"], "lawful_good"),
         (BTN_ALIGNMENT_NAMES["neutral_good"], "neutral_good"),
@@ -189,8 +188,70 @@ def create_alignment_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+# =========================================================
+# НОВЫЕ КЛАВИАТУРЫ ДЛЯ ДОПОЛНИТЕЛЬНЫХ ВЫБОРОВ
+# =========================================================
+
+def create_druid_order_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text=BTN_DRUID_ORDER_GUIDE, callback_data="druid_order_guide")],
+        [InlineKeyboardButton(text=BTN_DRUID_ORDER_GUARDIAN, callback_data="druid_order_guardian")],
+        [InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def create_cleric_order_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text=BTN_CLERIC_ORDER_PROTECTOR, callback_data="cleric_order_protector")],
+        [InlineKeyboardButton(text=BTN_CLERIC_ORDER_MIRACLE, callback_data="cleric_order_miracle")],
+        [InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def create_warlock_pact_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text=BTN_WARLOCK_PACT_TOME, callback_data="warlock_pact_tome")],
+        [InlineKeyboardButton(text=BTN_WARLOCK_PACT_BLADE, callback_data="warlock_pact_blade")],
+        [InlineKeyboardButton(text=BTN_WARLOCK_PACT_CHAIN, callback_data="warlock_pact_chain")],
+        [InlineKeyboardButton(text=BTN_WARLOCK_PACT_SHADOW_ARMOR, callback_data="warlock_pact_shadow_armor")],
+        [InlineKeyboardButton(text=BTN_WARLOCK_PACT_ARCANE_MIND, callback_data="warlock_pact_arcane_mind")],
+        [InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# =========================================================
+# КЛАВИАТУРЫ ДЛЯ ПЛУТА (ЭКСПЕРТИЗА, ЯЗЫК) – ПОКА ЗАГОТОВКИ
+# =========================================================
+def create_rogue_expertise_keyboard(available_skills: List[str]) -> InlineKeyboardMarkup:
+    """Клавиатура для выбора двух навыков для экспертности (до 2)."""
+    buttons = []
+    for skill in available_skills:
+        buttons.append([InlineKeyboardButton(text=skill, callback_data=f"rogue_expertise_{skill}")])
+    buttons.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def create_rogue_language_keyboard(languages: List[str]) -> InlineKeyboardMarkup:
+    """Клавиатура для выбора дополнительного языка."""
+    buttons = []
+    row = []
+    for i, lang in enumerate(languages):
+        row.append(InlineKeyboardButton(text=lang, callback_data=f"rogue_lang_{lang}"))
+        if len(row) == 2 or i == len(languages) - 1:
+            buttons.append(row)
+            row = []
+    buttons.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# =========================================================
+# КЛАВИАТУРЫ ДЛЯ ПРОСМОТРА И УДАЛЕНИЯ ПЕРСОНАЖЕЙ
+# =========================================================
+
 def create_character_list_keyboard(user_id: int) -> Optional[InlineKeyboardMarkup]:
-    """Старая клавиатура – только текстовый просмотр (для обратной совместимости)"""
     characters = get_user_characters(user_id)
     if not characters:
         return None
@@ -202,20 +263,13 @@ def create_character_list_keyboard(user_id: int) -> Optional[InlineKeyboardMarku
 
 
 def create_character_list_with_webapp_keyboard(user_id: int, webapp_base_url: str) -> Optional[InlineKeyboardMarkup]:
-    """
-    Новая клавиатура списка персонажей с двумя кнопками:
-    - текстовый просмотр (сохраняет старый функционал)
-    - Web App (открывает красивый лист)
-    """
     characters = get_user_characters(user_id)
     if not characters:
         return None
     buttons = []
     for char in characters:
-        # Кнопка текстового просмотра
         text_btn_text = BTN_VIEW_CHAR.format(name=char['name'], class_name=char['class_name'], level=char['level'])
         text_btn = InlineKeyboardButton(text=text_btn_text, callback_data=f"view_{char['id']}")
-        # Кнопка Web App
         webapp_btn = InlineKeyboardButton(text=BTN_WEBAPP_CHAR, web_app=WebAppInfo(url=f"{webapp_base_url}/character/{char['id']}"))
         buttons.append([text_btn, webapp_btn])
     return InlineKeyboardMarkup(inline_keyboard=buttons)

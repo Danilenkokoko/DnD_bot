@@ -2,8 +2,6 @@
 """
 Database initialization and connection management.
 """
-from dotenv import load_dotenv
-load_dotenv()
 
 import os
 import logging
@@ -43,10 +41,9 @@ def _init_pool():
 
 @contextmanager
 def get_connection():
-    """Get a connection from the pool, enable autocommit, and return it when done."""
     _init_pool()
     conn = _db_pool.getconn()
-    conn.autocommit = True   # <-- КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ
+    conn.autocommit = True
     try:
         yield conn
     finally:
@@ -57,7 +54,7 @@ def init_db():
     """Initialize database tables if they don't exist."""
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Create races table
+            # --- existing tables (unchanged) ---
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS races (
                     id SERIAL PRIMARY KEY,
@@ -68,8 +65,6 @@ def init_db():
                     image_path VARCHAR(200)
                 )
             """)
-
-            # Create subraces table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS subraces (
                     id SERIAL PRIMARY KEY,
@@ -81,8 +76,6 @@ def init_db():
                     extra_traits TEXT
                 )
             """)
-
-            # Create classes table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS classes (
                     id SERIAL PRIMARY KEY,
@@ -101,8 +94,6 @@ def init_db():
                     skills TEXT[]
                 )
             """)
-
-            # Create subclasses table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS subclasses (
                     id SERIAL PRIMARY KEY,
@@ -113,8 +104,6 @@ def init_db():
                     features TEXT
                 )
             """)
-
-            # Create backgrounds table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS backgrounds (
                     id SERIAL PRIMARY KEY,
@@ -131,8 +120,6 @@ def init_db():
                     origin_feat VARCHAR(100)
                 )
             """)
-
-            # Create spells table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS spells (
                     id SERIAL PRIMARY KEY,
@@ -147,11 +134,10 @@ def init_db():
                     higher_levels TEXT,
                     is_cantrip BOOLEAN DEFAULT FALSE,
                     category VARCHAR(50),
-                    class_list TEXT[]
+                    class_list TEXT[],
+                    is_ritual BOOLEAN DEFAULT FALSE
                 )
             """)
-
-            # Create equipment table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS equipment (
                     id SERIAL PRIMARY KEY,
@@ -172,8 +158,6 @@ def init_db():
                     weapon_mastery VARCHAR(50)
                 )
             """)
-
-            # Create class_equipment table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS class_equipment (
                     id SERIAL PRIMARY KEY,
@@ -186,8 +170,6 @@ def init_db():
                     coins INTEGER DEFAULT 0
                 )
             """)
-
-            # Create fighting_styles table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS fighting_styles (
                     id SERIAL PRIMARY KEY,
@@ -196,8 +178,6 @@ def init_db():
                     allowed_classes TEXT[]
                 )
             """)
-
-            # Create invocations table (not used on level 1, kept for future)
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS invocations (
                     id SERIAL PRIMARY KEY,
@@ -208,7 +188,35 @@ def init_db():
                 )
             """)
 
-            # Create characters table with new fields
+            # --- new table for warlock pacts (if needed) ---
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS warlock_pacts (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(50) UNIQUE NOT NULL,
+                    description TEXT
+                )
+            """)
+
+            # --- languages reference table for rogue extra language ---
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS languages (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(50) UNIQUE NOT NULL
+                )
+            """)
+            # insert standard languages if empty
+            cur.execute("SELECT COUNT(*) FROM languages")
+            if cur.fetchone()[0] == 0:
+                languages = [
+                    'Общий', 'Эльфийский', 'Дварфийский', 'Гномий', 'Полуросликов',
+                    'Драконий', 'Гоблинский', 'Оркский', 'Великаний', 'Терранский',
+                    'Акванский', 'Ауранский', 'Игнианский', 'Абиссальный', 'Небесный',
+                    'Инфернальный', 'Глубинная речь', 'Примордиальный', 'Сильвани'
+                ]
+                for lang in languages:
+                    cur.execute("INSERT INTO languages (name) VALUES (%s)", (lang,))
+
+            # --- characters table with new columns ---
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS characters (
                     id SERIAL PRIMARY KEY,
@@ -240,30 +248,48 @@ def init_db():
                     image_file_id VARCHAR(200),
                     origin_feat VARCHAR(100),
                     alignment VARCHAR(30) DEFAULT 'Нейтральный',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    -- new columns for class-specific features
+                    druid_order VARCHAR(20),
+                    cleric_order VARCHAR(20),
+                    warlock_pact VARCHAR(30),
+                    rogue_expertise TEXT[],
+                    rogue_extra_language VARCHAR(50),
+                    auto_spells TEXT[],
+                    pact_tome_cantrips TEXT[],
+                    pact_tome_rituals TEXT[],
+                    pact_blade_weapon VARCHAR(50)
                 )
             """)
 
-            # Migrations: add missing columns if they don't exist
-            # Add origin_feat if missing
+            # --- migrations for missing columns (idempotent) ---
+            # check and add columns if they don't exist
+            existing_columns = []
             cur.execute("""
                 SELECT column_name FROM information_schema.columns
-                WHERE table_name='characters' AND column_name='origin_feat'
+                WHERE table_name = 'characters'
             """)
-            if not cur.fetchone():
-                cur.execute("ALTER TABLE characters ADD COLUMN origin_feat VARCHAR(100) DEFAULT ''")
-                logger.info("Added origin_feat column to characters")
+            for row in cur.fetchall():
+                existing_columns.append(row[0])
 
-            # Add alignment if missing
-            cur.execute("""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name='characters' AND column_name='alignment'
-            """)
-            if not cur.fetchone():
-                cur.execute("ALTER TABLE characters ADD COLUMN alignment VARCHAR(30) DEFAULT 'Нейтральный'")
-                logger.info("Added alignment column to characters")
+            def add_column_if_missing(col_name, col_type):
+                if col_name not in existing_columns:
+                    cur.execute(f"ALTER TABLE characters ADD COLUMN {col_name} {col_type}")
+                    logger.info(f"Added column {col_name} to characters")
 
-            # Drop deprecated selected_equipment_choice if exists
+            add_column_if_missing('druid_order', 'VARCHAR(20)')
+            add_column_if_missing('cleric_order', 'VARCHAR(20)')
+            add_column_if_missing('warlock_pact', 'VARCHAR(30)')
+            add_column_if_missing('rogue_expertise', 'TEXT[]')
+            add_column_if_missing('rogue_extra_language', 'VARCHAR(50)')
+            add_column_if_missing('auto_spells', 'TEXT[]')
+            add_column_if_missing('pact_tome_cantrips', 'TEXT[]')
+            add_column_if_missing('pact_tome_rituals', 'TEXT[]')
+            add_column_if_missing('pact_blade_weapon', 'VARCHAR(50)')
+            add_column_if_missing('origin_feat', 'VARCHAR(100)')
+            add_column_if_missing('alignment', 'VARCHAR(30) DEFAULT \'Нейтральный\'')
+
+            # drop deprecated column if exists
             cur.execute("""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_name='characters' AND column_name='selected_equipment_choice'
@@ -277,19 +303,14 @@ def init_db():
 
 
 def init_database():
-    """Legacy wrapper for init_db(), called by bot.py."""
-    logger.info("Initializing database (legacy wrapper)")
     init_db()
 
 
 def migrate_database_v2():
-    """Explicit migration for new fields (kept for compatibility)."""
-    logger.info("Running migration v2 (already handled in init_db, but calling anyway)")
     init_db()
 
 
 def get_user_characters(user_id: int) -> List[Dict[str, Any]]:
-    """Get all characters for a user (simplified version, used by keyboards)."""
     with get_connection() as conn:
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
             cur.execute("""
@@ -303,7 +324,6 @@ def get_user_characters(user_id: int) -> List[Dict[str, Any]]:
 
 
 def get_background_from_db(name: str) -> Optional[Dict[str, Any]]:
-    """Fetch background data by name."""
     with get_connection() as conn:
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
             cur.execute("""
@@ -316,12 +336,7 @@ def get_background_from_db(name: str) -> Optional[Dict[str, Any]]:
 
 
 def get_all_backgrounds_from_db() -> List[Dict[str, Any]]:
-    """Fetch all backgrounds."""
     with get_connection() as conn:
         with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT id, name
-                FROM backgrounds
-                ORDER BY name
-            """)
+            cur.execute("SELECT id, name FROM backgrounds ORDER BY name")
             return cur.fetchall()

@@ -33,22 +33,31 @@ class CreateCharacter(StatesGroup):
     # Шаг 6: Боевой стиль
     fighting_style_select = State()
 
-    # Возвания удалены (не выбираются на 1 уровне)
-
-    # Шаг 7: Предыстория (без отдельного выбора снаряжения)
+    # Предыстория (без отдельного выбора снаряжения)
     background_select = State()
-    # background_equipment_select удалено
 
-    # Шаг 8-9: Раса и подраса
+    # Раса и подраса
     race_select = State()
     subrace_select = State()
 
-    # Шаг 10-11: Имя, история
+    # Имя, история, мировоззрение, изображение
     name_input = State()
     backstory_input = State()
-
-    # Шаг 12: Мировоззрение
     alignment_select = State()
-
-    # Шаг 13: Изображение
     image_input = State()
+
+    # ========== НОВЫЕ СОСТОЯНИЯ ==========
+    # Друид: выбор природного ордена
+    druid_order_select = State()
+    # Жрец: выбор ордена
+    cleric_order_select = State()
+    # Колдун: выбор возвания (договора)
+    warlock_pact_select = State()
+    # Для договора гримуара: выбор 3 кантрипов
+    warlock_tome_cantrips_select = State()
+    # Для договора гримуара: выбор 2 ритуалов 1 уровня
+    warlock_tome_rituals_select = State()
+    # Плут: выбор двух навыков для экспертности
+    rogue_expertise_select = State()
+    # Плут: выбор дополнительного языка
+    rogue_language_select = State()

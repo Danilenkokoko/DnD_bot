@@ -4,8 +4,8 @@
 """
 
 import json
-import psycopg2
 from typing import List, Dict, Any, Optional
+import psycopg2
 from repositories.base_repository import BaseRepository
 from db import get_connection
 
@@ -30,12 +30,18 @@ class CharacterRepository(BaseRepository):
                 selected_skills, selected_masteries, selected_fighting_style,
                 selected_invocations, selected_spells,
                 selected_weapon, selected_armor,
-                backstory, image_file_id, origin_feat, alignment
+                backstory, image_file_id, origin_feat, alignment,
+                druid_order, cleric_order, warlock_pact,
+                rogue_expertise, rogue_extra_language,
+                auto_spells, pact_tome_cantrips, pact_tome_rituals, pact_blade_weapon
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
                       %s, %s, %s, %s, %s, %s,
                       %s, %s, %s,
                       %s, %s, %s,
                       %s, %s,
+                      %s, %s,
+                      %s, %s, %s, %s,
+                      %s, %s, %s,
                       %s, %s,
                       %s, %s, %s, %s)
             RETURNING id
@@ -68,9 +74,17 @@ class CharacterRepository(BaseRepository):
             data.get('backstory', ''),
             data.get('image_file_id'),
             data.get('origin_feat', ''),
-            data.get('alignment', 'Нейтральный')
+            data.get('alignment', 'Нейтральный'),
+            data.get('druid_order'),
+            data.get('cleric_order'),
+            data.get('warlock_pact'),
+            json.dumps(data.get('rogue_expertise', [])),
+            data.get('rogue_extra_language'),
+            json.dumps(data.get('auto_spells', [])),
+            json.dumps(data.get('pact_tome_cantrips', [])),
+            json.dumps(data.get('pact_tome_rituals', [])),
+            data.get('pact_blade_weapon')
         )
-
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, params)
@@ -92,6 +106,9 @@ class CharacterRepository(BaseRepository):
                         c.selected_invocations, c.selected_spells,
                         c.selected_weapon, c.selected_armor,
                         c.backstory, c.image_file_id, c.origin_feat, c.alignment,
+                        c.druid_order, c.cleric_order, c.warlock_pact,
+                        c.rogue_expertise, c.rogue_extra_language,
+                        c.auto_spells, c.pact_tome_cantrips, c.pact_tome_rituals, c.pact_blade_weapon,
                         r.name as race_name,
                         s.name as subrace_name,
                         cl.name as class_name,
@@ -125,6 +142,9 @@ class CharacterRepository(BaseRepository):
                         c.selected_invocations, c.selected_spells,
                         c.selected_weapon, c.selected_armor,
                         c.backstory, c.image_file_id, c.origin_feat, c.alignment,
+                        c.druid_order, c.cleric_order, c.warlock_pact,
+                        c.rogue_expertise, c.rogue_extra_language,
+                        c.auto_spells, c.pact_tome_cantrips, c.pact_tome_rituals, c.pact_blade_weapon,
                         r.name as race_name,
                         s.name as subrace_name,
                         cl.name as class_name,
@@ -143,33 +163,31 @@ class CharacterRepository(BaseRepository):
     def update(self, character_id: int, user_id: int, data: Dict[str, Any]) -> bool:
         set_clauses = []
         params = []
-
         allowed_fields = [
             'name', 'level', 'experience', 'hp', 'ac', 'speed',
             'selected_skills', 'selected_masteries', 'selected_fighting_style',
             'selected_invocations', 'selected_spells', 'selected_weapon', 'selected_armor',
-            'backstory', 'image_file_id', 'origin_feat', 'alignment'
+            'backstory', 'image_file_id', 'origin_feat', 'alignment',
+            'druid_order', 'cleric_order', 'warlock_pact',
+            'rogue_extra_language', 'pact_blade_weapon'
         ]
         for field in allowed_fields:
             if field in data:
                 set_clauses.append(f"{field} = %s")
-                if field in ('selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells'):
+                if field in ('selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells',
+                             'rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals'):
                     params.append(json.dumps(data[field]))
                 else:
                     params.append(data[field])
-
         if not set_clauses:
             return False
-
         stat_fields = ['str', 'dex', 'con', 'int', 'wis', 'cha']
         for stat in stat_fields:
             if stat in data:
                 set_clauses.append(f"{stat} = %s")
                 params.append(data[stat])
-
         query = f"UPDATE characters SET {', '.join(set_clauses)} WHERE id = %s AND user_id = %s"
         params.extend([character_id, user_id])
-
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, params)
@@ -183,7 +201,10 @@ class CharacterRepository(BaseRepository):
                 return cur.rowcount > 0
 
     def _deserialize_character(self, row: Dict[str, Any]) -> Dict[str, Any]:
-        for field in ['selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells']:
+        """Десериализует JSON поля персонажа."""
+        json_fields = ['selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells',
+                       'rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals']
+        for field in json_fields:
             if row.get(field):
                 if isinstance(row[field], str):
                     try:

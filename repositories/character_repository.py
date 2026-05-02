@@ -1,27 +1,17 @@
 # repositories/character_repository.py
-"""
-Репозиторий для работы с персонажами
-"""
-
 import json
-from typing import List, Dict, Any, Optional
 import psycopg2
-from psycopg2.extras import Json
+from typing import List, Dict, Any, Optional
+from psycopg2.extras import Json, RealDictCursor
 from repositories.base_repository import BaseRepository
 from db import get_connection
 
-
 class CharacterRepository(BaseRepository):
-    """Репозиторий для работы с персонажами"""
-
     def __init__(self):
         super().__init__()
         self._table_name = "characters"
 
     def create(self, data: Dict[str, Any]) -> int:
-        """
-        Создаёт нового персонажа и возвращает его ID.
-        """
         stats = data.get('stats', {})
         query = """
             INSERT INTO characters (
@@ -92,12 +82,11 @@ class CharacterRepository(BaseRepository):
                 result = cur.fetchone()
                 if result:
                     return result[0]
-                else:
-                    raise Exception("Failed to insert character, no ID returned")
+                raise Exception("Failed to insert character, no ID returned")
 
     def get_by_id(self, character_id: int, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
         with get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 query = """
                     SELECT
                         c.id, c.user_id, c.name, c.level, c.experience,
@@ -133,7 +122,7 @@ class CharacterRepository(BaseRepository):
 
     def get_by_user_id(self, user_id: int) -> List[Dict[str, Any]]:
         with get_connection() as conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("""
                     SELECT
                         c.id, c.user_id, c.name, c.level, c.experience,
@@ -202,17 +191,17 @@ class CharacterRepository(BaseRepository):
                 return cur.rowcount > 0
 
     def _deserialize_character(self, row: Dict[str, Any]) -> Dict[str, Any]:
-        # Для jsonb-полей данные уже будут десериализованы в Python-объекты
-        # (psycopg2 автоматически преобразует jsonb в dict/list)
-        jsonb_fields = ['selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells',
-                        'rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals']
-        for field in jsonb_fields:
-            if row.get(field) is None:
-                row[field] = []
-            # Если это строка (вдруг), можно распарсить, но обычно нет
-            elif isinstance(row[field], str):
+        # Для jsonb-полей psycopg2 возвращает уже десериализованные объекты (списки или dict).
+        # Но если вдруг они пришли как строки, преобразуем.
+        json_fields = ['selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells',
+                       'rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals']
+        for field in json_fields:
+            val = row.get(field)
+            if isinstance(val, str):
                 try:
-                    row[field] = json.loads(row[field])
+                    row[field] = json.loads(val)
                 except:
                     row[field] = []
+            elif val is None:
+                row[field] = []
         return row

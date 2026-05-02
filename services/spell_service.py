@@ -121,6 +121,41 @@ class SpellSelectionService:
             await SpellSelectionService.start_level1_selection(callback, state)
             return
 
+        # --- ИСПРАВЛЕНИЕ: здесь должен быть код для выбора заговоров ---
+        # Сохраняем авто-списки в state
+        await state.update_data(auto_cantrips=auto_cantrips, auto_level1=auto_level1)
+
+        # Создаём или обновляем селектор
+        selector = await SpellSelectionService._ensure_selector(state, class_name)
+        if not selector:
+            await callback.answer("❌ Ошибка инициализации выбора заклинаний", show_alert=True)
+            return
+        if selector.cantrip_state:
+            selector.cantrip_state.required_count = cantrips_required
+        if selector.level1_state:
+            selector.level1_state.required_count = level1_required
+        await state.update_data(spell_selector=selector.to_dict())
+
+        categories = selector.get_cantrip_categories()
+        logger.info(f"🔍 CATEGORIES: {list(categories.keys()) if categories else 'EMPTY'}")
+        if not categories:
+            logger.error("Нет категорий заговоров, переход к боевому стилю")
+            from handlers.character_handlers import go_to_fighting_style
+            await go_to_fighting_style(callback, state)
+            return
+
+        selected_count, required = selector.get_cantrip_progress()
+        await state.set_state(CreateCharacter.spells_cantrips_category)
+        text = CANTRIP_SELECTION_START.format(
+            class_name=selector.class_name,
+            required=required,
+            remaining=required - selected_count
+        )
+        await send_new_from_callback(callback, state, text,
+                                     reply_markup=create_category_keyboard(categories, "cantrip", selected_count, required))
+        await callback.answer()
+        # --- конец исправления ---
+
     @staticmethod
     async def show_cantrips_in_category(callback: CallbackQuery, state: FSMContext) -> None:
         category = callback.data.replace("cantrip_cat_", "")

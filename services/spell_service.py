@@ -68,7 +68,6 @@ class SpellSelectionService:
         logger.info(f"🔍 is_spellcaster = {is_spellcaster}")
 
         if not is_spellcaster:
-            logger.info("Класс не заклинатель, переходим к боевому стилю")
             from handlers.character_handlers import go_to_fighting_style
             await go_to_fighting_style(callback, state)
             return
@@ -112,13 +111,13 @@ class SpellSelectionService:
         logger.info(f"🔍 cantrips_required = {cantrips_required}, level1_required = {level1_required}")
 
         if cantrips_required == 0 and level1_required == 0:
-            logger.info("Нет ни заговоров, ни заклинаний, переходим к боевому стилю")
+            logger.info("Нет заклинаний, переход к боевому стилю")
             from handlers.character_handlers import go_to_fighting_style
             await go_to_fighting_style(callback, state)
             return
 
         if cantrips_required == 0 and level1_required > 0:
-            logger.info("Нет заговоров, но есть заклинания 1 уровня → start_level1_selection")
+            logger.info("Нет заговоров, переход к заклинаниям 1 уровня")
             await SpellSelectionService.start_level1_selection(callback, state)
             return
 

@@ -1,7 +1,7 @@
 # webapp.py
 """
 Веб-сервер для отображения листа персонажа (Telegram Mini App)
-Обновлён для премиального шаблона с цветовыми темами, HUD-блоком и разделением особенностей.
+Обновлён для отображения всех новых классовых особенностей с разделением по категориям.
 """
 
 import os
@@ -58,10 +58,10 @@ def format_features_by_category(char: Dict[str, Any]) -> Dict[str, List[str]]:
     Возвращает {'order': [], 'pact': [], 'rogue': [], 'class': []}
     """
     result = {
-        'order': [],
-        'pact': [],
-        'rogue': [],
-        'class': []
+        'order': [],   # орден друида / жреца
+        'pact': [],    # договор колдуна (возвания)
+        'rogue': [],   # экспертиза и язык плута
+        'class': []    # все остальные классовые особенности
     }
 
     # 1. Орден друида
@@ -159,26 +159,44 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     }
 
     skills = char.get("selected_skills", [])
-    class_name = char.get("class_name") or "Без класса"
+    class_name_ru = char.get("class_name") or "Без класса"
     race_name = char.get("race_name") or "Неизвестно"
     background_name = char.get("background_name") or "Нет"
 
-    class_info = _class_repo.get_by_name(class_name) or {}
+    # Маппинг русских названий классов на английские ключи для CSS темы
+    class_mapping = {
+        "Варвар": "barbarian",
+        "Бард": "bard",
+        "Жрец": "cleric",
+        "Друид": "druid",
+        "Воин": "warrior",
+        "Монах": "monk",
+        "Паладин": "paladin",
+        "Следопыт": "ranger",
+        "Плут": "rogue",
+        "Чародей": "sorcerer",
+        "Колдун": "warlock",
+        "Волшебник": "wizard",
+        "Артефактор": "artificer",
+    }
+    class_key = class_mapping.get(class_name_ru, "warrior")  # по умолчанию воин
+
+    class_info = _class_repo.get_by_name(class_name_ru) or {}
     saving_throws = class_info.get("saving_throws", [])
     background_info = _bg_repo.get_by_name(background_name) or {}
     background_trait = background_info.get("trait", "")
     background_description = background_info.get("description", "")
     origin_feat = background_info.get("origin_feat", "")
 
-    # Заклинания
+    # Собираем все заклинания: выбранные + автоматические
     selected_spells = char.get("selected_spells", [])
     auto_spells = char.get("auto_spells", [])
     all_spells = list(set(selected_spells + auto_spells))
 
-    # Особенности по категориям
+    # Категоризированные особенности
     categorized_features = format_features_by_category(char)
 
-    # Снаряжение
+    # Снаряжение: от класса и от предыстории
     equipment = []
     if char.get("selected_weapon"):
         equipment.append(char["selected_weapon"])
@@ -207,12 +225,13 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
             mod += 2
         skill_mods[skill] = f"{mod:+d}"
 
-    # Инициатива (для HUD)
-    initiative = (stats.get("DEX", 10) - 10) // 2
+    # Инициатива = модификатор Ловкости
+    initiative = (stats['DEX'] - 10) // 2
 
     return {
         "name": char["name"],
-        "class_name": class_name,
+        "class_name": class_name_ru,
+        "class_key": class_key,
         "race": race_name,
         "level": char.get("level", 1),
         "background": background_name,
@@ -224,10 +243,9 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "hp": char.get("hp", 0),
         "ac": char.get("ac", 10),
         "speed": char.get("speed", 30),
-        "initiative": initiative,
         "alignment": char.get("alignment", "Нейтральное"),
         "experience": char.get("experience", 0),
-        "proficiency_bonus": 2,   # уровень 1
+        "proficiency_bonus": 2,
         "saving_throws": saving_throws,
         "skills": skills,
         "equipment": equipment,
@@ -238,22 +256,27 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "class_specific_features": categorized_features['class'],
         "skill_mods": skill_mods,
         "all_skills": skills,
-        "race_traits": [],      # можно расширить позже
-        "class_features": [],   # можно расширить позже
+        "initiative": initiative,
+        "race_traits": [],
+        "class_features": [],
         "appearance": "",
         "created_date": "недавно",
     }
 
 
-# Загрузка HTML-шаблона из внешнего файла
+# ------------------------------------------------------------------
+# HTML-шаблон вынесен в отдельный файл (например, templates/character_sheet.html)
+# ------------------------------------------------------------------
 def get_template() -> Template:
+    """Загружает HTML-шаблон из файла."""
     template_path = os.path.join(os.path.dirname(__file__), "templates", "character_sheet.html")
-    if os.path.exists(template_path):
+    try:
         with open(template_path, "r", encoding="utf-8") as f:
             return Template(f.read())
-    else:
-        # fallback
-        return Template("<h1>Ошибка: шаблон не найден</h1><p>Пожалуйста, убедитесь, что файл templates/character_sheet.html существует.</p>")
+    except FileNotFoundError:
+        logger.error("HTML шаблон не найден по пути: %s", template_path)
+        # fallback – минимальный шаблон
+        return Template("<h1>Ошибка: шаблон не найден</h1><p>{{ error }}</p>")
 
 
 @app.get("/character/{char_id}", response_class=HTMLResponse)

@@ -26,31 +26,73 @@
   .hero {
     background: linear-gradient(135deg, #7c3aed, #4f46e5);
     border-radius: 24px;
-    padding: 32px;
+    padding: 28px 32px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
     box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+  }
+
+  .hero-left {
+    flex: 1;
   }
 
   .name {
     font-size: 42px;
     font-weight: 700;
     letter-spacing: 1px;
+    margin-bottom: 16px;
   }
 
-  .meta {
+  /* Вертикальный список класса, расы, мировоззрения */
+  .class-race-alignment {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .class-race-alignment span {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.12);
+    padding: 6px 16px;
+    border-radius: 40px;
+    width: fit-content;
+    backdrop-filter: blur(4px);
     font-size: 16px;
-    opacity: 0.9;
-    margin-top: 8px;
+  }
+
+  .xp-info {
+    background: rgba(255,255,255,0.1);
+    border-radius: 40px;
+    padding: 6px 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    width: fit-content;
   }
 
   .level-badge {
-    background: rgba(255,255,255,0.2);
-    padding: 12px 20px;
+    background: rgba(0,0,0,0.3);
+    padding: 12px 24px;
     border-radius: 60px;
     font-weight: bold;
-    font-size: 20px;
+    font-size: 24px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 0 12px rgba(0,0,0,0.2);
+    backdrop-filter: blur(4px);
+  }
+
+  .level-badge i {
+    font-style: normal;
+    font-size: 28px;
   }
 
   /* ===== STATS STRIP ===== */
@@ -171,10 +213,6 @@
     gap: 8px;
   }
 
-  .sub-title i {
-    font-style: normal;
-  }
-
   .footer {
     text-align: center;
     margin-top: 48px;
@@ -193,23 +231,34 @@
     .grid { grid-template-columns: 1fr; }
     .stats .stat-value { font-size: 20px; }
     .name { font-size: 28px; }
+    .hero { flex-direction: column; align-items: stretch; text-align: left; }
+    .level-badge { align-self: flex-start; }
+    .class-race-alignment span { width: auto; }
   }
 </style>
 </head>
 <body>
 <div class="container">
 
-  <!-- HERO -->
+  <!-- HERO (ВЕРТИКАЛЬНЫЙ СПИСОК + УРОВЕНЬ СПРАВА) -->
   <div class="hero">
-    <div>
+    <div class="hero-left">
       <div class="name">{{ name }}</div>
-      <div class="meta">{{ class_name }} • {{ race }} • {{ alignment }}</div>
-      <div class="meta">{{ background }} • {{ experience }} XP</div>
+      <div class="class-race-alignment">
+        <span>⚔️ Класс: {{ class_name }}</span>
+        <span>🧝 Раса: {{ race }}</span>
+        <span>⚖️ Мировоззрение: {{ alignment }}</span>
+      </div>
+      <div class="xp-info">
+        <span>📈 Опыт:</span> <strong>{{ experience }} XP</strong>
+      </div>
     </div>
-    <div class="level-badge">УРОВЕНЬ {{ level }}</div>
+    <div class="level-badge">
+      <i>🌟</i> УРОВЕНЬ {{ level }}
+    </div>
   </div>
 
-  <!-- CHARACTERISTICS -->
+  <!-- ХАРАКТЕРИСТИКИ -->
   <div class="stats">
     {% for stat, value in stats.items() %}
     <div class="stat">
@@ -219,7 +268,7 @@
     {% endfor %}
   </div>
 
-  <!-- COMBAT PARAMETERS -->
+  <!-- БОЕВЫЕ ПАРАМЕТРЫ -->
   <div class="combat">
     <div class="badge">
       <div class="badge-value">🛡 {{ ac }}</div>
@@ -239,10 +288,10 @@
     </div>
   </div>
 
-  <!-- MAIN GRID -->
+  <!-- ОСНОВНАЯ СЕТКА -->
   <div class="grid">
 
-    <!-- LEVY BLOCK: SKILLS + SAVES -->
+    <!-- ЛЕВАЯ КОЛОНКА: НАВЫКИ И СПАСБРОСКИ -->
     <div class="card">
       <div class="title">НАВЫКИ И СПАСБРОСКИ</div>
       <div class="content">
@@ -261,25 +310,21 @@
       </div>
     </div>
 
-    <!-- PRAVY BLOCK: FEATURES (GROUPED) -->
+    <!-- ПРАВАЯ КОЛОНКА: ОСОБЕННОСТИ (С ГРУППИРОВКОЙ) -->
     <div class="card">
       <div class="title">ОСОБЕННОСТИ И УМЕНИЯ</div>
       <div class="content">
         {% if race_traits %}
         <div class="sub-section">
           <div class="sub-title"><i>🐉</i> Раса</div>
-          <ul class="traits-list">
-            {% for trait in race_traits %}<li>{{ trait }}</li>{% endfor %}
-          </ul>
+          <ul class="traits-list">{% for trait in race_traits %}<li>{{ trait }}</li>{% endfor %}</ul>
         </div>
         {% endif %}
 
         {% if class_features %}
         <div class="sub-section">
           <div class="sub-title"><i>⚔️</i> Класс</div>
-          <ul class="traits-list">
-            {% for feature in class_features %}<li>{{ feature }}</li>{% endfor %}
-          </ul>
+          <ul class="traits-list">{% for feature in class_features %}<li>{{ feature }}</li>{% endfor %}</ul>
         </div>
         {% endif %}
 
@@ -327,7 +372,7 @@
       </div>
     </div>
 
-    <!-- LEFT COLUMN: EQUIPMENT + BACKGROUND -->
+    <!-- НИЖНЯЯ ЛЕВАЯ: СНАРЯЖЕНИЕ + ПРЕДЫСТОРИЯ -->
     <div class="card">
       <div class="title">СНАРЯЖЕНИЕ</div>
       <div class="content">
@@ -346,7 +391,7 @@
       </div>
     </div>
 
-    <!-- RIGHT COLUMN: SPELLS + NOTES -->
+    <!-- НИЖНЯЯ ПРАВАЯ: ЗАКЛИНАНИЯ -->
     <div class="card">
       <div class="title">ЗАКЛИНАНИЯ</div>
       <div class="content">
@@ -363,7 +408,7 @@
     </div>
   </div>
 
-  <!-- FOOTER -->
+  <!-- ПОДВАЛ -->
   <div class="footer">
     Создано в <span class="brand">⚔️ Кузнице героев ⚔️</span>
   </div>

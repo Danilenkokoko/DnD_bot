@@ -337,10 +337,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     font-family: monospace;
   }
 
-  /* ===== STATS (РУССКИЕ НАЗВАНИЯ) ===== */
+  /* ===== STATS (GRID ДЛЯ ГИБКОСТИ) ===== */
   .stats {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
     gap: 12px;
     margin-top: 24px;
   }
@@ -350,7 +350,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     border-radius: 20px;
     padding: 16px 8px;
     text-align: center;
-    flex: 1;
     backdrop-filter: blur(4px);
     transition: transform 0.2s, background 0.2s;
   }
@@ -374,11 +373,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     letter-spacing: 0.5px;
   }
 
-  /* ===== COMBAT BADGES (ПРЕМИАЛЬНЫЕ ИКОНКИ) ===== */
+  /* ===== COMBAT BADGES ===== */
   .combat {
     display: flex;
     gap: 16px;
     margin-top: 24px;
+    flex-wrap: wrap;
   }
 
   .badge {
@@ -392,6 +392,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     align-items: center;
     gap: 8px;
     transition: all 0.2s;
+    min-width: 100px;
   }
 
   .badge:hover {
@@ -498,16 +499,52 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     color: #a78bfa;
   }
 
+  /* ===== АДАПТИВНОСТЬ ===== */
+  @media (max-width: 900px) {
+    .stats {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+  }
+
   @media (max-width: 750px) {
     .container { padding: 20px; }
     .grid { grid-template-columns: 1fr; }
-    .stats .stat-value { font-size: 20px; }
     .name { font-size: 28px; }
     .hero { flex-direction: column; align-items: stretch; text-align: left; }
     .level-badge { align-self: flex-start; }
     .class-race-alignment span { width: auto; }
+    .stats {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .stat-value { font-size: 22px; }
+    .stat-label { font-size: 10px; }
+    .badge { min-width: 80px; }
     .badge i { font-size: 22px; }
-    .badge-value { font-size: 22px; }
+    .badge-value { font-size: 20px; }
+    .combat {
+      flex-wrap: wrap;
+    }
+    .badge {
+      flex: 1 1 calc(50% - 16px);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .stats {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .stat {
+      padding: 10px 4px;
+    }
+    .stat-value {
+      font-size: 18px;
+    }
+    .badge {
+      flex: 1 1 100%;
+    }
   }
 </style>
 </head>
@@ -532,7 +569,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- ХАРАКТЕРИСТИКИ (РУССКИЕ НАЗВАНИЯ) -->
+  <!-- ХАРАКТЕРИСТИКИ (GRID) -->
   <div class="stats">
     <div class="stat">
       <div class="stat-value">{{ stats['STR'] }}</div>
@@ -560,7 +597,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- БОЕВЫЕ ПОКАЗАТЕЛИ (ПРЕМИАЛЬНЫЕ ИКОНКИ) -->
+  <!-- БОЕВЫЕ ПОКАЗАТЕЛИ -->
   <div class="combat">
     <div class="badge">
       <i class="fas fa-shield-alt"></i>
@@ -587,7 +624,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <!-- ОСНОВНАЯ СЕТКА -->
   <div class="grid">
 
-    <!-- ЛЕВАЯ КОЛОНКА: НАВЫКИ И СПАСБРОСКИ -->
     <div class="card">
       <div class="title">Навыки и спасброски</div>
       <div class="content">
@@ -606,7 +642,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
     </div>
 
-    <!-- ПРАВАЯ КОЛОНКА: ОСОБЕННОСТИ (С ГРУППИРОВКОЙ) -->
     <div class="card">
       <div class="title">Особенности и умения</div>
       <div class="content">
@@ -668,7 +703,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
     </div>
 
-    <!-- НИЖНЯЯ ЛЕВАЯ: СНАРЯЖЕНИЕ + ПРЕДЫСТОРИЯ -->
     <div class="card">
       <div class="title">Снаряжение</div>
       <div class="content">
@@ -687,7 +721,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
     </div>
 
-    <!-- НИЖНЯЯ ПРАВАЯ: ЗАКЛИНАНИЯ -->
     <div class="card">
       <div class="title">Заклинания</div>
       <div class="content">
@@ -704,7 +737,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- ПОДВАЛ -->
   <div class="footer">
     Создано в <span class="brand">⚔️ Кузнице героев ⚔️</span>
   </div>

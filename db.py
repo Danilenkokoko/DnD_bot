@@ -291,15 +291,6 @@ def init_db():
             add_column_if_missing('origin_feat', 'VARCHAR(100)')
             add_column_if_missing('alignment', 'VARCHAR(30) DEFAULT \'Нейтральный\'')
 
-            # drop deprecated column if exists
-            cur.execute("""
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name='characters' AND column_name='selected_equipment_choice'
-            """)
-            if cur.fetchone():
-                cur.execute("ALTER TABLE characters DROP COLUMN selected_equipment_choice")
-                logger.info("Dropped deprecated column selected_equipment_choice")
-
             conn.commit()
             logger.info("Database initialized and migrated successfully")
 

@@ -730,6 +730,46 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         await message.answer(f"❌ Произошла ошибка: {str(e)[:200]}", reply_markup=main_menu())
         await state.clear()
 
+@router.callback_query(CreateCharacter.background_select, lambda c: c.data.startswith("bg_"))
+async def select_background(callback: CallbackQuery, state: FSMContext):
+    background = callback.data.replace("bg_", "")
+    await state.update_data(background=background)
+    logger.info(f"[FLOW] Выбрана предыстория: {background}")
+
+    bg_info = _bg_repo.get_by_name(background)
+    if not bg_info:
+        await send_new_from_callback(callback, state, BACKGROUND_ERROR.format(background=background))
+        await state.clear()
+        return
+
+    await state.update_data(
+        selected_skills_bg=bg_info.get('skills', []),
+        background_trait=bg_info.get('trait', 'Нет'),
+        background_origin_feat=bg_info.get('origin_feat', '')
+    )
+
+    trait = bg_info.get('trait', 'Нет')
+    skills = ", ".join(bg_info.get('skills', []))
+    tools = bg_info.get('tools', 'Нет')
+    description = bg_info.get('description', 'Нет описания')[:300]
+    origin_feat = bg_info.get('origin_feat', '')
+    origin_feat_text = f"✨ Черта происхождения: {origin_feat}\n\n" if origin_feat else ""
+
+    text = (f"📜 {background}\n\n"
+            f"📖 {description}...\n\n"
+            f"{origin_feat_text}"
+            f"✨ Бонусы характеристик: +2 {bg_info['characteristics'][0]}, +1 {bg_info['characteristics'][1]}\n\n"
+            f"🔧 Черта: {trait}\n"
+            f"📚 Навыки: {skills}\n"
+            f"🛠️ Инструменты: {tools}\n\n"
+            f"Теперь выбери снаряжение от предыстории:")
+
+    await send_new_from_callback(callback, state, text)
+    await state.set_state(CreateCharacter.background_equipment_select)
+    await send_new_from_callback(callback, state, "Выбери один из стартовых наборов:",
+                                 reply_markup=create_background_equipment_keyboard(background))
+    await callback.answer()
+
 # =========================================================
 # ПРОСМОТР И УДАЛЕНИЕ ПЕРСОНАЖЕЙ
 # =========================================================

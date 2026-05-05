@@ -248,6 +248,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <title>D&D Character Sheet — {{ name }}</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 <style>
   @page {
     size: A4;
@@ -256,7 +257,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   body {
     margin: 0;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
     background: #0f172a;
     color: #e2e8f0;
   }
@@ -289,9 +290,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     font-weight: 700;
     letter-spacing: 1px;
     margin-bottom: 16px;
+    font-family: 'Playfair Display', serif;
   }
 
-  /* Вертикальный список класса, расы, мировоззрения */
   .class-race-alignment {
     display: flex;
     flex-direction: column;
@@ -333,14 +334,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     gap: 8px;
     box-shadow: 0 0 12px rgba(0,0,0,0.2);
     backdrop-filter: blur(4px);
+    font-family: monospace;
   }
 
-  .level-badge i {
-    font-style: normal;
-    font-size: 28px;
-  }
-
-  /* ===== STATS STRIP ===== */
+  /* ===== STATS (РУССКИЕ НАЗВАНИЯ) ===== */
   .stats {
     display: flex;
     justify-content: space-between;
@@ -355,6 +352,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     text-align: center;
     flex: 1;
     backdrop-filter: blur(4px);
+    transition: transform 0.2s, background 0.2s;
+  }
+
+  .stat:hover {
+    background: rgba(255,255,255,0.1);
+    transform: translateY(-2px);
   }
 
   .stat-value {
@@ -368,9 +371,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     opacity: 0.7;
     margin-top: 6px;
     text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
-  /* ===== COMBAT BADGES ===== */
+  /* ===== COMBAT BADGES (ПРЕМИАЛЬНЫЕ ИКОНКИ) ===== */
   .combat {
     display: flex;
     gap: 16px;
@@ -383,17 +387,33 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     padding: 14px 12px;
     text-align: center;
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+  }
+
+  .badge:hover {
+    background: rgba(255,255,255,0.12);
+    transform: translateY(-2px);
+  }
+
+  .badge i {
+    font-size: 28px;
+    color: #a78bfa;
   }
 
   .badge-value {
     font-size: 26px;
     font-weight: bold;
+    line-height: 1.2;
   }
 
   .badge-label {
-    font-size: 12px;
+    font-size: 11px;
     opacity: 0.6;
-    margin-top: 4px;
+    letter-spacing: 0.5px;
   }
 
   /* ===== GRID ===== */
@@ -409,6 +429,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     border-radius: 24px;
     padding: 20px;
     backdrop-filter: blur(4px);
+    border: 1px solid rgba(255,255,255,0.05);
+    transition: all 0.2s;
+  }
+
+  .card:hover {
+    border-color: rgba(167, 139, 250, 0.3);
   }
 
   .title {
@@ -418,6 +444,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     border-left: 4px solid #8b5cf6;
     padding-left: 12px;
     letter-spacing: -0.3px;
+    font-family: 'Playfair Display', serif;
   }
 
   .content {
@@ -479,57 +506,81 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .hero { flex-direction: column; align-items: stretch; text-align: left; }
     .level-badge { align-self: flex-start; }
     .class-race-alignment span { width: auto; }
+    .badge i { font-size: 22px; }
+    .badge-value { font-size: 22px; }
   }
 </style>
 </head>
 <body>
 <div class="container">
 
-  <!-- HERO (ВЕРТИКАЛЬНЫЙ СПИСОК + УРОВЕНЬ СПРАВА) -->
+  <!-- HERO -->
   <div class="hero">
     <div class="hero-left">
       <div class="name">{{ name }}</div>
       <div class="class-race-alignment">
-        <span>⚔️ Класс: {{ class_name }}</span>
-        <span>🧝 Раса: {{ race }}</span>
-        <span>⚖️ Мировоззрение: {{ alignment }}</span>
+        <span><i class="fas fa-fist-raised"></i> Класс: {{ class_name }}</span>
+        <span><i class="fas fa-dragon"></i> Раса: {{ race }}</span>
+        <span><i class="fas fa-balance-scale"></i> Мировоззрение: {{ alignment }}</span>
       </div>
       <div class="xp-info">
-        <span>📈 Опыт:</span> <strong>{{ experience }} XP</strong>
+        <i class="fas fa-chart-line"></i> <strong>{{ experience }} XP</strong>
       </div>
     </div>
     <div class="level-badge">
-      <i>🌟</i> УРОВЕНЬ {{ level }}
+      <i class="fas fa-star"></i> УРОВЕНЬ {{ level }}
     </div>
   </div>
 
-  <!-- ХАРАКТЕРИСТИКИ -->
+  <!-- ХАРАКТЕРИСТИКИ (РУССКИЕ НАЗВАНИЯ) -->
   <div class="stats">
-    {% for stat, value in stats.items() %}
     <div class="stat">
-      <div class="stat-value">{{ value }}</div>
-      <div class="stat-label">{{ stat }}</div>
+      <div class="stat-value">{{ stats['STR'] }}</div>
+      <div class="stat-label">Сила</div>
     </div>
-    {% endfor %}
+    <div class="stat">
+      <div class="stat-value">{{ stats['DEX'] }}</div>
+      <div class="stat-label">Ловкость</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{{ stats['CON'] }}</div>
+      <div class="stat-label">Телосложение</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{{ stats['INT'] }}</div>
+      <div class="stat-label">Интеллект</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{{ stats['WIS'] }}</div>
+      <div class="stat-label">Мудрость</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{{ stats['CHA'] }}</div>
+      <div class="stat-label">Харизма</div>
+    </div>
   </div>
 
-  <!-- БОЕВЫЕ ПАРАМЕТРЫ -->
+  <!-- БОЕВЫЕ ПОКАЗАТЕЛИ (ПРЕМИАЛЬНЫЕ ИКОНКИ) -->
   <div class="combat">
     <div class="badge">
-      <div class="badge-value">🛡 {{ ac }}</div>
-      <div class="badge-label">КЛАСС БРОНИ</div>
+      <i class="fas fa-shield-alt"></i>
+      <div class="badge-value">{{ ac }}</div>
+      <div class="badge-label">Класс брони</div>
     </div>
     <div class="badge">
-      <div class="badge-value">❤️ {{ hp }}</div>
-      <div class="badge-label">ХИТЫ</div>
+      <i class="fas fa-heartbeat"></i>
+      <div class="badge-value">{{ hp }}</div>
+      <div class="badge-label">Хиты</div>
     </div>
     <div class="badge">
-      <div class="badge-value">⚡ {{ (stats['DEX'] - 10) // 2 }}</div>
-      <div class="badge-label">ИНИЦИАТИВА</div>
+      <i class="fas fa-bolt"></i>
+      <div class="badge-value">{{ (stats['DEX'] - 10) // 2 }}</div>
+      <div class="badge-label">Инициатива</div>
     </div>
     <div class="badge">
-      <div class="badge-value">🏃 {{ speed }}</div>
-      <div class="badge-label">СКОРОСТЬ</div>
+      <i class="fas fa-shoe-prints"></i>
+      <div class="badge-value">{{ speed }}</div>
+      <div class="badge-label">Скорость</div>
     </div>
   </div>
 
@@ -538,7 +589,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     <!-- ЛЕВАЯ КОЛОНКА: НАВЫКИ И СПАСБРОСКИ -->
     <div class="card">
-      <div class="title">НАВЫКИ И СПАСБРОСКИ</div>
+      <div class="title">Навыки и спасброски</div>
       <div class="content">
         <strong>Спасброски</strong>
         <ul class="traits-list" style="margin-bottom: 16px;">
@@ -557,60 +608,60 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     <!-- ПРАВАЯ КОЛОНКА: ОСОБЕННОСТИ (С ГРУППИРОВКОЙ) -->
     <div class="card">
-      <div class="title">ОСОБЕННОСТИ И УМЕНИЯ</div>
+      <div class="title">Особенности и умения</div>
       <div class="content">
         {% if race_traits %}
         <div class="sub-section">
-          <div class="sub-title"><i>🐉</i> Раса</div>
+          <div class="sub-title"><i class="fas fa-dragon"></i> Раса</div>
           <ul class="traits-list">{% for trait in race_traits %}<li>{{ trait }}</li>{% endfor %}</ul>
         </div>
         {% endif %}
 
         {% if class_features %}
         <div class="sub-section">
-          <div class="sub-title"><i>⚔️</i> Класс</div>
+          <div class="sub-title"><i class="fas fa-fist-raised"></i> Класс</div>
           <ul class="traits-list">{% for feature in class_features %}<li>{{ feature }}</li>{% endfor %}</ul>
         </div>
         {% endif %}
 
         {% if background_trait %}
         <div class="sub-section">
-          <div class="sub-title"><i>📜</i> Предыстория</div>
+          <div class="sub-title"><i class="fas fa-scroll"></i> Предыстория</div>
           <ul class="traits-list"><li>{{ background_trait }}</li></ul>
         </div>
         {% endif %}
 
         {% if origin_feat %}
         <div class="sub-section">
-          <div class="sub-title"><i>✨</i> Черта происхождения</div>
+          <div class="sub-title"><i class="fas fa-star"></i> Черта происхождения</div>
           <ul class="traits-list"><li>{{ origin_feat }}</li></ul>
         </div>
         {% endif %}
 
         {% if order_features %}
         <div class="sub-section">
-          <div class="sub-title"><i>🌿</i> Орден / Путь</div>
+          <div class="sub-title"><i class="fas fa-tree"></i> Орден / Путь</div>
           <ul class="traits-list">{% for item in order_features %}<li>{{ item }}</li>{% endfor %}</ul>
         </div>
         {% endif %}
 
         {% if pact_features %}
         <div class="sub-section">
-          <div class="sub-title"><i>🤝</i> Договор</div>
+          <div class="sub-title"><i class="fas fa-handshake"></i> Договор</div>
           <ul class="traits-list">{% for item in pact_features %}<li>{{ item }}</li>{% endfor %}</ul>
         </div>
         {% endif %}
 
         {% if rogue_features %}
         <div class="sub-section">
-          <div class="sub-title"><i>🗡️</i> Плут</div>
+          <div class="sub-title"><i class="fas fa-user-secret"></i> Плут</div>
           <ul class="traits-list">{% for item in rogue_features %}<li>{{ item }}</li>{% endfor %}</ul>
         </div>
         {% endif %}
 
         {% if class_specific_features %}
         <div class="sub-section">
-          <div class="sub-title"><i>🎲</i> Умения класса</div>
+          <div class="sub-title"><i class="fas fa-dice-d20"></i> Умения класса</div>
           <ul class="traits-list">{% for item in class_specific_features %}<li>{{ item }}</li>{% endfor %}</ul>
         </div>
         {% endif %}
@@ -619,7 +670,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     <!-- НИЖНЯЯ ЛЕВАЯ: СНАРЯЖЕНИЕ + ПРЕДЫСТОРИЯ -->
     <div class="card">
-      <div class="title">СНАРЯЖЕНИЕ</div>
+      <div class="title">Снаряжение</div>
       <div class="content">
         <ul class="equipment-list">
           {% for item in equipment %}
@@ -629,7 +680,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           {% endfor %}
         </ul>
       </div>
-      <div class="title" style="margin-top: 20px;">ПРЕДЫСТОРИЯ</div>
+      <div class="title" style="margin-top: 20px;">Предыстория</div>
       <div class="content">
         {% if background_description %}<p><em>{{ background_description }}</em></p>{% endif %}
         <p>{{ backstory }}</p>
@@ -638,7 +689,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     <!-- НИЖНЯЯ ПРАВАЯ: ЗАКЛИНАНИЯ -->
     <div class="card">
-      <div class="title">ЗАКЛИНАНИЯ</div>
+      <div class="title">Заклинания</div>
       <div class="content">
         {% if spells and spells|length > 0 %}
         <ul class="spells-list">

@@ -244,239 +244,376 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
 # HTML-шаблон (можно вынести в отдельный файл, но для простоты здесь)
 # ------------------------------------------------------------------
 HTML_TEMPLATE = """<!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
 <meta charset="UTF-8">
-
+<title>D&D Character Sheet — {{ name }}</title>
 <style>
-@page {
-  size: A4;
-  margin: 0;
-}
+  @page {
+    size: A4;
+    margin: 0;
+  }
 
-body {
-  margin: 0;
-  font-family: 'Inter', sans-serif;
-  background: #0f172a;
-  color: white;
-}
+  body {
+    margin: 0;
+    font-family: 'Inter', sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+  }
 
-/* ===== CONTAINER ===== */
+  .container {
+    padding: 40px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
 
-.container {
-  padding: 40px;
-}
+  /* ===== HERO ===== */
+  .hero {
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    border-radius: 24px;
+    padding: 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+  }
 
-/* ===== HERO BLOCK (ВАЖНО ДЛЯ PREVIEW) ===== */
+  .name {
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
 
-.hero {
-  background: linear-gradient(135deg, #7c3aed, #4f46e5);
-  border-radius: 20px;
-  padding: 30px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+  .meta {
+    font-size: 16px;
+    opacity: 0.9;
+    margin-top: 8px;
+  }
 
-.name {
-  font-size: 42px;
-  font-weight: 700;
-}
+  .level-badge {
+    background: rgba(255,255,255,0.2);
+    padding: 12px 20px;
+    border-radius: 60px;
+    font-weight: bold;
+    font-size: 20px;
+  }
 
-.meta {
-  font-size: 16px;
-  opacity: 0.9;
-}
+  /* ===== STATS STRIP ===== */
+  .stats {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 24px;
+  }
 
-.level-badge {
-  background: rgba(255,255,255,0.2);
-  padding: 10px 16px;
-  border-radius: 12px;
-  font-weight: bold;
-}
+  .stat {
+    background: rgba(255,255,255,0.05);
+    border-radius: 20px;
+    padding: 16px 8px;
+    text-align: center;
+    flex: 1;
+    backdrop-filter: blur(4px);
+  }
 
-/* ===== STATS STRIP ===== */
+  .stat-value {
+    font-size: 28px;
+    font-weight: bold;
+    color: #c4b5fd;
+  }
 
-.stats {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 20px;
-}
+  .stat-label {
+    font-size: 12px;
+    opacity: 0.7;
+    margin-top: 6px;
+    text-transform: uppercase;
+  }
 
-.stat {
-  background: rgba(255,255,255,0.05);
-  border-radius: 14px;
-  padding: 14px;
-  text-align: center;
-  width: 15%;
-}
+  /* ===== COMBAT BADGES ===== */
+  .combat {
+    display: flex;
+    gap: 16px;
+    margin-top: 24px;
+  }
 
-.stat-value {
-  font-size: 24px;
-  font-weight: bold;
-}
+  .badge {
+    background: rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 14px 12px;
+    text-align: center;
+    flex: 1;
+  }
 
-.stat-label {
-  font-size: 11px;
-  opacity: 0.7;
-}
+  .badge-value {
+    font-size: 26px;
+    font-weight: bold;
+  }
 
-/* ===== MAIN GRID ===== */
+  .badge-label {
+    font-size: 12px;
+    opacity: 0.6;
+    margin-top: 4px;
+  }
 
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-top: 30px;
-}
+  /* ===== GRID ===== */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-top: 32px;
+  }
 
-.card {
-  background: rgba(255,255,255,0.05);
-  border-radius: 16px;
-  padding: 16px;
-}
+  .card {
+    background: rgba(255,255,255,0.05);
+    border-radius: 24px;
+    padding: 20px;
+    backdrop-filter: blur(4px);
+  }
 
-.title {
-  font-weight: 600;
-  margin-bottom: 10px;
-  font-size: 14px;
-  opacity: 0.8;
-}
+  .title {
+    font-weight: 600;
+    font-size: 18px;
+    margin-bottom: 16px;
+    border-left: 4px solid #8b5cf6;
+    padding-left: 12px;
+    letter-spacing: -0.3px;
+  }
 
-.content {
-  font-size: 13px;
-  white-space: pre-line;
-}
+  .content {
+    font-size: 14px;
+    line-height: 1.5;
+  }
 
-/* ===== COMBAT BADGES ===== */
+  .traits-list, .equipment-list, .spells-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+  }
 
-.combat {
-  display: flex;
-  gap: 15px;
-  margin-top: 20px;
-}
+  .traits-list li, .equipment-list li, .spells-list li {
+    padding: 8px 0 8px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    position: relative;
+  }
 
-.badge {
-  flex: 1;
-  background: rgba(255,255,255,0.08);
-  border-radius: 14px;
-  padding: 12px;
-  text-align: center;
-}
+  .traits-list li::before {
+    content: "✧";
+    color: #a78bfa;
+    position: absolute;
+    left: 0;
+  }
 
-.badge-value {
-  font-size: 22px;
-  font-weight: bold;
-}
+  .sub-section {
+    margin-top: 16px;
+  }
 
-.badge-label {
-  font-size: 11px;
-  opacity: 0.6;
-}
+  .sub-title {
+    font-size: 14px;
+    font-weight: 600;
+    opacity: 0.8;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
 
-/* ===== FOOTER ===== */
+  .sub-title i {
+    font-style: normal;
+  }
 
-.footer {
-  text-align: center;
-  margin-top: 40px;
-  font-size: 11px;
-  opacity: 0.5;
-}
+  .footer {
+    text-align: center;
+    margin-top: 48px;
+    font-size: 12px;
+    opacity: 0.5;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 24px;
+  }
 
-.brand {
-  color: #a78bfa;
-}
+  .brand {
+    color: #a78bfa;
+  }
 
+  @media (max-width: 750px) {
+    .container { padding: 20px; }
+    .grid { grid-template-columns: 1fr; }
+    .stats .stat-value { font-size: 20px; }
+    .name { font-size: 28px; }
+  }
 </style>
 </head>
-
 <body>
-
 <div class="container">
 
-  <!-- 🔥 HERO (ЭТО ВИДИТ TELEGRAM) -->
+  <!-- HERO -->
   <div class="hero">
     <div>
       <div class="name">{{ name }}</div>
-      <div class="meta">
-        {{ class }} • {{ race }}
-      </div>
+      <div class="meta">{{ class_name }} • {{ race }} • {{ alignment }}</div>
+      <div class="meta">{{ background }} • {{ experience }} XP</div>
     </div>
-
-    <div class="level-badge">
-      LVL {{ level }}
-    </div>
+    <div class="level-badge">УРОВЕНЬ {{ level }}</div>
   </div>
 
-  <!-- STATS -->
+  <!-- CHARACTERISTICS -->
   <div class="stats">
-    {% for key, value in stats.items() %}
+    {% for stat, value in stats.items() %}
     <div class="stat">
       <div class="stat-value">{{ value }}</div>
-      <div class="stat-label">{{ key }}</div>
+      <div class="stat-label">{{ stat }}</div>
     </div>
     {% endfor %}
   </div>
 
-  <!-- COMBAT -->
+  <!-- COMBAT PARAMETERS -->
   <div class="combat">
     <div class="badge">
       <div class="badge-value">🛡 {{ ac }}</div>
-      <div class="badge-label">AC</div>
+      <div class="badge-label">КЛАСС БРОНИ</div>
     </div>
-
     <div class="badge">
       <div class="badge-value">❤️ {{ hp }}</div>
-      <div class="badge-label">HP</div>
+      <div class="badge-label">ХИТЫ</div>
     </div>
-
     <div class="badge">
-      <div class="badge-value">⚡ {{ initiative }}</div>
-      <div class="badge-label">INIT</div>
+      <div class="badge-value">⚡ {{ (stats['DEX'] - 10) // 2 }}</div>
+      <div class="badge-label">ИНИЦИАТИВА</div>
     </div>
-
     <div class="badge">
       <div class="badge-value">🏃 {{ speed }}</div>
-      <div class="badge-label">SPEED</div>
+      <div class="badge-label">СКОРОСТЬ</div>
     </div>
   </div>
 
-  <!-- MAIN -->
+  <!-- MAIN GRID -->
   <div class="grid">
 
+    <!-- LEVY BLOCK: SKILLS + SAVES -->
     <div class="card">
-      <div class="title">Навыки</div>
+      <div class="title">НАВЫКИ И СПАСБРОСКИ</div>
       <div class="content">
-{% for skill, value in skills.items() %}
-{{ skill }}: {{ value }}
-{% endfor %}
+        <strong>Спасброски</strong>
+        <ul class="traits-list" style="margin-bottom: 16px;">
+          {% for save in saving_throws %}
+          <li>{{ save }} ({{ (stats[save] - 10) // 2 + proficiency_bonus }})</li>
+          {% endfor %}
+        </ul>
+        <strong>Навыки</strong>
+        <ul class="traits-list">
+          {% for skill, mod in skill_mods.items() %}
+          <li>{{ skill }}: {{ mod }}</li>
+          {% endfor %}
+        </ul>
       </div>
     </div>
 
+    <!-- PRAVY BLOCK: FEATURES (GROUPED) -->
     <div class="card">
-      <div class="title">Особенности</div>
-      <div class="content">{{ features }}</div>
+      <div class="title">ОСОБЕННОСТИ И УМЕНИЯ</div>
+      <div class="content">
+        {% if race_traits %}
+        <div class="sub-section">
+          <div class="sub-title"><i>🐉</i> Раса</div>
+          <ul class="traits-list">
+            {% for trait in race_traits %}<li>{{ trait }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% if class_features %}
+        <div class="sub-section">
+          <div class="sub-title"><i>⚔️</i> Класс</div>
+          <ul class="traits-list">
+            {% for feature in class_features %}<li>{{ feature }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        {% if background_trait %}
+        <div class="sub-section">
+          <div class="sub-title"><i>📜</i> Предыстория</div>
+          <ul class="traits-list"><li>{{ background_trait }}</li></ul>
+        </div>
+        {% endif %}
+
+        {% if origin_feat %}
+        <div class="sub-section">
+          <div class="sub-title"><i>✨</i> Черта происхождения</div>
+          <ul class="traits-list"><li>{{ origin_feat }}</li></ul>
+        </div>
+        {% endif %}
+
+        {% if order_features %}
+        <div class="sub-section">
+          <div class="sub-title"><i>🌿</i> Орден / Путь</div>
+          <ul class="traits-list">{% for item in order_features %}<li>{{ item }}</li>{% endfor %}</ul>
+        </div>
+        {% endif %}
+
+        {% if pact_features %}
+        <div class="sub-section">
+          <div class="sub-title"><i>🤝</i> Договор</div>
+          <ul class="traits-list">{% for item in pact_features %}<li>{{ item }}</li>{% endfor %}</ul>
+        </div>
+        {% endif %}
+
+        {% if rogue_features %}
+        <div class="sub-section">
+          <div class="sub-title"><i>🗡️</i> Плут</div>
+          <ul class="traits-list">{% for item in rogue_features %}<li>{{ item }}</li>{% endfor %}</ul>
+        </div>
+        {% endif %}
+
+        {% if class_specific_features %}
+        <div class="sub-section">
+          <div class="sub-title"><i>🎲</i> Умения класса</div>
+          <ul class="traits-list">{% for item in class_specific_features %}<li>{{ item }}</li>{% endfor %}</ul>
+        </div>
+        {% endif %}
+      </div>
     </div>
 
+    <!-- LEFT COLUMN: EQUIPMENT + BACKGROUND -->
     <div class="card">
-      <div class="title">Снаряжение</div>
-      <div class="content">{{ equipment }}</div>
+      <div class="title">СНАРЯЖЕНИЕ</div>
+      <div class="content">
+        <ul class="equipment-list">
+          {% for item in equipment %}
+          <li>{{ item }}</li>
+          {% else %}
+          <li>Нет снаряжения</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="title" style="margin-top: 20px;">ПРЕДЫСТОРИЯ</div>
+      <div class="content">
+        {% if background_description %}<p><em>{{ background_description }}</em></p>{% endif %}
+        <p>{{ backstory }}</p>
+      </div>
     </div>
 
+    <!-- RIGHT COLUMN: SPELLS + NOTES -->
     <div class="card">
-      <div class="title">Атаки</div>
-      <div class="content">{{ attacks }}</div>
+      <div class="title">ЗАКЛИНАНИЯ</div>
+      <div class="content">
+        {% if spells and spells|length > 0 %}
+        <ul class="spells-list">
+          {% for spell in spells %}
+          <li>{{ spell }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p>Нет заклинаний</p>
+        {% endif %}
+      </div>
     </div>
-
   </div>
 
   <!-- FOOTER -->
   <div class="footer">
-    Создано в <span class="brand">Кузнице героев ⚔️</span>
+    Создано в <span class="brand">⚔️ Кузнице героев ⚔️</span>
   </div>
 
 </div>
-
 </body>
 </html>
 """

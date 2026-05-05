@@ -170,10 +170,25 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     # Дополнительные особенности (ордены, договоры, экспертиза и т.д.)
     extra_features = format_extra_features(char)
 
-    # Вычисляем модификаторы навыков (упрощённо)
+    # Снаряжение: от класса и от предыстории (если есть)
+    equipment = []
+    if char.get("selected_weapon"):
+        equipment.append(char["selected_weapon"])
+    if char.get("selected_armor"):
+        equipment.append(char["selected_armor"])
+    # Снаряжение предыстории (если сохранено)
+    equip_choice = char.get("selected_equipment_choice")  # 'A' или 'B'
+    if equip_choice and background_info:
+        if equip_choice == "A":
+            equip_desc = background_info.get("equipment_a", "")
+        else:
+            equip_desc = background_info.get("equipment_b", "")
+        if equip_desc:
+            equipment.append(f"Снаряжение предыстории ({equip_choice}): {equip_desc}")
+
+    # Модификаторы навыков (упрощённо)
     skill_mods = {}
     for skill in skills:
-        # Определяем базовую характеристику для навыка (упрощённо)
         base_stat = "DEX"
         if skill in ["Атлетика"]:
             base_stat = "STR"
@@ -184,7 +199,6 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         elif skill in ["Выступление", "Запугивание", "Обман", "Убеждение"]:
             base_stat = "CHA"
         mod = (stats[base_stat] - 10) // 2
-        # Если навык входит в список владений (спасброски или экспертность – упрощённо)
         if skill in saving_throws:
             mod += 2
         skill_mods[skill] = f"{mod:+d}"
@@ -208,7 +222,7 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "proficiency_bonus": 2,
         "saving_throws": saving_throws,
         "skills": skills,
-        "equipment": [char.get("selected_weapon"), char.get("selected_armor")] if char.get("selected_weapon") or char.get("selected_armor") else [],
+        "equipment": equipment,
         "spells": all_spells,
         "extra_features": extra_features,
         "skill_mods": skill_mods,

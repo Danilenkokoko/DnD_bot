@@ -337,67 +337,78 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     font-family: monospace;
   }
 
-  /* ===== STATS (GRID ДЛЯ ГИБКОСТИ) ===== */
+  /* ===== ХАРАКТЕРИСТИКИ (ВЫДЕЛЕННЫЕ КАРТОЧКИ) ===== */
   .stats {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
-    gap: 12px;
-    margin-top: 24px;
+    gap: 16px;
+    margin-top: 32px;
+    margin-bottom: 32px;
   }
 
   .stat {
-    background: rgba(255,255,255,0.05);
-    border-radius: 20px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+    border-radius: 24px;
     padding: 16px 8px;
     text-align: center;
-    backdrop-filter: blur(4px);
-    transition: transform 0.2s, background 0.2s;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    transition: all 0.25s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
   }
 
   .stat:hover {
+    transform: translateY(-4px);
+    border-color: #a78bfa;
+    box-shadow: 0 8px 20px rgba(167, 139, 250, 0.2);
     background: rgba(255,255,255,0.1);
-    transform: translateY(-2px);
   }
 
   .stat-value {
-    font-size: 28px;
-    font-weight: bold;
+    font-size: 32px;
+    font-weight: 800;
     color: #c4b5fd;
+    text-shadow: 0 0 6px rgba(167, 139, 250, 0.5);
   }
 
   .stat-label {
-    font-size: 12px;
-    opacity: 0.7;
-    margin-top: 6px;
+    font-size: 13px;
+    opacity: 0.8;
+    margin-top: 8px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
+    font-weight: 500;
   }
 
-  /* ===== COMBAT BADGES ===== */
+  /* ===== БОЕВЫЕ ПОКАЗАТЕЛИ (КОМПАКТНЫЕ, НЕ РАСТЯГИВАЮТСЯ) ===== */
   .combat {
     display: flex;
-    gap: 16px;
-    margin-top: 24px;
     flex-wrap: wrap;
+    justify-content: center;
+    gap: 24px;
+    margin-top: 16px;
+    margin-bottom: 32px;
   }
 
   .badge {
     background: rgba(255,255,255,0.08);
-    border-radius: 20px;
-    padding: 14px 12px;
+    border-radius: 36px;
+    padding: 12px 28px;
     text-align: center;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
+    display: inline-flex;
+    flex-direction: row;
     align-items: center;
-    gap: 8px;
+    gap: 16px;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1);
     transition: all 0.2s;
-    min-width: 100px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
   }
 
   .badge:hover {
     background: rgba(255,255,255,0.12);
     transform: translateY(-2px);
+    border-color: #a78bfa;
   }
 
   .badge i {
@@ -406,18 +417,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   }
 
   .badge-value {
-    font-size: 26px;
+    font-size: 28px;
     font-weight: bold;
-    line-height: 1.2;
+    line-height: 1;
   }
 
   .badge-label {
-    font-size: 11px;
-    opacity: 0.6;
+    font-size: 12px;
+    opacity: 0.7;
     letter-spacing: 0.5px;
   }
 
-  /* ===== GRID ===== */
+  /* ===== ОСНОВНАЯ СЕТКА ===== */
   .grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -503,7 +514,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   @media (max-width: 900px) {
     .stats {
       grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .badge {
+      padding: 8px 20px;
       gap: 12px;
+    }
+    .badge-value {
+      font-size: 24px;
+    }
+    .badge i {
+      font-size: 24px;
     }
   }
 
@@ -516,34 +537,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .class-race-alignment span { width: auto; }
     .stats {
       grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
+      gap: 12px;
     }
-    .stat-value { font-size: 22px; }
-    .stat-label { font-size: 10px; }
-    .badge { min-width: 80px; }
-    .badge i { font-size: 22px; }
-    .badge-value { font-size: 20px; }
     .combat {
-      flex-wrap: wrap;
+      gap: 16px;
     }
     .badge {
-      flex: 1 1 calc(50% - 16px);
+      flex: 1 1 auto;
+      justify-content: center;
     }
   }
 
   @media (max-width: 480px) {
     .stats {
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-    .stat {
-      padding: 10px 4px;
-    }
-    .stat-value {
-      font-size: 18px;
+      gap: 10px;
     }
     .badge {
-      flex: 1 1 100%;
+      flex-wrap: wrap;
+      text-align: center;
     }
   }
 </style>
@@ -569,7 +581,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- ХАРАКТЕРИСТИКИ (GRID) -->
+  <!-- ХАРАКТЕРИСТИКИ (ВЫДЕЛЕННЫЕ, С ЭФФЕКТАМИ) -->
   <div class="stats">
     <div class="stat">
       <div class="stat-value">{{ stats['STR'] }}</div>
@@ -597,7 +609,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- БОЕВЫЕ ПОКАЗАТЕЛИ -->
+  <!-- БОЕВЫЕ ПОКАЗАТЕЛИ (КОМПАКТНО, БЕЗ РАСТЯГИВАНИЯ) -->
   <div class="combat">
     <div class="badge">
       <i class="fas fa-shield-alt"></i>

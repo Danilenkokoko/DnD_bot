@@ -1,7 +1,7 @@
 # webapp.py
 """
 Веб-сервер для отображения листа персонажа (Telegram Mini App)
-Обновлён для отображения всех новых классовых особенностей с разделением по категориям.
+Обновлён для премиального шаблона с цветовыми темами, HUD-блоком и разделением особенностей.
 """
 
 import os
@@ -58,10 +58,10 @@ def format_features_by_category(char: Dict[str, Any]) -> Dict[str, List[str]]:
     Возвращает {'order': [], 'pact': [], 'rogue': [], 'class': []}
     """
     result = {
-        'order': [],   # орден друида / жреца
-        'pact': [],    # договор колдуна (возвания)
-        'rogue': [],   # экспертиза и язык плута
-        'class': []    # все остальные классовые особенности
+        'order': [],
+        'pact': [],
+        'rogue': [],
+        'class': []
     }
 
     # 1. Орден друида
@@ -170,15 +170,15 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     background_description = background_info.get("description", "")
     origin_feat = background_info.get("origin_feat", "")
 
-    # Собираем все заклинания: выбранные + автоматические
+    # Заклинания
     selected_spells = char.get("selected_spells", [])
     auto_spells = char.get("auto_spells", [])
     all_spells = list(set(selected_spells + auto_spells))
 
-    # Категоризированные особенности
+    # Особенности по категориям
     categorized_features = format_features_by_category(char)
 
-    # Снаряжение: от класса и от предыстории
+    # Снаряжение
     equipment = []
     if char.get("selected_weapon"):
         equipment.append(char["selected_weapon"])
@@ -207,6 +207,9 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
             mod += 2
         skill_mods[skill] = f"{mod:+d}"
 
+    # Инициатива (для HUD)
+    initiative = (stats.get("DEX", 10) - 10) // 2
+
     return {
         "name": char["name"],
         "class_name": class_name,
@@ -221,9 +224,10 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "hp": char.get("hp", 0),
         "ac": char.get("ac", 10),
         "speed": char.get("speed", 30),
+        "initiative": initiative,
         "alignment": char.get("alignment", "Нейтральное"),
         "experience": char.get("experience", 0),
-        "proficiency_bonus": 2,
+        "proficiency_bonus": 2,   # уровень 1
         "saving_throws": saving_throws,
         "skills": skills,
         "equipment": equipment,
@@ -234,540 +238,22 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "class_specific_features": categorized_features['class'],
         "skill_mods": skill_mods,
         "all_skills": skills,
-        "race_traits": [],          # можно заполнить из репозитория рас
-        "class_features": [],       # можно заполнить из репозитория классов
+        "race_traits": [],      # можно расширить позже
+        "class_features": [],   # можно расширить позже
         "appearance": "",
         "created_date": "недавно",
     }
 
-# ------------------------------------------------------------------
-# HTML-шаблон (можно вынести в отдельный файл, но для простоты здесь)
-# ------------------------------------------------------------------
-HTML_TEMPLATE = """<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<title>D&D Character Sheet — {{ name }}</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-<style>
-  @page {
-    size: A4;
-    margin: 0;
-  }
 
-  body {
-    margin: 0;
-    font-family: 'Inter', 'Segoe UI', sans-serif;
-    background: #0f172a;
-    color: #e2e8f0;
-  }
-
-  .container {
-    padding: 40px;
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  /* ===== HERO ===== */
-  .hero {
-    background: linear-gradient(135deg, #7c3aed, #4f46e5);
-    border-radius: 24px;
-    padding: 28px 32px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 20px;
-    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
-  }
-
-  .hero-left {
-    flex: 1;
-  }
-
-  .name {
-    font-size: 42px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    margin-bottom: 16px;
-    font-family: 'Playfair Display', serif;
-  }
-
-  .class-race-alignment {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-
-  .class-race-alignment span {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    background: rgba(255,255,255,0.12);
-    padding: 6px 16px;
-    border-radius: 40px;
-    width: fit-content;
-    backdrop-filter: blur(4px);
-    font-size: 16px;
-  }
-
-  .xp-info {
-    background: rgba(255,255,255,0.1);
-    border-radius: 40px;
-    padding: 6px 18px;
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 14px;
-    width: fit-content;
-  }
-
-  .level-badge {
-    background: rgba(0,0,0,0.3);
-    padding: 12px 24px;
-    border-radius: 60px;
-    font-weight: bold;
-    font-size: 24px;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    box-shadow: 0 0 12px rgba(0,0,0,0.2);
-    backdrop-filter: blur(4px);
-    font-family: monospace;
-  }
-
-  /* ===== ХАРАКТЕРИСТИКИ (ВЫДЕЛЕННЫЕ КАРТОЧКИ) ===== */
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 16px;
-    margin-top: 32px;
-    margin-bottom: 32px;
-  }
-
-  .stat {
-    background: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
-    border-radius: 24px;
-    padding: 16px 8px;
-    text-align: center;
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(167, 139, 250, 0.2);
-    transition: all 0.25s ease;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-  }
-
-  .stat:hover {
-    transform: translateY(-4px);
-    border-color: #a78bfa;
-    box-shadow: 0 8px 20px rgba(167, 139, 250, 0.2);
-    background: rgba(255,255,255,0.1);
-  }
-
-  .stat-value {
-    font-size: 32px;
-    font-weight: 800;
-    color: #c4b5fd;
-    text-shadow: 0 0 6px rgba(167, 139, 250, 0.5);
-  }
-
-  .stat-label {
-    font-size: 13px;
-    opacity: 0.8;
-    margin-top: 8px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: 500;
-  }
-
-  /* ===== БОЕВЫЕ ПОКАЗАТЕЛИ (КОМПАКТНЫЕ, НЕ РАСТЯГИВАЮТСЯ) ===== */
-  .combat {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 24px;
-    margin-top: 16px;
-    margin-bottom: 32px;
-  }
-
-  .badge {
-    background: rgba(255,255,255,0.08);
-    border-radius: 36px;
-    padding: 12px 28px;
-    text-align: center;
-    display: inline-flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 16px;
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,0.1);
-    transition: all 0.2s;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-  }
-
-  .badge:hover {
-    background: rgba(255,255,255,0.12);
-    transform: translateY(-2px);
-    border-color: #a78bfa;
-  }
-
-  .badge i {
-    font-size: 28px;
-    color: #a78bfa;
-  }
-
-  .badge-value {
-    font-size: 28px;
-    font-weight: bold;
-    line-height: 1;
-  }
-
-  .badge-label {
-    font-size: 12px;
-    opacity: 0.7;
-    letter-spacing: 0.5px;
-  }
-
-  /* ===== ОСНОВНАЯ СЕТКА ===== */
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-top: 32px;
-  }
-
-  .card {
-    background: rgba(255,255,255,0.05);
-    border-radius: 24px;
-    padding: 20px;
-    backdrop-filter: blur(4px);
-    border: 1px solid rgba(255,255,255,0.05);
-    transition: all 0.2s;
-  }
-
-  .card:hover {
-    border-color: rgba(167, 139, 250, 0.3);
-  }
-
-  .title {
-    font-weight: 600;
-    font-size: 18px;
-    margin-bottom: 16px;
-    border-left: 4px solid #8b5cf6;
-    padding-left: 12px;
-    letter-spacing: -0.3px;
-    font-family: 'Playfair Display', serif;
-  }
-
-  .content {
-    font-size: 14px;
-    line-height: 1.5;
-  }
-
-  .traits-list, .equipment-list, .spells-list {
-    list-style: none;
-    padding-left: 0;
-    margin: 0;
-  }
-
-  .traits-list li, .equipment-list li, .spells-list li {
-    padding: 8px 0 8px 20px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    position: relative;
-  }
-
-  .traits-list li::before {
-    content: "✧";
-    color: #a78bfa;
-    position: absolute;
-    left: 0;
-  }
-
-  .sub-section {
-    margin-top: 16px;
-  }
-
-  .sub-title {
-    font-size: 14px;
-    font-weight: 600;
-    opacity: 0.8;
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .footer {
-    text-align: center;
-    margin-top: 48px;
-    font-size: 12px;
-    opacity: 0.5;
-    border-top: 1px solid rgba(255,255,255,0.1);
-    padding-top: 24px;
-  }
-
-  .brand {
-    color: #a78bfa;
-  }
-
-  /* ===== АДАПТИВНОСТЬ ===== */
-  @media (max-width: 900px) {
-    .stats {
-      grid-template-columns: repeat(3, 1fr);
-      gap: 14px;
-    }
-    .badge {
-      padding: 8px 20px;
-      gap: 12px;
-    }
-    .badge-value {
-      font-size: 24px;
-    }
-    .badge i {
-      font-size: 24px;
-    }
-  }
-
-  @media (max-width: 750px) {
-    .container { padding: 20px; }
-    .grid { grid-template-columns: 1fr; }
-    .name { font-size: 28px; }
-    .hero { flex-direction: column; align-items: stretch; text-align: left; }
-    .level-badge { align-self: flex-start; }
-    .class-race-alignment span { width: auto; }
-    .stats {
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-    }
-    .combat {
-      gap: 16px;
-    }
-    .badge {
-      flex: 1 1 auto;
-      justify-content: center;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .stats {
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-    .badge {
-      flex-wrap: wrap;
-      text-align: center;
-    }
-  }
-</style>
-</head>
-<body>
-<div class="container">
-
-  <!-- HERO -->
-  <div class="hero">
-    <div class="hero-left">
-      <div class="name">{{ name }}</div>
-      <div class="class-race-alignment">
-        <span><i class="fas fa-fist-raised"></i> Класс: {{ class_name }}</span>
-        <span><i class="fas fa-dragon"></i> Раса: {{ race }}</span>
-        <span><i class="fas fa-balance-scale"></i> Мировоззрение: {{ alignment }}</span>
-      </div>
-      <div class="xp-info">
-        <i class="fas fa-chart-line"></i> <strong>{{ experience }} XP</strong>
-      </div>
-    </div>
-    <div class="level-badge">
-      <i class="fas fa-star"></i> УРОВЕНЬ {{ level }}
-    </div>
-  </div>
-
-  <!-- ХАРАКТЕРИСТИКИ (ВЫДЕЛЕННЫЕ, С ЭФФЕКТАМИ) -->
-  <div class="stats">
-    <div class="stat">
-      <div class="stat-value">{{ stats['STR'] }}</div>
-      <div class="stat-label">Сила</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value">{{ stats['DEX'] }}</div>
-      <div class="stat-label">Ловкость</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value">{{ stats['CON'] }}</div>
-      <div class="stat-label">Телосложение</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value">{{ stats['INT'] }}</div>
-      <div class="stat-label">Интеллект</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value">{{ stats['WIS'] }}</div>
-      <div class="stat-label">Мудрость</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value">{{ stats['CHA'] }}</div>
-      <div class="stat-label">Харизма</div>
-    </div>
-  </div>
-
-  <!-- БОЕВЫЕ ПОКАЗАТЕЛИ (КОМПАКТНО, БЕЗ РАСТЯГИВАНИЯ) -->
-  <div class="combat">
-    <div class="badge">
-      <i class="fas fa-shield-alt"></i>
-      <div class="badge-value">{{ ac }}</div>
-      <div class="badge-label">Класс брони</div>
-    </div>
-    <div class="badge">
-      <i class="fas fa-heartbeat"></i>
-      <div class="badge-value">{{ hp }}</div>
-      <div class="badge-label">Хиты</div>
-    </div>
-    <div class="badge">
-      <i class="fas fa-bolt"></i>
-      <div class="badge-value">{{ (stats['DEX'] - 10) // 2 }}</div>
-      <div class="badge-label">Инициатива</div>
-    </div>
-    <div class="badge">
-      <i class="fas fa-shoe-prints"></i>
-      <div class="badge-value">{{ speed }}</div>
-      <div class="badge-label">Скорость</div>
-    </div>
-  </div>
-
-  <!-- ОСНОВНАЯ СЕТКА -->
-  <div class="grid">
-
-    <div class="card">
-      <div class="title">Навыки и спасброски</div>
-      <div class="content">
-        <strong>Спасброски</strong>
-        <ul class="traits-list" style="margin-bottom: 16px;">
-          {% for save in saving_throws %}
-          <li>{{ save }} ({{ (stats[save] - 10) // 2 + proficiency_bonus }})</li>
-          {% endfor %}
-        </ul>
-        <strong>Навыки</strong>
-        <ul class="traits-list">
-          {% for skill, mod in skill_mods.items() %}
-          <li>{{ skill }}: {{ mod }}</li>
-          {% endfor %}
-        </ul>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="title">Особенности и умения</div>
-      <div class="content">
-        {% if race_traits %}
-        <div class="sub-section">
-          <div class="sub-title"><i class="fas fa-dragon"></i> Раса</div>
-          <ul class="traits-list">{% for trait in race_traits %}<li>{{ trait }}</li>{% endfor %}</ul>
-        </div>
-        {% endif %}
-
-        {% if class_features %}
-        <div class="sub-section">
-          <div class="sub-title"><i class="fas fa-fist-raised"></i> Класс</div>
-          <ul class="traits-list">{% for feature in class_features %}<li>{{ feature }}</li>{% endfor %}</ul>
-        </div>
-        {% endif %}
-
-        {% if background_trait %}
-        <div class="sub-section">
-          <div class="sub-title"><i class="fas fa-scroll"></i> Предыстория</div>
-          <ul class="traits-list"><li>{{ background_trait }}</li></ul>
-        </div>
-        {% endif %}
-
-        {% if origin_feat %}
-        <div class="sub-section">
-          <div class="sub-title"><i class="fas fa-star"></i> Черта происхождения</div>
-          <ul class="traits-list"><li>{{ origin_feat }}</li></ul>
-        </div>
-        {% endif %}
-
-        {% if order_features %}
-        <div class="sub-section">
-          <div class="sub-title"><i class="fas fa-tree"></i> Орден / Путь</div>
-          <ul class="traits-list">{% for item in order_features %}<li>{{ item }}</li>{% endfor %}</ul>
-        </div>
-        {% endif %}
-
-        {% if pact_features %}
-        <div class="sub-section">
-          <div class="sub-title"><i class="fas fa-handshake"></i> Договор</div>
-          <ul class="traits-list">{% for item in pact_features %}<li>{{ item }}</li>{% endfor %}</ul>
-        </div>
-        {% endif %}
-
-        {% if rogue_features %}
-        <div class="sub-section">
-          <div class="sub-title"><i class="fas fa-user-secret"></i> Плут</div>
-          <ul class="traits-list">{% for item in rogue_features %}<li>{{ item }}</li>{% endfor %}</ul>
-        </div>
-        {% endif %}
-
-        {% if class_specific_features %}
-        <div class="sub-section">
-          <div class="sub-title"><i class="fas fa-dice-d20"></i> Умения класса</div>
-          <ul class="traits-list">{% for item in class_specific_features %}<li>{{ item }}</li>{% endfor %}</ul>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="title">Снаряжение</div>
-      <div class="content">
-        <ul class="equipment-list">
-          {% for item in equipment %}
-          <li>{{ item }}</li>
-          {% else %}
-          <li>Нет снаряжения</li>
-          {% endfor %}
-        </ul>
-      </div>
-      <div class="title" style="margin-top: 20px;">Предыстория</div>
-      <div class="content">
-        {% if background_description %}<p><em>{{ background_description }}</em></p>{% endif %}
-        <p>{{ backstory }}</p>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="title">Заклинания</div>
-      <div class="content">
-        {% if spells and spells|length > 0 %}
-        <ul class="spells-list">
-          {% for spell in spells %}
-          <li>{{ spell }}</li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p>Нет заклинаний</p>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <div class="footer">
-    Создано в <span class="brand">⚔️ Кузнице героев ⚔️</span>
-  </div>
-
-</div>
-</body>
-</html>
-"""
-
-
+# Загрузка HTML-шаблона из внешнего файла
 def get_template() -> Template:
-    """Загружает HTML-шаблон из файла (если он есть) или возвращает встроенный."""
     template_path = os.path.join(os.path.dirname(__file__), "templates", "character_sheet.html")
     if os.path.exists(template_path):
         with open(template_path, "r", encoding="utf-8") as f:
             return Template(f.read())
     else:
-        # fallback – минимальный шаблон с предупреждением (обычно такого не должно быть)
-        return Template("<h1>Ошибка: шаблон не найден</h1><p>{{ error }}</p>")
+        # fallback
+        return Template("<h1>Ошибка: шаблон не найден</h1><p>Пожалуйста, убедитесь, что файл templates/character_sheet.html существует.</p>")
 
 
 @app.get("/character/{char_id}", response_class=HTMLResponse)

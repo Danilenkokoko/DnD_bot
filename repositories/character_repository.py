@@ -22,6 +22,7 @@ class CharacterRepository(BaseRepository):
                 selected_invocations, selected_spells,
                 selected_weapon, selected_armor,
                 backstory, image_file_id, origin_feat, alignment,
+                selected_equipment_choice,
                 druid_order, cleric_order, warlock_pact,
                 rogue_expertise, rogue_extra_language,
                 auto_spells, pact_tome_cantrips, pact_tome_rituals, pact_blade_weapon
@@ -32,6 +33,7 @@ class CharacterRepository(BaseRepository):
                       %s, %s,
                       %s, %s,
                       %s, %s, %s, %s,
+                      %s,
                       %s, %s, %s,
                       %s, %s,
                       %s, %s, %s, %s)
@@ -77,6 +79,7 @@ class CharacterRepository(BaseRepository):
             data.get('image_file_id'),
             data.get('origin_feat', ''),
             data.get('alignment', 'Нейтральный'),
+            data.get('selected_equipment_choice', 'A'),   # новое поле
             data.get('druid_order'),
             data.get('cleric_order'),
             data.get('warlock_pact'),

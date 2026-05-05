@@ -306,8 +306,8 @@ class CharacterFinalizationService:
 
     @staticmethod
     def prepare_character_data(
-        state_data: Dict[str, Any],
-        user_id: int
+            state_data: Dict[str, Any],
+            user_id: int
     ) -> Dict[str, Any]:
         """
         Подготавливает данные персонажа для сохранения.
@@ -362,14 +362,17 @@ class CharacterFinalizationService:
         wisdom = stats.get('WIS', 10)
         hp = CharacterStatsService.calculate_hp(class_name, constitution, level=1)
         ac = CharacterStatsService.calculate_ac(dexterity, selected_armor, False, class_name,
-                                                 constitution if class_name == "Варвар" else wisdom)
+                                                constitution if class_name == "Варвар" else wisdom)
 
         # Навыки от предыстории
         bg_skills = background_data.get('skills', []) if background_data else []
 
-        # Origin feat и alignment (уже есть)
+        # Origin feat и alignment
         origin_feat = state_data.get('background_origin_feat', '')
         alignment = state_data.get('alignment', 'Нейтральный')
+
+        # Выбор снаряжения от предыстории (возвращён)
+        background_equipment_choice = state_data.get('background_equipment_choice', 'A')
 
         # НОВЫЕ ПОЛЯ
         druid_order = state_data.get('druid_order')
@@ -406,6 +409,7 @@ class CharacterFinalizationService:
             'selected_skills_bg': bg_skills,
             'origin_feat': origin_feat,
             'alignment': alignment,
+            'background_equipment_choice': background_equipment_choice,  # добавлено
             # Новые поля
             'druid_order': druid_order,
             'cleric_order': cleric_order,
@@ -428,6 +432,7 @@ class CharacterFinalizationService:
             'subrace_id': character_data.get('subrace_id'),
             'class_id': character_data.get('class_id'),
             'background_id': character_data.get('background_id'),
+            'selected_equipment_choice': character_data.get('background_equipment_choice', 'A'),
             'level': 1,
             'experience': 0,
             'stats': character_data['stats'],

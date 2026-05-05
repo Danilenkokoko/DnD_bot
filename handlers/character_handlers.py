@@ -31,7 +31,8 @@ from keyboards.character_keyboards import (
     create_cleric_order_keyboard,
     create_warlock_pact_keyboard,
     create_rogue_expertise_keyboard,
-    create_rogue_language_keyboard
+    create_rogue_language_keyboard,
+    create_background_equipment_keyboard
 )
 
 from services.character_service import CharacterStatsService, CharacterFinalizationService
@@ -515,24 +516,18 @@ async def back_to_spells(callback: CallbackQuery, state: FSMContext):
 # =========================================================
 # ПРЕДЫСТОРИЯ
 # =========================================================
-@router.callback_query(CreateCharacter.background_select, lambda c: c.data.startswith("bg_"))
-async def select_background(callback: CallbackQuery, state: FSMContext):
-    background = callback.data.replace("bg_", "")
-    await state.update_data(background=background)
-    logger.info(f"[FLOW] Выбрана предыстория: {background}")
-    bg_info = _bg_repo.get_by_name(background)
-    if not bg_info:
-        await send_new_from_callback(callback, state, BACKGROUND_ERROR.format(background=background))
-        await state.clear()
-        return
-    await state.update_data(selected_skills_bg=bg_info.get('skills', []), background_trait=bg_info.get('trait', 'Нет'), background_origin_feat=bg_info.get('origin_feat', ''))
-    trait = bg_info.get('trait', 'Нет')
-    skills = ", ".join(bg_info.get('skills', []))
-    tools = bg_info.get('tools', 'Нет')
-    description = bg_info.get('description', 'Нет описания')[:300]
-    text = BACKGROUND_INFO_TEMPLATE.format(background=background, description=description, trait=trait, skills=skills, tools=tools)
-    await send_new_from_callback(callback, state, text)
+@router.callback_query(CreateCharacter.background_equipment_select, lambda c: c.data.startswith("bg_equip_"))
+async def select_background_equipment(callback: CallbackQuery, state: FSMContext):
+    choice = callback.data.replace("bg_equip_", "")
+    await state.update_data(background_equipment_choice=choice)
+    await callback.answer(f"✅ Выбран вариант {choice}")
     await calculate_and_show_stats(callback, state)
+
+@router.callback_query(CreateCharacter.background_equipment_select, lambda c: c.data == "back_to_background")
+async def back_to_background_from_equipment(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(CreateCharacter.background_select)
+    await send_new_from_callback(callback, state, "Выбери предысторию заново:",
+                                 reply_markup=create_background_keyboard())
     await callback.answer()
 
 # =========================================================

@@ -33,8 +33,9 @@ class CreateCharacter(StatesGroup):
     # Шаг 6: Боевой стиль
     fighting_style_select = State()
 
-    # Предыстория (без отдельного выбора снаряжения)
+    # Предыстория (и выбор её снаряжения)
     background_select = State()
+    background_equipment_select = State()   # <-- ВОЗВРАЩАЕМ ЭТО СОСТОЯНИЕ
 
     # Раса и подраса
     race_select = State()

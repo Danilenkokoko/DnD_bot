@@ -10,7 +10,7 @@ from db import get_user_characters
 from dnd_logic import (
     get_class_list, get_class_equipment, get_subclasses_for_class,
     get_background_list, get_race_list, get_subraces,
-    get_fighting_styles_for_class, get_all_invocations
+    get_fighting_styles_for_class, get_all_invocations,
 )
 
 # Импорт строковых констант
@@ -176,6 +176,20 @@ def create_alignment_keyboard() -> InlineKeyboardMarkup:
         buttons.append([InlineKeyboardButton(text=name, callback_data=f"alignment_{value}")])
     buttons.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def create_background_equipment_keyboard(background_name: str) -> InlineKeyboardMarkup:
+    """Клавиатура выбора снаряжения предыстории (вариант А или Б)."""
+    from dnd_logic import get_background_by_name
+    bg_info = get_background_by_name(background_name)
+    if not bg_info:
+        return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Ошибка", callback_data="cancel_creation")]])
+    equip_a = bg_info.get('equipment_a', 'Нет описания')[:60]
+    equip_b = bg_info.get('equipment_b', 'Нет описания')[:60]
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"📦 Вариант А: {equip_a}...", callback_data="bg_equip_A")],
+        [InlineKeyboardButton(text=f"🎒 Вариант Б: {equip_b}...", callback_data="bg_equip_B")],
+        [InlineKeyboardButton(text="⬅️ Назад к предыстории", callback_data="back_to_background")]
+    ])
 
 
 # =========================================================

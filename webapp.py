@@ -1,7 +1,7 @@
 # webapp.py
 """
 Веб-сервер для отображения листа персонажа (Telegram Mini App)
-Обновлён для отображения всех новых классовых особенностей.
+Обновлён для отображения всех новых классовых особенностей с разделением по категориям.
 """
 
 import os
@@ -52,88 +52,96 @@ _bg_repo = BackgroundRepository()
 _race_repo = RaceRepository()
 
 
-def format_extra_features(char: Dict[str, Any]) -> List[str]:
-    """Формирует список дополнительных особенностей персонажа."""
-    features = []
+def format_features_by_category(char: Dict[str, Any]) -> Dict[str, List[str]]:
+    """
+    Формирует словарь с особенностями персонажа, разделёнными по категориям.
+    Возвращает {'order': [], 'pact': [], 'rogue': [], 'class': []}
+    """
+    result = {
+        'order': [],   # орден друида / жреца
+        'pact': [],    # договор колдуна (возвания)
+        'rogue': [],   # экспертиза и язык плута
+        'class': []    # все остальные классовые особенности
+    }
 
     # 1. Орден друида
     druid_order = char.get("druid_order")
     if druid_order:
         if druid_order == "guide":
-            features.append(DRUID_ORDER_GUIDE_DESC)
+            result['order'].append(DRUID_ORDER_GUIDE_DESC)
         elif druid_order == "guardian":
-            features.append(DRUID_ORDER_GUARDIAN_DESC)
+            result['order'].append(DRUID_ORDER_GUARDIAN_DESC)
 
     # 2. Орден жреца
     cleric_order = char.get("cleric_order")
     if cleric_order:
         if cleric_order == "protector":
-            features.append(CLERIC_ORDER_PROTECTOR_DESC)
+            result['order'].append(CLERIC_ORDER_PROTECTOR_DESC)
         elif cleric_order == "miracle":
-            features.append(CLERIC_ORDER_MIRACLE_DESC)
+            result['order'].append(CLERIC_ORDER_MIRACLE_DESC)
 
     # 3. Договор колдуна
     warlock_pact = char.get("warlock_pact")
     if warlock_pact == "tome":
-        features.append(WARLOCK_PACT_TOME_DESC)
+        result['pact'].append(WARLOCK_PACT_TOME_DESC)
         pact_cantrips = char.get("pact_tome_cantrips", [])
         pact_rituals = char.get("pact_tome_rituals", [])
         if pact_cantrips:
-            features.append(f"• Заговоры Книги теней: {', '.join(pact_cantrips)}")
+            result['pact'].append(f"• Заговоры Книги теней: {', '.join(pact_cantrips)}")
         if pact_rituals:
-            features.append(f"• Ритуалы Книги теней: {', '.join(pact_rituals)}")
+            result['pact'].append(f"• Ритуалы Книги теней: {', '.join(pact_rituals)}")
     elif warlock_pact == "blade":
-        features.append(WARLOCK_PACT_BLADE_DESC)
+        result['pact'].append(WARLOCK_PACT_BLADE_DESC)
         blade_weapon = char.get("pact_blade_weapon")
         if blade_weapon:
-            features.append(f"• Оружие договора: {blade_weapon}")
+            result['pact'].append(f"• Оружие договора: {blade_weapon}")
     elif warlock_pact == "chain":
-        features.append(WARLOCK_PACT_CHAIN_DESC)
+        result['pact'].append(WARLOCK_PACT_CHAIN_DESC)
     elif warlock_pact == "shadow_armor":
-        features.append(WARLOCK_PACT_SHADOW_ARMOR_DESC)
+        result['pact'].append(WARLOCK_PACT_SHADOW_ARMOR_DESC)
     elif warlock_pact == "arcane_mind":
-        features.append(WARLOCK_PACT_ARCANE_MIND_DESC)
+        result['pact'].append(WARLOCK_PACT_ARCANE_MIND_DESC)
 
     # 4. Плут: экспертиза и язык
     rogue_expertise = char.get("rogue_expertise", [])
     if rogue_expertise:
-        features.append(ROGUE_EXPERTISE.format(skills=", ".join(rogue_expertise)))
+        result['rogue'].append(ROGUE_EXPERTISE.format(skills=", ".join(rogue_expertise)))
     rogue_lang = char.get("rogue_extra_language")
     if rogue_lang:
-        features.append(ROGUE_EXTRA_LANGUAGE.format(language=rogue_lang))
+        result['rogue'].append(ROGUE_EXTRA_LANGUAGE.format(language=rogue_lang))
 
-    # 5. Особенности из strings.py (добавляем по классу)
+    # 5. Классовые особенности (из strings.py)
     class_name = char.get("class_name")
     if class_name == "Артефактор":
-        features.append(FEATURE_MENDING)
+        result['class'].append(FEATURE_MENDING)
     elif class_name == "Бард":
-        features.append(FEATURE_BARDIC_INSPIRATION)
+        result['class'].append(FEATURE_BARDIC_INSPIRATION)
     elif class_name == "Варвар":
-        features.append(FEATURE_RAGE)
-        features.append(FEATURE_UNARMORED_DEFENSE_BARBARIAN)
+        result['class'].append(FEATURE_RAGE)
+        result['class'].append(FEATURE_UNARMORED_DEFENSE_BARBARIAN)
     elif class_name == "Воин":
-        features.append(FEATURE_SECOND_WIND)
+        result['class'].append(FEATURE_SECOND_WIND)
     elif class_name == "Волшебник":
-        features.append(FEATURE_WIZARD_SPELLS)
-        features.append(FEATURE_RITUAL_CASTER)
-        features.append(FEATURE_ARCANE_RECOVERY)
+        result['class'].append(FEATURE_WIZARD_SPELLS)
+        result['class'].append(FEATURE_RITUAL_CASTER)
+        result['class'].append(FEATURE_ARCANE_RECOVERY)
     elif class_name == "Друид":
-        features.append(FEATURE_DRUIDIC_LANGUAGE)
-        features.append(FEATURE_SPEAK_WITH_ANIMALS)
+        result['class'].append(FEATURE_DRUIDIC_LANGUAGE)
+        result['class'].append(FEATURE_SPEAK_WITH_ANIMALS)
     elif class_name == "Монах":
-        features.append(MONK_MARTIAL_ARTS)
+        result['class'].append(MONK_MARTIAL_ARTS)
     elif class_name == "Паладин":
         hp_reserve = char.get("level", 1) * 5
-        features.append(PALADIN_LAY_ON_HANDS.format(hp_reserve=hp_reserve))
+        result['class'].append(PALADIN_LAY_ON_HANDS.format(hp_reserve=hp_reserve))
     elif class_name == "Плут":
-        features.append(ROGUE_SNEAK_ATTACK.format(damage_dice="1к6"))
-        features.append(ROGUE_THIEVES_CANT)
+        result['class'].append(ROGUE_SNEAK_ATTACK.format(damage_dice="1к6"))
+        result['class'].append(ROGUE_THIEVES_CANT)
     elif class_name == "Следопыт":
-        features.append(RANGER_HUNTERS_MARK)
+        result['class'].append(RANGER_HUNTERS_MARK)
     elif class_name == "Чародей":
-        features.append(SORCERER_MAGIC_RELEASE)
+        result['class'].append(SORCERER_MAGIC_RELEASE)
 
-    return features
+    return result
 
 
 def get_character_data(char_id: int) -> Dict[str, Any]:
@@ -167,26 +175,22 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     auto_spells = char.get("auto_spells", [])
     all_spells = list(set(selected_spells + auto_spells))
 
-    # Дополнительные особенности (ордены, договоры, экспертиза и т.д.)
-    extra_features = format_extra_features(char)
+    # Категоризированные особенности
+    categorized_features = format_features_by_category(char)
 
-    # Снаряжение: от класса и от предыстории (если есть)
+    # Снаряжение: от класса и от предыстории
     equipment = []
     if char.get("selected_weapon"):
         equipment.append(char["selected_weapon"])
     if char.get("selected_armor"):
         equipment.append(char["selected_armor"])
-    # Снаряжение предыстории (если сохранено)
-    equip_choice = char.get("selected_equipment_choice")  # 'A' или 'B'
+    equip_choice = char.get("selected_equipment_choice")
     if equip_choice and background_info:
-        if equip_choice == "A":
-            equip_desc = background_info.get("equipment_a", "")
-        else:
-            equip_desc = background_info.get("equipment_b", "")
+        equip_desc = background_info.get(f"equipment_{equip_choice.lower()}", "")
         if equip_desc:
             equipment.append(f"Снаряжение предыстории ({equip_choice}): {equip_desc}")
 
-    # Модификаторы навыков (упрощённо)
+    # Модификаторы навыков
     skill_mods = {}
     for skill in skills:
         base_stat = "DEX"
@@ -224,11 +228,14 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "skills": skills,
         "equipment": equipment,
         "spells": all_spells,
-        "extra_features": extra_features,
+        "order_features": categorized_features['order'],
+        "pact_features": categorized_features['pact'],
+        "rogue_features": categorized_features['rogue'],
+        "class_specific_features": categorized_features['class'],
         "skill_mods": skill_mods,
         "all_skills": skills,
-        "race_traits": [],
-        "class_features": [],
+        "race_traits": [],          # можно заполнить из репозитория рас
+        "class_features": [],       # можно заполнить из репозитория классов
         "appearance": "",
         "created_date": "недавно",
     }
@@ -682,7 +689,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="combat-card"><div class="combat-label"><i class="fas fa-wind"></i> СКОРОСТЬ</div><div class="combat-value">{{ speed }} фт.</div></div>
     </div>
 
-    {% if race_traits or class_features or background_trait or origin_feat or extra_features %}
+    <!-- Блок особенностей – разделён на категории -->
+    {% if race_traits or class_features or background_trait or origin_feat or order_features or pact_features or rogue_features or class_specific_features %}
     <div class="detail-section">
         <div class="detail-title"><i class="fas fa-gem"></i> ОСОБЕННОСТИ И УМЕНИЯ</div>
         <div class="detail-content">
@@ -699,10 +707,47 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 {% if origin_feat %}
                 <li><strong>Черта происхождения:</strong> {{ origin_feat }}</li>
                 {% endif %}
-                {% for extra in extra_features %}
-                <li>{{ extra }}</li>
-                {% endfor %}
             </ul>
+            {% if order_features %}
+            <div style="margin-top: 16px;">
+                <div class="section-title" style="font-size: 14px; margin-bottom: 8px;"><i class="fas fa-tree"></i> ОРДЕН / ПУТЬ</div>
+                <ul class="traits-list">
+                    {% for item in order_features %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% if pact_features %}
+            <div style="margin-top: 16px;">
+                <div class="section-title" style="font-size: 14px; margin-bottom: 8px;"><i class="fas fa-handshake"></i> ДОГОВОР</div>
+                <ul class="traits-list">
+                    {% for item in pact_features %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% if rogue_features %}
+            <div style="margin-top: 16px;">
+                <div class="section-title" style="font-size: 14px; margin-bottom: 8px;"><i class="fas fa-user-secret"></i> ОСОБЕННОСТИ ПЛУТА</div>
+                <ul class="traits-list">
+                    {% for item in rogue_features %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% if class_specific_features %}
+            <div style="margin-top: 16px;">
+                <div class="section-title" style="font-size: 14px; margin-bottom: 8px;"><i class="fas fa-dice-d20"></i> УМЕНИЯ КЛАССА</div>
+                <ul class="traits-list">
+                    {% for item in class_specific_features %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
         </div>
     </div>
     {% endif %}
@@ -717,9 +762,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <li>Нет снаряжения</li>
                 {% endfor %}
             </ul>
-            {% if coins %}
-            <div style="margin-top: 12px;"><i class="fas fa-coins"></i> <strong>Монеты:</strong> {{ coins }}</div>
-            {% endif %}
         </div>
     </div>
 
@@ -755,11 +797,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+def get_template() -> Template:
+    """Загружает HTML-шаблон из файла (если он есть) или возвращает встроенный."""
+    template_path = os.path.join(os.path.dirname(__file__), "templates", "character_sheet.html")
+    if os.path.exists(template_path):
+        with open(template_path, "r", encoding="utf-8") as f:
+            return Template(f.read())
+    else:
+        # fallback – минимальный шаблон с предупреждением (обычно такого не должно быть)
+        return Template("<h1>Ошибка: шаблон не найден</h1><p>{{ error }}</p>")
+
+
 @app.get("/character/{char_id}", response_class=HTMLResponse)
 async def character_sheet(char_id: int = Path(..., title="ID персонажа")):
     try:
         data = get_character_data(char_id)
-        template = Template(HTML_TEMPLATE)
+        template = get_template()
         html = template.render(**data)
         return HTMLResponse(content=html)
     except HTTPException:

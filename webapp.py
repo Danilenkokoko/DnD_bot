@@ -681,38 +681,73 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="combat-card"><div class="combat-label"><i class="fas fa-heartbeat"></i> ХИТЫ (HP)</div><div class="combat-value">{{ hp }}</div><div class="hp-bar"><div class="hp-fill"></div></div></div>
         <div class="combat-card"><div class="combat-label"><i class="fas fa-wind"></i> СКОРОСТЬ</div><div class="combat-value">{{ speed }} фт.</div></div>
     </div>
-    {% if race_traits or class_features or background_trait or origin_feat %}
+
+    {% if race_traits or class_features or background_trait or origin_feat or extra_features %}
     <div class="detail-section">
         <div class="detail-title"><i class="fas fa-gem"></i> ОСОБЕННОСТИ И УМЕНИЯ</div>
-        <div class="detail-content"><ul class="traits-list">
-            {% for trait in race_traits %}<li><strong>Раса:</strong> {{ trait }}</li>{% endfor %}
-            {% for feature in class_features %}<li><strong>Класс:</strong> {{ feature }}</li>{% endfor %}
-            {% if background_trait %}<li><strong>Предыстория:</strong> {{ background_trait }}</li>{% endif %}
-            {% if origin_feat %}<li><strong>Черта происхождения:</strong> {{ origin_feat }}</li>{% endif %}
-        </ul></div>
+        <div class="detail-content">
+            <ul class="traits-list">
+                {% for trait in race_traits %}
+                <li><strong>Раса:</strong> {{ trait }}</li>
+                {% endfor %}
+                {% for feature in class_features %}
+                <li><strong>Класс:</strong> {{ feature }}</li>
+                {% endfor %}
+                {% if background_trait %}
+                <li><strong>Предыстория:</strong> {{ background_trait }}</li>
+                {% endif %}
+                {% if origin_feat %}
+                <li><strong>Черта происхождения:</strong> {{ origin_feat }}</li>
+                {% endif %}
+                {% for extra in extra_features %}
+                <li>{{ extra }}</li>
+                {% endfor %}
+            </ul>
+        </div>
     </div>
     {% endif %}
+
     <div class="detail-section">
         <div class="detail-title"><i class="fas fa-backpack"></i> СНАРЯЖЕНИЕ</div>
-        <div class="detail-content"><ul class="equipment-list">
-            {% for item in equipment %}<li>{{ item }}</li>{% else %}<li>Нет снаряжения</li>{% endfor %}
-        </ul>{% if coins %}<div style="margin-top: 12px;"><i class="fas fa-coins"></i> <strong>Монеты:</strong> {{ coins }}</div>{% endif %}</div>
+        <div class="detail-content">
+            <ul class="equipment-list">
+                {% for item in equipment %}
+                <li>{{ item }}</li>
+                {% else %}
+                <li>Нет снаряжения</li>
+                {% endfor %}
+            </ul>
+            {% if coins %}
+            <div style="margin-top: 12px;"><i class="fas fa-coins"></i> <strong>Монеты:</strong> {{ coins }}</div>
+            {% endif %}
+        </div>
     </div>
+
     <div class="detail-section">
         <div class="detail-title"><i class="fas fa-history"></i> ПРЕДЫСТОРИЯ</div>
         <div class="detail-content">
-            {% if background_description %}<p><strong>Описание:</strong> {{ background_description }}</p>{% endif %}
+            {% if background_description %}
+            <p><strong>Описание:</strong> {{ background_description }}</p>
+            {% endif %}
             <p><strong>История:</strong> {{ backstory }}</p>
         </div>
     </div>
+
     {% if spells and spells|length > 0 %}
     <div class="spells-section">
         <div class="detail-title"><i class="fas fa-magic"></i> ЗАКЛИНАНИЯ</div>
-        <div class="spell-slots"><div class="slot-level">1 уровень: {{ spell_slots_1 }} ячейки</div><div class="slot-level">2 уровень: {{ spell_slots_2 }} ячеек</div></div>
-        <div class="spells-list">{% for spell in spells %}<div class="spell-item"><i class="fas fa-star-of-life"></i> {{ spell }}</div>{% endfor %}</div>
+        <div class="spells-list">
+            {% for spell in spells %}
+            <div class="spell-item"><i class="fas fa-star-of-life"></i> {{ spell }}</div>
+            {% endfor %}
+        </div>
     </div>
     {% endif %}
-    <div class="notes-section"><div class="detail-title"><i class="fas fa-pen-fancy"></i> ЗАМЕТКИ</div><div class="detail-content">{{ notes if notes else "—" }}</div></div>
+
+    <div class="notes-section">
+        <div class="detail-title"><i class="fas fa-pen-fancy"></i> ЗАМЕТКИ</div>
+        <div class="detail-content">{{ notes if notes else "—" }}</div>
+    </div>
     <div class="footer"><i class="fas fa-dice-d20"></i> D&D Character Sheet • {{ created_date }}</div>
 </div>
 </body>

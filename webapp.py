@@ -1,7 +1,7 @@
 # webapp.py
 """
 Веб-сервер для отображения листа персонажа (Telegram Mini App)
-Обновлён для отображения всех новых классовых особенностей с разделением по категориям.
+Адаптирован под новый премиальный HTML-шаблон.
 """
 
 import os
@@ -10,7 +10,7 @@ from typing import Dict, Any, List
 from fastapi import FastAPI, HTTPException, Path
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-from jinja2 import Template
+from jinja2 import Template, Environment, FileSystemLoader
 from dotenv import load_dotenv
 
 # Репозитории
@@ -51,20 +51,34 @@ _class_repo = ClassRepository()
 _bg_repo = BackgroundRepository()
 _race_repo = RaceRepository()
 
+# Цвета классов для PDF/HTML (в шестнадцатеричном формате)
+CLASS_COLORS = {
+    "artificer": "#14b8a6",
+    "barbarian": "#f97316",
+    "bard": "#ec4899",
+    "cleric": "#fbbf24",
+    "druid": "#10b981",
+    "fighter": "#ef4444",
+    "monk": "#6b7280",
+    "paladin": "#eab308",
+    "ranger": "#84cc16",
+    "rogue": "#8b5cf6",
+    "sorcerer": "#f43f5e",
+    "warlock": "#a855f7",
+    "wizard": "#3b82f6",
+}
+
 
 def format_features_by_category(char: Dict[str, Any]) -> Dict[str, List[str]]:
-    """
-    Формирует словарь с особенностями персонажа, разделёнными по категориям.
-    Возвращает {'order': [], 'pact': [], 'rogue': [], 'class': []}
-    """
+    """Формирует словарь с особенностями персонажа, разделёнными по категориям."""
     result = {
-        'order': [],   # орден друида / жреца
-        'pact': [],    # договор колдуна (возвания)
-        'rogue': [],   # экспертиза и язык плута
-        'class': []    # все остальные классовые особенности
+        'order': [],
+        'pact': [],
+        'rogue': [],
+        'class': []
     }
 
-    # 1. Орден друида
+    # Орден друида
     druid_order = char.get("druid_order")
     if druid_order:
         if druid_order == "guide":
@@ -72,7 +86,7 @@ def format_features_by_category(char: Dict[str, Any]) -> Dict[str, List[str]]:
         elif druid_order == "guardian":
             result['order'].append(DRUID_ORDER_GUARDIAN_DESC)
 
-    # 2. Орден жреца
+    # Орден жреца
     cleric_order = char.get("cleric_order")
     if cleric_order:
         if cleric_order == "protector":
@@ -80,7 +94,7 @@ def format_features_by_category(char: Dict[str, Any]) -> Dict[str, List[str]]:
         elif cleric_order == "miracle":
             result['order'].append(CLERIC_ORDER_MIRACLE_DESC)
 
-    # 3. Договор колдуна
+    # Договор колдуна
     warlock_pact = char.get("warlock_pact")
     if warlock_pact == "tome":
         result['pact'].append(WARLOCK_PACT_TOME_DESC)
@@ -102,7 +116,7 @@ def format_features_by_category(char: Dict[str, Any]) -> Dict[str, List[str]]:
     elif warlock_pact == "arcane_mind":
         result['pact'].append(WARLOCK_PACT_ARCANE_MIND_DESC)
 
-    # 4. Плут: экспертиза и язык
+    # Плут: экспертиза и язык
     rogue_expertise = char.get("rogue_expertise", [])
     if rogue_expertise:
         result['rogue'].append(ROGUE_EXPERTISE.format(skills=", ".join(rogue_expertise)))
@@ -110,7 +124,7 @@ def format_features_by_category(char: Dict[str, Any]) -> Dict[str, List[str]]:
     if rogue_lang:
         result['rogue'].append(ROGUE_EXTRA_LANGUAGE.format(language=rogue_lang))
 
-    # 5. Классовые особенности (из strings.py)
+    # Классовые особенности
     class_name = char.get("class_name")
     if class_name == "Артефактор":
         result['class'].append(FEATURE_MENDING)
@@ -158,18 +172,19 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "CHA": char.get("cha", 10),
     }
 
-    skills = char.get("selected_skills", [])
+    skills_list = char.get("selected_skills", [])
     class_name_ru = char.get("class_name") or "Без класса"
     race_name = char.get("race_name") or "Неизвестно"
     background_name = char.get("background_name") or "Нет"
+    alignment = char.get("alignment", "Нейтральное")
 
-    # Маппинг русских названий классов на английские ключи для CSS темы
+    # Маппинг русских названий классов на английские ключи для CSS темы и цвета
     class_mapping = {
         "Варвар": "barbarian",
         "Бард": "bard",
         "Жрец": "cleric",
         "Друид": "druid",
-        "Воин": "warrior",
+        "Воин": "fighter",
         "Монах": "monk",
         "Паладин": "paladin",
         "Следопыт": "ranger",
@@ -179,24 +194,35 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "Волшебник": "wizard",
         "Артефактор": "artificer",
     }
-    class_key = class_mapping.get(class_name_ru, "warrior")  # по умолчанию воин
+    class_key = class_mapping.get(class_name_ru, "fighter")
+    class_color = CLASS_COLORS.get(class_key, "#ef4444")
 
     class_info = _class_repo.get_by_name(class_name_ru) or {}
-    saving_throws = class_info.get("saving_throws", [])
+    saving_throws = class_info.get("saving_throws", [])  # список характеристик (напр. ['STR', 'CON'])
+    proficiency_bonus = 2  # для 1 уровня
+
+    # Вычисляем модификаторы спасбросков (передаются как словарь stat -> modifier)
+    save_mods = {}
+    for stat in ["STR", "DEX", "CON", "INT", "WIS", "CHA"]:
+        mod = (stats[stat] - 10) // 2
+        if stat in saving_throws:
+            mod += proficiency_bonus
+        save_mods[stat] = f"{mod:+d}"
+
     background_info = _bg_repo.get_by_name(background_name) or {}
     background_trait = background_info.get("trait", "")
     background_description = background_info.get("description", "")
     origin_feat = background_info.get("origin_feat", "")
 
-    # Собираем все заклинания: выбранные + автоматические
+    # Заклинания
     selected_spells = char.get("selected_spells", [])
     auto_spells = char.get("auto_spells", [])
     all_spells = list(set(selected_spells + auto_spells))
 
-    # Категоризированные особенности
-    categorized_features = format_features_by_category(char)
+    # Особенности по категориям
+    categorized = format_features_by_category(char)
 
-    # Снаряжение: от класса и от предыстории
+    # Снаряжение
     equipment = []
     if char.get("selected_weapon"):
         equipment.append(char["selected_weapon"])
@@ -208,11 +234,12 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         if equip_desc:
             equipment.append(f"Снаряжение предыстории ({equip_choice}): {equip_desc}")
 
-    # Модификаторы навыков
+    # Навыки: словарь {skill_name: модификатор}
     skill_mods = {}
-    for skill in skills:
+    for skill in skills_list:
+        # Простейшее определение базовой характеристики (можно улучшить)
         base_stat = "DEX"
-        if skill in ["Атлетика"]:
+        if skill == "Атлетика":
             base_stat = "STR"
         elif skill in ["Анализ", "Знание магии", "История", "Исследование", "Природа", "Религия"]:
             base_stat = "INT"
@@ -221,69 +248,81 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         elif skill in ["Выступление", "Запугивание", "Обман", "Убеждение"]:
             base_stat = "CHA"
         mod = (stats[base_stat] - 10) // 2
-        if skill in saving_throws:
-            mod += 2
+        if skill in skills_list:  # если владеет навыком (все skills_list – выбранные навыки)
+            mod += proficiency_bonus
         skill_mods[skill] = f"{mod:+d}"
 
-    # Инициатива = модификатор Ловкости
+    # Инициатива
     initiative = (stats['DEX'] - 10) // 2
+
+    # Прочие данные
+    hp = char.get("hp", 0)
+    ac = char.get("ac", 10)
+    speed = char.get("speed", 30)
+    level = char.get("level", 1)
+    experience = char.get("experience", 0)
 
     return {
         "name": char["name"],
-        "class_name": class_name_ru,
+        "class": class_name_ru,
         "class_key": class_key,
+        "class_color": class_color,
         "race": race_name,
-        "level": char.get("level", 1),
+        "level": level,
+        "alignment": alignment,
         "background": background_name,
         "background_trait": background_trait,
         "background_description": background_description,
         "origin_feat": origin_feat,
         "backstory": char.get("backstory", ""),
         "stats": stats,
-        "hp": char.get("hp", 0),
-        "ac": char.get("ac", 10),
-        "speed": char.get("speed", 30),
-        "alignment": char.get("alignment", "Нейтральное"),
-        "experience": char.get("experience", 0),
-        "proficiency_bonus": 2,
-        "saving_throws": saving_throws,
-        "skills": skills,
+        "hp": hp,
+        "ac": ac,
+        "speed": speed,
+        "experience": experience,
+        "proficiency_bonus": proficiency_bonus,
+        "prof_saves": saving_throws,          # список характеристик со спасброском
+        "prof_skills": skills_list,           # список названий навыков, которыми владеет
+        "skills": skill_mods,                 # словарь {название: модификатор}
+        "initiative": initiative,
         "equipment": equipment,
         "spells": all_spells,
-        "order_features": categorized_features['order'],
-        "pact_features": categorized_features['pact'],
-        "rogue_features": categorized_features['rogue'],
-        "class_specific_features": categorized_features['class'],
-        "skill_mods": skill_mods,
-        "all_skills": skills,
-        "initiative": initiative,
-        "race_traits": [],
-        "class_features": [],
-        "appearance": "",
+        "order_features": categorized['order'],
+        "pact_features": categorized['pact'],
+        "rogue_features": categorized['rogue'],
+        "class_specific_features": categorized['class'],
+        "attacks": "",  # можно заполнить позже
         "created_date": "недавно",
     }
 
 
-# ------------------------------------------------------------------
-# HTML-шаблон вынесен в отдельный файл (например, templates/character_sheet.html)
-# ------------------------------------------------------------------
-def get_template() -> Template:
-    """Загружает HTML-шаблон из файла."""
-    template_path = os.path.join(os.path.dirname(__file__), "templates", "character_sheet.html")
-    try:
-        with open(template_path, "r", encoding="utf-8") as f:
-            return Template(f.read())
-    except FileNotFoundError:
-        logger.error("HTML шаблон не найден по пути: %s", template_path)
-        # fallback – минимальный шаблон
-        return Template("<h1>Ошибка: шаблон не найден</h1><p>{{ error }}</p>")
+# Настройка Jinja2 с пользовательским фильтром
+def modifier_filter(value):
+    """Возвращает модификатор характеристики со знаком."""
+    mod = (value - 10) // 2
+    return f"{mod:+d}" if mod != 0 else "0"
+
+
+# Загружаем шаблон из файла
+template_path = os.path.join(os.path.dirname(__file__), "templates", "character_sheet.html")
+if os.path.exists(template_path):
+    with open(template_path, "r", encoding="utf-8") as f:
+        html_template = f.read()
+    env = Environment()
+    env.filters['modifier'] = modifier_filter
+    template = env.from_string(html_template)
+else:
+    # fallback
+    template = None
+    logger.error(f"HTML шаблон не найден по пути: {template_path}")
 
 
 @app.get("/character/{char_id}", response_class=HTMLResponse)
 async def character_sheet(char_id: int = Path(..., title="ID персонажа")):
     try:
         data = get_character_data(char_id)
-        template = get_template()
+        if template is None:
+            return HTMLResponse(content="<h1>Ошибка: шаблон не загружен</h1>", status_code=500)
         html = template.render(**data)
         return HTMLResponse(content=html)
     except HTTPException:

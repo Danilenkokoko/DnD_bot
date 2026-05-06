@@ -2,6 +2,7 @@
 """
 Веб-сервер для отображения листа персонажа (Telegram Mini App)
 Адаптирован под новый премиальный HTML-шаблон.
+Гарантирует, что все числовые значения передаются как int.
 """
 
 import os
@@ -163,16 +164,17 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     if not char:
         raise HTTPException(status_code=404, detail="Персонаж не найден")
 
+    # ПРИВОДИМ ВСЕ ЧИСЛОВЫЕ ЗНАЧЕНИЯ К int
     stats = {
-        "STR": char.get("str", 10),
-        "DEX": char.get("dex", 10),
-        "CON": char.get("con", 10),
-        "INT": char.get("int", 10),
-        "WIS": char.get("wis", 10),
-        "CHA": char.get("cha", 10),
+        "STR": int(char.get("str", 10)),
+        "DEX": int(char.get("dex", 10)),
+        "CON": int(char.get("con", 10)),
+        "INT": int(char.get("int", 10)),
+        "WIS": int(char.get("wis", 10)),
+        "CHA": int(char.get("cha", 10)),
     }
 
-    skills_list = char.get("selected_skills", [])
+    skills_list = char.get("selected_skills", []) or []
     class_name_ru = char.get("class_name") or "Без класса"
     race_name = char.get("race_name") or "Неизвестно"
     background_name = char.get("background_name") or "Нет"
@@ -215,8 +217,8 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     origin_feat = background_info.get("origin_feat", "")
 
     # Заклинания
-    selected_spells = char.get("selected_spells", [])
-    auto_spells = char.get("auto_spells", [])
+    selected_spells = char.get("selected_spells", []) or []
+    auto_spells = char.get("auto_spells", []) or []
     all_spells = list(set(selected_spells + auto_spells))
 
     # Особенности по категориям
@@ -237,7 +239,7 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     # Навыки: словарь {skill_name: модификатор}
     skill_mods = {}
     for skill in skills_list:
-        # Простейшее определение базовой характеристики (можно улучшить)
+        # Простейшее определение базовой характеристики
         base_stat = "DEX"
         if skill == "Атлетика":
             base_stat = "STR"
@@ -255,18 +257,19 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     # Инициатива
     initiative = (stats['DEX'] - 10) // 2
 
-    # Прочие данные
-    hp = char.get("hp", 0)
-    ac = char.get("ac", 10)
-    speed = char.get("speed", 30)
-    level = char.get("level", 1)
-    experience = char.get("experience", 0)
+    # Прочие данные с приведением к int
+    hp = int(char.get("hp", 0))
+    ac = int(char.get("ac", 10))
+    speed = int(char.get("speed", 30))
+    level = int(char.get("level", 1))
+    experience = int(char.get("experience", 0))
 
     return {
         "name": char["name"],
         "class": class_name_ru,
         "class_key": class_key,
         "class_color": class_color,
+        "class_color_rgb": f"{int(class_color[1:3],16)},{int(class_color[3:5],16)},{int(class_color[5:7],16)}",
         "race": race_name,
         "level": level,
         "alignment": alignment,
@@ -281,9 +284,9 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "speed": speed,
         "experience": experience,
         "proficiency_bonus": proficiency_bonus,
-        "prof_saves": saving_throws,          # список характеристик со спасброском
-        "prof_skills": skills_list,           # список названий навыков, которыми владеет
-        "skills": skill_mods,                 # словарь {название: модификатор}
+        "prof_saves": saving_throws,
+        "prof_skills": skills_list,
+        "skills": skill_mods,
         "initiative": initiative,
         "equipment": equipment,
         "spells": all_spells,
@@ -291,7 +294,7 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "pact_features": categorized['pact'],
         "rogue_features": categorized['rogue'],
         "class_specific_features": categorized['class'],
-        "attacks": "",  # можно заполнить позже
+        "attacks": "",
         "created_date": "недавно",
     }
 
@@ -299,7 +302,11 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
 # Настройка Jinja2 с пользовательским фильтром
 def modifier_filter(value):
     """Возвращает модификатор характеристики со знаком."""
-    mod = (value - 10) // 2
+    try:
+        val = int(value)
+    except (TypeError, ValueError):
+        return "0"
+    mod = (val - 10) // 2
     return f"{mod:+d}" if mod != 0 else "0"
 
 
@@ -312,7 +319,6 @@ if os.path.exists(template_path):
     env.filters['modifier'] = modifier_filter
     template = env.from_string(html_template)
 else:
-    # fallback
     template = None
     logger.error(f"HTML шаблон не найден по пути: {template_path}")
 

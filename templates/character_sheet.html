@@ -6,18 +6,23 @@
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 <style>
+  /* ── JINJA2: вычисляем символ и паттерн по классу ── */
+  /*
+    class_symbol  — передаётся из Python как строка символа
+    class_pattern — передаётся из Python как ключ паттерна
+    Оба добавляются в контекст рендера вместе с остальными переменными.
+  */
+
   :root {
     --paper: #f4f1ea;
     --paper-dark: #e8e2d3;
     --ink: #2c2418;
-    --accent: {{ class_color }};
     --border-deco: #c9b58b;
-  }
-  {% set r = class_color[1:3]|int(base=16) %}
-  {% set g = class_color[3:5]|int(base=16) %}
-  {% set b = class_color[5:7]|int(base=16) %}
-  .sheet, .stat-card, .combat-card, .saving-card, .skills-card, .block {
-    --accent-rgb: {{ r }}, {{ g }}, {{ b }};
+    --ink-muted: #7c6b54;
+
+    /* Единый нейтральный акцент — без цвета класса */
+    --accent: #6b5a42;
+    --accent-rgb: 107, 90, 66;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -27,51 +32,236 @@
     font-family: 'Cormorant Garamond', Georgia, serif;
     color: var(--ink);
     padding: 40px 24px;
-    background-image: radial-gradient(circle at 25% 40%, rgba(0,0,0,0.03) 1.5%, transparent 2%);
+  }
+
+  /* ════════════════════════════════════════
+     ВАРИАНТ 3: фоновые паттерны по классу
+     ════════════════════════════════════════ */
+
+  /* Воин — диагональная штриховка */
+  .sheet.pattern-warrior {
+    background-color: var(--paper);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 18px,
+      rgba(0,0,0,0.028) 18px,
+      rgba(0,0,0,0.028) 19px
+    );
+  }
+
+  /* Маг — сетка из точек */
+  .sheet.pattern-mage {
+    background-color: var(--paper);
+    background-image: radial-gradient(
+      circle, rgba(0,0,0,0.07) 1px, transparent 1px
+    );
+    background-size: 22px 22px;
+  }
+
+  /* Жрец — крест-сетка */
+  .sheet.pattern-cleric {
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px),
+      linear-gradient(rgba(0,0,0,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,0.015) 1px, transparent 1px);
+    background-size: 72px 72px, 72px 72px, 18px 18px, 18px 18px;
+  }
+
+  /* Плут — тонкие горизонтальные линии (нотная бумага) */
+  .sheet.pattern-rogue {
+    background-color: var(--paper);
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 23px,
+      rgba(0,0,0,0.04) 23px,
+      rgba(0,0,0,0.04) 24px
+    );
+  }
+
+  /* Паладин — ромбовидная сетка */
+  .sheet.pattern-paladin {
+    background-color: var(--paper);
+    background-image:
+      repeating-linear-gradient(
+        45deg, rgba(0,0,0,0.025) 0, rgba(0,0,0,0.025) 1px,
+        transparent 0, transparent 50%
+      ),
+      repeating-linear-gradient(
+        -45deg, rgba(0,0,0,0.025) 0, rgba(0,0,0,0.025) 1px,
+        transparent 0, transparent 50%
+      );
+    background-size: 24px 24px;
+  }
+
+  /* Монах — концентрические круги (SVG data-uri) */
+  .sheet.pattern-monk {
+    background-color: var(--paper);
+    background-image: radial-gradient(
+        ellipse at center,
+        transparent 30px, rgba(0,0,0,0.028) 30px,
+        rgba(0,0,0,0.028) 31px, transparent 31px
+      ),
+      radial-gradient(
+        ellipse at center,
+        transparent 60px, rgba(0,0,0,0.02) 60px,
+        rgba(0,0,0,0.02) 61px, transparent 61px
+      ),
+      radial-gradient(
+        ellipse at center,
+        transparent 90px, rgba(0,0,0,0.015) 90px,
+        rgba(0,0,0,0.015) 91px, transparent 91px
+      );
+    background-size: 180px 180px;
+  }
+
+  /* Друид — органические волны */
+  .sheet.pattern-druid {
+    background-color: var(--paper);
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 8px,
+      rgba(0,0,0,0.018) 8px,
+      rgba(0,0,0,0.018) 9px,
+      transparent 9px,
+      transparent 17px,
+      rgba(0,0,0,0.012) 17px,
+      rgba(0,0,0,0.012) 18px
+    );
+  }
+
+  /* Бард — нотные линии (пятилинейка) */
+  .sheet.pattern-bard {
+    background-color: var(--paper);
+    background-image:
+      repeating-linear-gradient(
+        0deg,
+        transparent 0px, transparent 6px,
+        rgba(0,0,0,0.035) 6px, rgba(0,0,0,0.035) 7px,
+        transparent 7px, transparent 10px,
+        rgba(0,0,0,0.035) 10px, rgba(0,0,0,0.035) 11px,
+        transparent 11px, transparent 14px,
+        rgba(0,0,0,0.035) 14px, rgba(0,0,0,0.035) 15px,
+        transparent 15px, transparent 18px,
+        rgba(0,0,0,0.035) 18px, rgba(0,0,0,0.035) 19px,
+        transparent 19px, transparent 22px,
+        rgba(0,0,0,0.035) 22px, rgba(0,0,0,0.035) 23px,
+        transparent 23px, transparent 52px
+      );
+  }
+
+  /* Варвар — крупная диагональ */
+  .sheet.pattern-barbarian {
+    background-color: var(--paper);
+    background-image:
+      repeating-linear-gradient(
+        -60deg,
+        transparent, transparent 14px,
+        rgba(0,0,0,0.03) 14px, rgba(0,0,0,0.03) 15px
+      ),
+      repeating-linear-gradient(
+        60deg,
+        transparent, transparent 14px,
+        rgba(0,0,0,0.015) 14px, rgba(0,0,0,0.015) 15px
+      );
+  }
+
+  /* Чернокнижник — мелкая шестиугольная сетка */
+  .sheet.pattern-warlock {
+    background-color: var(--paper);
+    background-image:
+      radial-gradient(circle at 0% 50%, rgba(0,0,0,0.04) 1px, transparent 1px),
+      radial-gradient(circle at 100% 50%, rgba(0,0,0,0.04) 1px, transparent 1px),
+      radial-gradient(circle at 50% 0%, rgba(0,0,0,0.04) 1px, transparent 1px),
+      radial-gradient(circle at 50% 100%, rgba(0,0,0,0.04) 1px, transparent 1px);
+    background-size: 20px 34px, 20px 34px, 40px 34px, 40px 34px;
+  }
+
+  /* Следопыт — пунктирные линии */
+  .sheet.pattern-ranger {
+    background-color: var(--paper);
+    background-image:
+      repeating-linear-gradient(
+        90deg,
+        rgba(0,0,0,0.04) 0px, rgba(0,0,0,0.04) 4px,
+        transparent 4px, transparent 20px
+      ),
+      repeating-linear-gradient(
+        0deg,
+        rgba(0,0,0,0.025) 0px, rgba(0,0,0,0.025) 1px,
+        transparent 1px, transparent 28px
+      );
+  }
+
+  /* Дефолт (неизвестный класс) — лёгкая точечная текстура */
+  .sheet.pattern-default {
+    background-color: var(--paper);
+    background-image: radial-gradient(
+      circle, rgba(0,0,0,0.04) 1px, transparent 1px
+    );
     background-size: 28px 28px;
   }
 
-  /* ── SHEET CONTAINER ── */
+  /* ════════════════════════════════
+     SHEET CONTAINER
+     ════════════════════════════════ */
   .sheet {
     max-width: 1150px;
     margin: 0 auto;
-    background: var(--paper);
     box-shadow:
       0 20px 35px -12px rgba(0,0,0,0.25),
       inset 0 1px 0 rgba(255,245,225,0.9);
     border-radius: 12px;
     position: relative;
-    padding: 48px 40px 40px;
-
-    /* Вариант 5: двойная рамка через border + outline */
+    padding: 52px 40px 40px;
     border: 1.5px solid var(--border-deco);
-    outline: 2px solid rgba(var(--accent-rgb), 0.18);
+    outline: 2px solid rgba(107,90,66,0.2);
     outline-offset: -10px;
   }
 
-  /* ── ВАРИАНТ 1+5: угловые орнаменты вместо квадратиков ── */
-  /* Убираем старые ::before / ::after-рамки, делаем символьные углы */
-  .sheet::before,
-  .sheet::after {
-    content: none; /* полностью отключаем */
-  }
-
-  /* Четыре угловых символа */
+  /* ════════════════════════════════
+     ВАРИАНТ 2: символьные углы класса
+     ════════════════════════════════ */
   .corner {
     position: absolute;
-    font-size: 28px;
-    color: var(--accent);
-    opacity: 0.55;
+    font-size: 26px;
+    color: var(--ink-muted);
+    opacity: 0.4;
     line-height: 1;
     pointer-events: none;
     user-select: none;
+    /* Плавное перетекание при смене класса */
+    transition: opacity 0.3s;
   }
-  .corner-tl { top: 12px;  left: 16px;  }
-  .corner-tr { top: 12px;  right: 16px; transform: scaleX(-1); }
-  .corner-bl { bottom: 12px; left: 16px;  transform: scaleY(-1); }
-  .corner-br { bottom: 12px; right: 16px; transform: scale(-1); }
+  .corner:hover { opacity: 0.65; }
 
-  /* ── HEADER ── */
+  .corner-tl { top: 13px;  left: 16px;  }
+  .corner-tr { top: 13px;  right: 16px; display: inline-block; transform: scaleX(-1); }
+  .corner-bl { bottom: 13px; left: 16px;  display: inline-block; transform: scaleY(-1); }
+  .corner-br { bottom: 13px; right: 16px; display: inline-block; transform: scale(-1); }
+
+  /* Подпись символа класса под угловым знаком */
+  .class-badge {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Cinzel', serif;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  /* ════════════════════
+     HEADER
+     ════════════════════ */
   .header {
     border-bottom: 2px solid var(--border-deco);
     margin-bottom: 28px;
@@ -82,226 +272,254 @@
     flex-wrap: wrap;
   }
 
-  /* Исправление имени: capitalize + нижний акцент */
   .name {
     font-family: 'Cinzel', serif;
     font-size: 42px;
     font-weight: 700;
     letter-spacing: 1.5px;
-    color: var(--accent);
-    text-shadow: 1px 1px 0 rgba(0,0,0,0.05);
-    text-transform: capitalize;   /* ← исправляет строчные имена */
+    color: var(--ink);
+    text-shadow: 1px 1px 0 rgba(0,0,0,0.04);
+    text-transform: capitalize;
   }
 
   .meta {
     font-size: 16px;
     font-style: italic;
-    color: #5e4b32;
+    color: var(--ink-muted);
     margin-top: 6px;
   }
 
   .header-right { text-align: right; }
 
   .xp-badge {
-    background: rgba(var(--accent-rgb), 0.1);
-    border: 1px solid rgba(var(--accent-rgb), 0.25);
+    background: rgba(107,90,66,0.08);
+    border: 1px solid rgba(107,90,66,0.2);
     padding: 4px 14px;
     border-radius: 50px;
     font-size: 14px;
     display: inline-block;
-    color: var(--ink);
   }
 
   .level-badge {
     font-family: 'Cinzel', serif;
     font-size: 24px;
     font-weight: 700;
-    background: var(--accent);
-    color: white;
+    background: var(--ink);
+    color: var(--paper);
     padding: 6px 22px;
     border-radius: 60px;
     display: inline-block;
     margin-top: 10px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
   }
 
-  /* ── GRID ── */
+  /* ════════════════════
+     LAYOUT GRID
+     ════════════════════ */
   .grid {
     display: grid;
     grid-template-columns: 260px 1fr;
     gap: 32px;
   }
-  .left-col {
-    display: flex;
-    flex-direction: column;
-    gap: 28px;
-  }
+  .left-col { display: flex; flex-direction: column; gap: 28px; }
 
-  /* ── STAT CARDS ── */
+  /* ════════════════════
+     STAT CARDS
+     ════════════════════ */
   .stats-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
+    gap: 16px;
   }
 
   .stat-card {
-    background: rgba(255, 250, 240, 0.9);
+    background: rgba(255,252,245,0.92);
     border: 1px solid var(--border-deco);
-    border-radius: 32px;
+    border-radius: 28px;
     text-align: center;
     padding: 14px 8px;
     transition: all 0.2s;
-    box-shadow: 0 6px 12px rgba(0,0,0,0.03);
-    backdrop-filter: blur(2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.04);
   }
   .stat-card:hover {
-    transform: translateY(-4px);
-    border-color: var(--accent);
-    box-shadow: 0 8px 18px rgba(var(--accent-rgb), 0.12);
+    transform: translateY(-3px);
+    border-color: var(--ink-muted);
+    box-shadow: 0 8px 18px rgba(0,0,0,0.09);
   }
 
-  .stat-icon { font-size: 26px; color: var(--accent); margin-bottom: 6px; }
-  .stat-value { font-family: 'Cinzel', serif; font-size: 38px; font-weight: 800; line-height: 1; margin: 6px 0; }
-  .stat-mod { font-size: 15px; font-weight: 600; color: #7c6b54; }
-  .stat-label { font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; margin-top: 6px; font-weight: 500; }
+  .stat-icon { font-size: 22px; color: var(--ink-muted); margin-bottom: 5px; opacity: 0.7; }
+  .stat-value { font-family: 'Cinzel', serif; font-size: 36px; font-weight: 800; line-height: 1; margin: 5px 0; color: var(--ink); }
+  .stat-mod { font-size: 14px; font-weight: 600; color: var(--ink-muted); }
+  .stat-label { font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase; margin-top: 5px; font-weight: 600; color: var(--ink-muted); }
 
-  /* ── SAVING / SKILLS ── */
+  /* ════════════════════
+     SAVING / SKILLS
+     ════════════════════ */
   .saving-card, .skills-card {
-    background: rgba(255, 250, 240, 0.8);
+    background: rgba(255,252,245,0.8);
     border: 1px solid var(--border-deco);
-    border-radius: 24px;
+    border-radius: 20px;
     padding: 16px;
   }
 
   .section-title {
     font-family: 'Cinzel', serif;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
-    border-bottom: 2px solid var(--accent);
-    display: inline-block;
-    margin-bottom: 14px;
-    padding-bottom: 4px;
+    border-bottom: 1.5px solid var(--border-deco);
+    display: block;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    color: var(--ink);
+    letter-spacing: 0.5px;
   }
 
   .saving-row, .skill-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 6px 0;
-    border-bottom: 1px dotted var(--border-deco);
+    padding: 5px 0;
+    border-bottom: 1px dotted rgba(0,0,0,0.08);
   }
+  .saving-row:last-child, .skill-row:last-child { border-bottom: none; }
 
   .skill-left { display: flex; align-items: center; gap: 8px; }
 
   .circle {
-    width: 12px; height: 12px;
-    border: 1px solid var(--accent);
+    width: 11px; height: 11px;
+    border: 1.5px solid var(--ink-muted);
     border-radius: 50%;
     display: inline-block;
+    flex-shrink: 0;
+    opacity: 0.5;
   }
-  .circle.checked { background: var(--accent); }
+  .circle.checked {
+    background: var(--ink);
+    border-color: var(--ink);
+    opacity: 0.8;
+  }
 
-  .save-value, .skill-value { font-weight: bold; font-size: 14px; }
+  .save-value, .skill-value {
+    font-weight: 700;
+    font-size: 13px;
+    font-family: 'Cinzel', serif;
+    color: var(--ink);
+  }
 
-  /* ── COMBAT CARDS ── */
+  /* ════════════════════
+     COMBAT CARDS
+     ════════════════════ */
   .combat-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 20px;
+    gap: 16px;
     margin-bottom: 28px;
   }
 
   .combat-card {
-    background: #faf7f2;
+    background: rgba(255,252,245,0.92);
     border: 1px solid var(--border-deco);
-    border-radius: 36px;
-    padding: 16px 20px;
+    border-radius: 32px;
+    padding: 16px 18px;
     flex: 1;
-    min-width: 130px;
+    min-width: 120px;
     text-align: center;
     transition: all 0.2s;
-    box-shadow: 0 6px 10px rgba(0,0,0,0.03);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.04);
   }
   .combat-card:hover {
     transform: translateY(-3px);
-    border-color: var(--accent);
-    box-shadow: 0 8px 18px rgba(var(--accent-rgb), 0.12);
+    border-color: var(--ink-muted);
+    box-shadow: 0 8px 18px rgba(0,0,0,0.09);
   }
 
-  .combat-icon { font-size: 32px; color: var(--accent); margin-bottom: 8px; }
-  .combat-value { font-family: 'Cinzel', serif; font-size: 32px; font-weight: 800; line-height: 1; }
-  .combat-label { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; margin-top: 8px; color: #6b5a42; }
+  .combat-icon { font-size: 28px; color: var(--ink-muted); margin-bottom: 8px; opacity: 0.65; }
+  .combat-value { font-family: 'Cinzel', serif; font-size: 30px; font-weight: 800; line-height: 1; color: var(--ink); }
+  .combat-label { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-top: 8px; color: var(--ink-muted); }
 
   .hp-bar-container {
     width: 100%;
-    background: #ddd0bc;
+    background: rgba(0,0,0,0.1);
     border-radius: 20px;
     margin-top: 10px;
     overflow: hidden;
   }
-  .hp-bar { width: 100%; height: 6px; background: var(--accent); border-radius: 20px; }
+  .hp-bar { width: 100%; height: 5px; background: var(--ink-muted); border-radius: 20px; opacity: 0.5; }
 
-  /* ── CONTENT BLOCKS ── */
+  /* ════════════════════
+     CONTENT BLOCKS
+     ════════════════════ */
   .block {
-    background: rgba(255, 250, 240, 0.85);
+    background: rgba(255,252,245,0.85);
     border: 1px solid var(--border-deco);
-    border-radius: 24px;
-    padding: 18px;
-    margin-bottom: 20px;
+    border-radius: 20px;
+    padding: 18px 20px;
+    margin-bottom: 18px;
   }
 
   .block-title {
     font-family: 'Cinzel', serif;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
-    border-left: 4px solid var(--accent);
-    padding-left: 14px;
+    border-left: 3px solid var(--border-deco);
+    padding-left: 12px;
     margin-bottom: 14px;
+    letter-spacing: 0.4px;
   }
 
   .sub-section { margin-top: 12px; }
 
   .sub-title {
     font-weight: 600;
-    font-size: 15px;
+    font-size: 14px;
     margin-bottom: 6px;
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--accent);
+    color: var(--ink-muted);
   }
 
   ul { list-style: none; padding-left: 0; }
   li {
-    padding: 6px 0 4px 24px;
+    padding: 5px 0 4px 22px;
     position: relative;
-    border-bottom: 1px dotted rgba(0,0,0,0.05);
+    border-bottom: 1px dotted rgba(0,0,0,0.06);
+    font-size: 15px;
+    line-height: 1.5;
   }
+  li:last-child { border-bottom: none; }
   li::before {
-    content: "❧";
-    color: var(--accent);
+    content: "✦";
+    color: var(--ink-muted);
     position: absolute;
     left: 0;
-    font-size: 14px;
+    font-size: 9px;
+    top: 9px;
+    opacity: 0.55;
   }
 
-  /* ── FOOTER ── */
+  /* ════════════════════
+     FOOTER
+     ════════════════════ */
   .footer {
     margin-top: 40px;
     text-align: center;
     font-size: 11px;
     border-top: 1px solid var(--border-deco);
-    padding-top: 18px;
-    color: #7f6b50;
+    padding-top: 16px;
+    color: var(--ink-muted);
     font-style: italic;
+    opacity: 0.7;
   }
 
-  /* ── RESPONSIVE ── */
+  /* ════════════════════
+     RESPONSIVE
+     ════════════════════ */
   @media (max-width: 850px) {
     .grid { grid-template-columns: 1fr; gap: 24px; }
     .stats-grid { grid-template-columns: repeat(3, 1fr); }
-    .sheet { padding: 32px 20px; }
-    .name { font-size: 32px; }
+    .sheet { padding: 40px 20px 28px; }
+    .name { font-size: 30px; }
   }
   @media (max-width: 600px) {
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
@@ -311,13 +529,55 @@
 </style>
 </head>
 <body>
-<div class="sheet">
 
-  <!-- Вариант 1: символьные угловые орнаменты вместо квадратиков -->
-  <span class="corner corner-tl">❧</span>
-  <span class="corner corner-tr">❧</span>
-  <span class="corner corner-bl">❧</span>
-  <span class="corner corner-br">❧</span>
+{#
+  ══════════════════════════════════════════════════════
+  ВАРИАНТ 2: символ класса — передаётся как class_symbol
+  ВАРИАНТ 3: паттерн класса — передаётся как class_pattern
+
+  В pdf_generator.py добавить в контекст:
+
+  CLASS_SYMBOLS = {
+    'Воин':        '⚔',
+    'Маг':         '✦',
+    'Жрец':        '✙',
+    'Паладин':     '⚜',
+    'Плут':        '◈',
+    'Монах':       '☯',
+    'Друид':       '❁',
+    'Бард':        '♪',
+    'Варвар':      '⛉',
+    'Чернокнижник':'⛧',
+    'Следопыт':    '⊕',
+  }
+  CLASS_PATTERNS = {
+    'Воин':        'warrior',
+    'Маг':         'mage',
+    'Жрец':        'cleric',
+    'Паладин':     'paladin',
+    'Плут':        'rogue',
+    'Монах':       'monk',
+    'Друид':       'druid',
+    'Бард':        'bard',
+    'Варвар':      'barbarian',
+    'Чернокнижник':'warlock',
+    'Следопыт':    'ranger',
+  }
+  context['class_symbol']  = CLASS_SYMBOLS.get(class_name, '✦')
+  context['class_pattern'] = CLASS_PATTERNS.get(class_name, 'default')
+  ══════════════════════════════════════════════════════
+#}
+
+<div class="sheet pattern-{{ class_pattern }}">
+
+  <!-- ВАРИАНТ 2: угловые символы класса -->
+  <span class="corner corner-tl">{{ class_symbol }}</span>
+  <span class="corner corner-tr">{{ class_symbol }}</span>
+  <span class="corner corner-bl">{{ class_symbol }}</span>
+  <span class="corner corner-br">{{ class_symbol }}</span>
+
+  <!-- Тонкая надпись класса по центру верхнего края -->
+  <div class="class-badge">{{ class }}</div>
 
   <div class="header">
     <div>
@@ -470,7 +730,7 @@
         <ul>{% for item in equipment %}<li>{{ item }}</li>{% endfor %}</ul>
         {% else %}
         <p style="color:#9c886a; font-style:italic; padding-left:4px;">
-          <i class="fas fa-box-open" style="margin-right:8px; opacity:0.5;"></i>Инвентарь пуст
+          <i class="fas fa-box-open" style="margin-right:8px; opacity:0.45;"></i>Инвентарь пуст
         </p>
         {% endif %}
       </div>

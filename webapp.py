@@ -164,7 +164,6 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     if not char:
         raise HTTPException(status_code=404, detail="Персонаж не найден")
 
-    # ПРИВОДИМ ВСЕ ЧИСЛОВЫЕ ЗНАЧЕНИЯ К int
     stats = {
         "STR": int(char.get("str", 10)),
         "DEX": int(char.get("dex", 10)),
@@ -174,13 +173,15 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "CHA": int(char.get("cha", 10)),
     }
 
+    # Вычисляем модификаторы один раз
+    mods = {stat: (stats[stat] - 10) // 2 for stat in stats}
+
     skills_list = char.get("selected_skills", []) or []
     class_name_ru = char.get("class_name") or "Без класса"
     race_name = char.get("race_name") or "Неизвестно"
     background_name = char.get("background_name") or "Нет"
     alignment = char.get("alignment", "Нейтральное")
 
-    # Маппинг русских названий классов на английские ключи для CSS темы и цвета
     class_mapping = {
         "Варвар": "barbarian",
         "Бард": "bard",
@@ -200,31 +201,20 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     class_color = CLASS_COLORS.get(class_key, "#ef4444")
 
     class_info = _class_repo.get_by_name(class_name_ru) or {}
-    saving_throws = class_info.get("saving_throws", [])  # список характеристик (напр. ['STR', 'CON'])
-    proficiency_bonus = 2  # для 1 уровня
-
-    # Вычисляем модификаторы спасбросков (передаются как словарь stat -> modifier)
-    save_mods = {}
-    for stat in ["STR", "DEX", "CON", "INT", "WIS", "CHA"]:
-        mod = (stats[stat] - 10) // 2
-        if stat in saving_throws:
-            mod += proficiency_bonus
-        save_mods[stat] = f"{mod:+d}"
+    saving_throws = class_info.get("saving_throws", [])
+    proficiency_bonus = 2
 
     background_info = _bg_repo.get_by_name(background_name) or {}
     background_trait = background_info.get("trait", "")
     background_description = background_info.get("description", "")
     origin_feat = background_info.get("origin_feat", "")
 
-    # Заклинания
     selected_spells = char.get("selected_spells", []) or []
     auto_spells = char.get("auto_spells", []) or []
     all_spells = list(set(selected_spells + auto_spells))
 
-    # Особенности по категориям
     categorized = format_features_by_category(char)
 
-    # Снаряжение
     equipment = []
     if char.get("selected_weapon"):
         equipment.append(char["selected_weapon"])
@@ -236,10 +226,8 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         if equip_desc:
             equipment.append(f"Снаряжение предыстории ({equip_choice}): {equip_desc}")
 
-    # Навыки: словарь {skill_name: модификатор}
     skill_mods = {}
     for skill in skills_list:
-        # Простейшее определение базовой характеристики
         base_stat = "DEX"
         if skill == "Атлетика":
             base_stat = "STR"
@@ -250,14 +238,11 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         elif skill in ["Выступление", "Запугивание", "Обман", "Убеждение"]:
             base_stat = "CHA"
         mod = (stats[base_stat] - 10) // 2
-        if skill in skills_list:  # если владеет навыком (все skills_list – выбранные навыки)
+        if skill in skills_list:
             mod += proficiency_bonus
         skill_mods[skill] = f"{mod:+d}"
 
-    # Инициатива
     initiative = (stats['DEX'] - 10) // 2
-
-    # Прочие данные с приведением к int
     hp = int(char.get("hp", 0))
     ac = int(char.get("ac", 10))
     speed = int(char.get("speed", 30))
@@ -279,6 +264,7 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "origin_feat": origin_feat,
         "backstory": char.get("backstory", ""),
         "stats": stats,
+        "mods": mods,                     # <-- добавлено
         "hp": hp,
         "ac": ac,
         "speed": speed,

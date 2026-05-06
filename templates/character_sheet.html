@@ -407,9 +407,10 @@
     box-shadow: 0 8px 18px rgba(0,0,0,0.09);
   }
   .stat-icon { font-size: 20px; color: var(--ink-muted); margin-bottom: 4px; opacity: 0.7; }
-  .stat-value { font-family: 'Cinzel', serif; font-size: 34px; font-weight: 800; line-height: 1; margin: 4px 0; color: var(--ink); }
-  .stat-mod { font-size: 14px; font-weight: 600; color: var(--ink-muted); }
-  .stat-label { font-size: 10px; letter-spacing: 0.8px; text-transform: uppercase; margin-top: 4px; font-weight: 600; color: var(--ink-muted); }
+  .stat-mod { font-family: 'Cinzel', serif; font-size: 34px; font-weight: 800; line-height: 1; margin: 4px 0; color: var(--ink); }
+  .stat-value { font-size: 14px; font-weight: 600; color: var(--ink-muted); }
+  .stat-sep { width: 24px; height: 1px; background: var(--border-deco); margin: 4px auto; opacity: 0.7; }
+  .stat-label { font-size: 10px; letter-spacing: 0.8px; text-transform: uppercase; margin-top: 2px; font-weight: 600; color: var(--ink-muted); }
 
   /* ── СПАСБРОСКИ / НАВЫКИ ── */
   .saving-card, .skills-card {
@@ -715,8 +716,9 @@
             {% elif stat == 'CHA' %}<i class="fas fa-comment-dots"></i>
             {% endif %}
           </div>
+          <div class="stat-mod">{% if mods[stat] >= 0 %}+{% endif %}{{ mods[stat] }}</div>
           <div class="stat-value">{{ value }}</div>
-          <div class="stat-mod">{{ mods[stat] }}</div>
+          <div class="stat-sep"></div>
           <div class="stat-label">
             {% if stat == 'STR' %}Сила
             {% elif stat == 'DEX' %}Ловкость

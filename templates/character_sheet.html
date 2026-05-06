@@ -19,7 +19,9 @@
   .sheet, .stat-card, .combat-card, .saving-card, .skills-card, .block {
     --accent-rgb: {{ r }}, {{ g }}, {{ b }};
   }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
+
   body {
     background: #e6dfd3;
     font-family: 'Cormorant Garamond', Georgia, serif;
@@ -28,76 +30,295 @@
     background-image: radial-gradient(circle at 25% 40%, rgba(0,0,0,0.03) 1.5%, transparent 2%);
     background-size: 28px 28px;
   }
+
+  /* ── SHEET CONTAINER ── */
   .sheet {
     max-width: 1150px;
     margin: 0 auto;
     background: var(--paper);
-    box-shadow: 0 20px 35px -12px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,245,225,0.9);
+    box-shadow:
+      0 20px 35px -12px rgba(0,0,0,0.25),
+      inset 0 1px 0 rgba(255,245,225,0.9);
     border-radius: 12px;
     position: relative;
-    padding: 36px 32px;
-    border: 1px solid var(--border-deco);
+    padding: 48px 40px 40px;
+
+    /* Вариант 5: двойная рамка через border + outline */
+    border: 1.5px solid var(--border-deco);
+    outline: 2px solid rgba(var(--accent-rgb), 0.18);
+    outline-offset: -10px;
   }
-  .sheet::before, .sheet::after {
-    content: "";
+
+  /* ── ВАРИАНТ 1+5: угловые орнаменты вместо квадратиков ── */
+  /* Убираем старые ::before / ::after-рамки, делаем символьные углы */
+  .sheet::before,
+  .sheet::after {
+    content: none; /* полностью отключаем */
+  }
+
+  /* Четыре угловых символа */
+  .corner {
     position: absolute;
-    width: 55px;
-    height: 55px;
-    border-style: solid;
-    border-color: var(--accent);
-    opacity: 0.45;
+    font-size: 28px;
+    color: var(--accent);
+    opacity: 0.55;
+    line-height: 1;
     pointer-events: none;
+    user-select: none;
   }
-  .sheet::before { top: 18px; left: 18px; border-top-width: 2px; border-left-width: 2px; }
-  .sheet::after { bottom: 18px; right: 18px; border-bottom-width: 2px; border-right-width: 2px; }
-  .sheet .corner-br { position: absolute; bottom: 18px; left: 18px; width: 55px; height: 55px; border-bottom-width: 2px; border-left-width: 2px; border-style: solid; border-color: var(--accent); opacity: 0.35; }
-  .sheet .corner-tl { position: absolute; top: 18px; right: 18px; width: 55px; height: 55px; border-top-width: 2px; border-right-width: 2px; border-style: solid; border-color: var(--accent); opacity: 0.35; }
-  .header { border-bottom: 2px solid var(--border-deco); margin-bottom: 28px; padding-bottom: 14px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; }
-  .name { font-family: 'Cinzel', serif; font-size: 42px; font-weight: 700; letter-spacing: 1.5px; color: var(--accent); text-shadow: 1px 1px 0 rgba(0,0,0,0.05); }
-  .meta { font-size: 16px; font-style: italic; color: #5e4b32; margin-top: 6px; }
+  .corner-tl { top: 12px;  left: 16px;  }
+  .corner-tr { top: 12px;  right: 16px; transform: scaleX(-1); }
+  .corner-bl { bottom: 12px; left: 16px;  transform: scaleY(-1); }
+  .corner-br { bottom: 12px; right: 16px; transform: scale(-1); }
+
+  /* ── HEADER ── */
+  .header {
+    border-bottom: 2px solid var(--border-deco);
+    margin-bottom: 28px;
+    padding-bottom: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+
+  /* Исправление имени: capitalize + нижний акцент */
+  .name {
+    font-family: 'Cinzel', serif;
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    text-shadow: 1px 1px 0 rgba(0,0,0,0.05);
+    text-transform: capitalize;   /* ← исправляет строчные имена */
+  }
+
+  .meta {
+    font-size: 16px;
+    font-style: italic;
+    color: #5e4b32;
+    margin-top: 6px;
+  }
+
   .header-right { text-align: right; }
-  .xp-badge { background: rgba(0,0,0,0.05); padding: 4px 14px; border-radius: 50px; font-size: 14px; display: inline-block; }
-  .level-badge { font-family: 'Cinzel', serif; font-size: 24px; font-weight: 700; background: var(--accent); color: white; padding: 6px 22px; border-radius: 60px; display: inline-block; margin-top: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-  .grid { display: grid; grid-template-columns: 260px 1fr; gap: 32px; }
-  .left-col { display: flex; flex-direction: column; gap: 28px; }
-  .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
-  .stat-card { background: rgba(255, 250, 240, 0.9); border: 1px solid var(--border-deco); border-radius: 32px; text-align: center; padding: 14px 8px; transition: all 0.2s; box-shadow: 0 6px 12px rgba(0,0,0,0.03); backdrop-filter: blur(2px); }
-  .stat-card:hover { transform: translateY(-4px); border-color: var(--accent); }
+
+  .xp-badge {
+    background: rgba(var(--accent-rgb), 0.1);
+    border: 1px solid rgba(var(--accent-rgb), 0.25);
+    padding: 4px 14px;
+    border-radius: 50px;
+    font-size: 14px;
+    display: inline-block;
+    color: var(--ink);
+  }
+
+  .level-badge {
+    font-family: 'Cinzel', serif;
+    font-size: 24px;
+    font-weight: 700;
+    background: var(--accent);
+    color: white;
+    padding: 6px 22px;
+    border-radius: 60px;
+    display: inline-block;
+    margin-top: 10px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  }
+
+  /* ── GRID ── */
+  .grid {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 32px;
+  }
+  .left-col {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  /* ── STAT CARDS ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+
+  .stat-card {
+    background: rgba(255, 250, 240, 0.9);
+    border: 1px solid var(--border-deco);
+    border-radius: 32px;
+    text-align: center;
+    padding: 14px 8px;
+    transition: all 0.2s;
+    box-shadow: 0 6px 12px rgba(0,0,0,0.03);
+    backdrop-filter: blur(2px);
+  }
+  .stat-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent);
+    box-shadow: 0 8px 18px rgba(var(--accent-rgb), 0.12);
+  }
+
   .stat-icon { font-size: 26px; color: var(--accent); margin-bottom: 6px; }
   .stat-value { font-family: 'Cinzel', serif; font-size: 38px; font-weight: 800; line-height: 1; margin: 6px 0; }
   .stat-mod { font-size: 15px; font-weight: 600; color: #7c6b54; }
   .stat-label { font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; margin-top: 6px; font-weight: 500; }
-  .saving-card, .skills-card { background: rgba(255, 250, 240, 0.8); border: 1px solid var(--border-deco); border-radius: 24px; padding: 16px; }
-  .section-title { font-family: 'Cinzel', serif; font-size: 18px; font-weight: 600; border-bottom: 2px solid var(--accent); display: inline-block; margin-bottom: 14px; padding-bottom: 4px; }
-  .saving-row, .skill-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px dotted var(--border-deco); }
+
+  /* ── SAVING / SKILLS ── */
+  .saving-card, .skills-card {
+    background: rgba(255, 250, 240, 0.8);
+    border: 1px solid var(--border-deco);
+    border-radius: 24px;
+    padding: 16px;
+  }
+
+  .section-title {
+    font-family: 'Cinzel', serif;
+    font-size: 18px;
+    font-weight: 600;
+    border-bottom: 2px solid var(--accent);
+    display: inline-block;
+    margin-bottom: 14px;
+    padding-bottom: 4px;
+  }
+
+  .saving-row, .skill-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px dotted var(--border-deco);
+  }
+
   .skill-left { display: flex; align-items: center; gap: 8px; }
-  .circle { width: 12px; height: 12px; border: 1px solid var(--accent); border-radius: 50%; display: inline-block; }
+
+  .circle {
+    width: 12px; height: 12px;
+    border: 1px solid var(--accent);
+    border-radius: 50%;
+    display: inline-block;
+  }
   .circle.checked { background: var(--accent); }
+
   .save-value, .skill-value { font-weight: bold; font-size: 14px; }
-  .combat-grid { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 28px; }
-  .combat-card { background: #faf7f2; border: 1px solid var(--border-deco); border-radius: 36px; padding: 16px 20px; flex: 1; min-width: 130px; text-align: center; transition: all 0.2s; box-shadow: 0 6px 10px rgba(0,0,0,0.03); }
-  .combat-card:hover { transform: translateY(-3px); border-color: var(--accent); }
+
+  /* ── COMBAT CARDS ── */
+  .combat-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-bottom: 28px;
+  }
+
+  .combat-card {
+    background: #faf7f2;
+    border: 1px solid var(--border-deco);
+    border-radius: 36px;
+    padding: 16px 20px;
+    flex: 1;
+    min-width: 130px;
+    text-align: center;
+    transition: all 0.2s;
+    box-shadow: 0 6px 10px rgba(0,0,0,0.03);
+  }
+  .combat-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--accent);
+    box-shadow: 0 8px 18px rgba(var(--accent-rgb), 0.12);
+  }
+
   .combat-icon { font-size: 32px; color: var(--accent); margin-bottom: 8px; }
   .combat-value { font-family: 'Cinzel', serif; font-size: 32px; font-weight: 800; line-height: 1; }
   .combat-label { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; margin-top: 8px; color: #6b5a42; }
-  .hp-bar-container { width: 100%; background: #ddd0bc; border-radius: 20px; margin-top: 10px; overflow: hidden; }
+
+  .hp-bar-container {
+    width: 100%;
+    background: #ddd0bc;
+    border-radius: 20px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
   .hp-bar { width: 100%; height: 6px; background: var(--accent); border-radius: 20px; }
-  .block { background: rgba(255, 250, 240, 0.85); border: 1px solid var(--border-deco); border-radius: 24px; padding: 18px; margin-bottom: 20px; }
-  .block-title { font-family: 'Cinzel', serif; font-size: 18px; font-weight: 600; border-left: 4px solid var(--accent); padding-left: 14px; margin-bottom: 14px; }
+
+  /* ── CONTENT BLOCKS ── */
+  .block {
+    background: rgba(255, 250, 240, 0.85);
+    border: 1px solid var(--border-deco);
+    border-radius: 24px;
+    padding: 18px;
+    margin-bottom: 20px;
+  }
+
+  .block-title {
+    font-family: 'Cinzel', serif;
+    font-size: 18px;
+    font-weight: 600;
+    border-left: 4px solid var(--accent);
+    padding-left: 14px;
+    margin-bottom: 14px;
+  }
+
   .sub-section { margin-top: 12px; }
-  .sub-title { font-weight: 600; font-size: 15px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; color: var(--accent); }
+
+  .sub-title {
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--accent);
+  }
+
   ul { list-style: none; padding-left: 0; }
-  li { padding: 6px 0 4px 20px; position: relative; border-bottom: 1px dotted rgba(0,0,0,0.05); }
-  li::before { content: "✧"; color: var(--accent); position: absolute; left: 0; }
-  .footer { margin-top: 40px; text-align: center; font-size: 11px; border-top: 1px solid var(--border-deco); padding-top: 18px; color: #7f6b50; font-style: italic; }
-  @media (max-width: 850px) { .grid { grid-template-columns: 1fr; gap: 24px; } .stats-grid { grid-template-columns: repeat(3, 1fr); } .sheet { padding: 24px 20px; } .name { font-size: 32px; } }
-  @media (max-width: 600px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } .header { flex-direction: column; align-items: flex-start; gap: 12px; } .header-right { text-align: left; } }
+  li {
+    padding: 6px 0 4px 24px;
+    position: relative;
+    border-bottom: 1px dotted rgba(0,0,0,0.05);
+  }
+  li::before {
+    content: "❧";
+    color: var(--accent);
+    position: absolute;
+    left: 0;
+    font-size: 14px;
+  }
+
+  /* ── FOOTER ── */
+  .footer {
+    margin-top: 40px;
+    text-align: center;
+    font-size: 11px;
+    border-top: 1px solid var(--border-deco);
+    padding-top: 18px;
+    color: #7f6b50;
+    font-style: italic;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 850px) {
+    .grid { grid-template-columns: 1fr; gap: 24px; }
+    .stats-grid { grid-template-columns: repeat(3, 1fr); }
+    .sheet { padding: 32px 20px; }
+    .name { font-size: 32px; }
+  }
+  @media (max-width: 600px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .header { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .header-right { text-align: left; }
+  }
 </style>
 </head>
 <body>
 <div class="sheet">
-  <div class="corner-tl"></div>
-  <div class="corner-br"></div>
+
+  <!-- Вариант 1: символьные угловые орнаменты вместо квадратиков -->
+  <span class="corner corner-tl">❧</span>
+  <span class="corner corner-tr">❧</span>
+  <span class="corner corner-bl">❧</span>
+  <span class="corner corner-br">❧</span>
+
   <div class="header">
     <div>
       <div class="name">{{ name }}</div>
@@ -135,6 +356,7 @@
 
   <div class="grid">
     <div class="left-col">
+
       <div class="stats-grid">
         {% for stat, value in stats.items() %}
         <div class="stat-card">
@@ -197,34 +419,60 @@
         </div>
         {% endfor %}
       </div>
+
     </div>
 
     <div class="right-col">
+
       <div class="block">
         <div class="block-title">Особенности и умения</div>
         {% if background_trait %}
-        <div class="sub-section"><div class="sub-title"><i class="fas fa-scroll"></i> Предыстория</div><p>{{ background_trait }}</p></div>
+        <div class="sub-section">
+          <div class="sub-title"><i class="fas fa-scroll"></i> Предыстория</div>
+          <p>{{ background_trait }}</p>
+        </div>
         {% endif %}
         {% if origin_feat %}
-        <div class="sub-section"><div class="sub-title"><i class="fas fa-star"></i> Черта происхождения</div><p>{{ origin_feat }}</p></div>
+        <div class="sub-section">
+          <div class="sub-title"><i class="fas fa-star"></i> Черта происхождения</div>
+          <p>{{ origin_feat }}</p>
+        </div>
         {% endif %}
         {% if order_features %}
-        <div class="sub-section"><div class="sub-title"><i class="fas fa-tree"></i> Орден / Путь</div><ul>{% for item in order_features %}<li>{{ item }}</li>{% endfor %}</ul></div>
+        <div class="sub-section">
+          <div class="sub-title"><i class="fas fa-tree"></i> Орден / Путь</div>
+          <ul>{% for item in order_features %}<li>{{ item }}</li>{% endfor %}</ul>
+        </div>
         {% endif %}
         {% if pact_features %}
-        <div class="sub-section"><div class="sub-title"><i class="fas fa-handshake"></i> Договор</div><ul>{% for item in pact_features %}<li>{{ item }}</li>{% endfor %}</ul></div>
+        <div class="sub-section">
+          <div class="sub-title"><i class="fas fa-handshake"></i> Договор</div>
+          <ul>{% for item in pact_features %}<li>{{ item }}</li>{% endfor %}</ul>
+        </div>
         {% endif %}
         {% if rogue_features %}
-        <div class="sub-section"><div class="sub-title"><i class="fas fa-user-secret"></i> Плут</div><ul>{% for item in rogue_features %}<li>{{ item }}</li>{% endfor %}</ul></div>
+        <div class="sub-section">
+          <div class="sub-title"><i class="fas fa-user-secret"></i> Плут</div>
+          <ul>{% for item in rogue_features %}<li>{{ item }}</li>{% endfor %}</ul>
+        </div>
         {% endif %}
         {% if class_specific_features %}
-        <div class="sub-section"><div class="sub-title"><i class="fas fa-dice-d20"></i> Умения класса</div><ul>{% for item in class_specific_features %}<li>{{ item }}</li>{% endfor %}</ul></div>
+        <div class="sub-section">
+          <div class="sub-title"><i class="fas fa-dice-d20"></i> Умения класса</div>
+          <ul>{% for item in class_specific_features %}<li>{{ item }}</li>{% endfor %}</ul>
+        </div>
         {% endif %}
       </div>
 
       <div class="block">
         <div class="block-title">Снаряжение</div>
-        {% if equipment %}<ul>{% for item in equipment %}<li>{{ item }}</li>{% endfor %}</ul>{% else %}<p>Нет снаряжения</p>{% endif %}
+        {% if equipment %}
+        <ul>{% for item in equipment %}<li>{{ item }}</li>{% endfor %}</ul>
+        {% else %}
+        <p style="color:#9c886a; font-style:italic; padding-left:4px;">
+          <i class="fas fa-box-open" style="margin-right:8px; opacity:0.5;"></i>Инвентарь пуст
+        </p>
+        {% endif %}
       </div>
 
       {% if spells and spells|length > 0 %}
@@ -241,12 +489,14 @@
         {% if backstory %}<p style="margin-top: 8px;">{{ backstory }}</p>{% endif %}
       </div>
       {% endif %}
+
     </div>
   </div>
 
   <div class="footer">
     <i class="fas fa-hammer"></i> Кузница героев • D&D Character Sheet • {{ created_date }}
   </div>
+
 </div>
 </body>
 </html>

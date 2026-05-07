@@ -20,6 +20,8 @@ from repositories.class_repository import ClassRepository
 from repositories.background_repository import BackgroundRepository
 from repositories.race_repository import RaceRepository
 
+from engine.proficiency import calculate_proficiency_bonus
+
 from strings import (
     DRUID_ORDER_GUIDE_DESC, DRUID_ORDER_GUARDIAN_DESC,
     CLERIC_ORDER_PROTECTOR_DESC, CLERIC_ORDER_MIRACLE_DESC,
@@ -354,7 +356,8 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
 
     class_info = _class_repo.get_by_name(class_name_ru) or {}
     saving_throws = class_info.get("saving_throws", [])
-    proficiency_bonus = 2
+    # Бонус мастерства считается из уровня (D&D 5.5e таблица: 1-4 → +2, 5-8 → +3, ...)
+    proficiency_bonus = calculate_proficiency_bonus(int(char.get("level", 1)))
 
     background_info = _bg_repo.get_by_name(background_name) or {}
     background_trait = background_info.get("trait", "")
@@ -364,6 +367,10 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     selected_spells = char.get("selected_spells", []) or []
     auto_spells = char.get("auto_spells", []) or []
     all_spells = list(set(selected_spells + auto_spells))
+
+    # 2024 PHB: языки (Общий + 2 от предыстории) и владение инструментами
+    languages = char.get("languages", []) or []
+    selected_tools = char.get("selected_tools", []) or []
 
     categorized = format_features_by_category(char)
 
@@ -459,6 +466,9 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         # ── Снаряжение и заклинания ───────────────────────────────────────
         "equipment":               equipment,
         "spells":                  all_spells,
+        # ── Языки и инструменты (2024 PHB) ────────────────────────────────
+        "languages":               languages,
+        "tools":                   selected_tools,
         # ── Особенности ───────────────────────────────────────────────────
         "order_features":          categorized['order'],
         "pact_features":           categorized['pact'],

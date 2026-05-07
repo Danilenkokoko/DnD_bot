@@ -290,6 +290,11 @@ def init_db():
             add_column_if_missing('pact_blade_weapon', 'VARCHAR(50)')
             add_column_if_missing('origin_feat', 'VARCHAR(100)')
             add_column_if_missing('alignment', 'VARCHAR(30) DEFAULT \'Нейтральный\'')
+            # D&D 5.5e (2024): персонаж знает Общий + 2 языка от предыстории.
+            # Также сохраняем владение инструментом от предыстории отдельным полем,
+            # т.к. backgrounds.tools хранит только описание.
+            add_column_if_missing('languages', 'JSONB DEFAULT \'[]\'::jsonb')
+            add_column_if_missing('selected_tools', 'JSONB DEFAULT \'[]\'::jsonb')
 
             conn.commit()
             logger.info("Database initialized and migrated successfully")

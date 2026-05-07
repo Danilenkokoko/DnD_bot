@@ -25,6 +25,12 @@ from repositories.character_repository import CharacterRepository
 # Для обратной совместимости (временные импорты)
 from dnd_logic import get_class_starting_stats
 
+# Авто-выборы (D&D 5.5e 2024): языки по умолчанию для предысторий и т.п.
+from services.auto_choices import (
+    get_default_languages_for_background,
+    parse_background_tools,
+)
+
 logger = logging.getLogger(__name__)
 
 # Инициализация репозиториев (синглтоны)
@@ -146,7 +152,22 @@ class CharacterStatsService:
 
     @staticmethod
     def auto_assign_masteries(weapon_name: str, class_name: str) -> List[str]:
-        return _equipment_repo.auto_assign_masteries(weapon_name, class_name)
+        # D&D 5.5e (2024): мастерство оружия на 1 уровне получают ТОЛЬКО
+        # Воин (3), Варвар/Плут/Паладин/Следопыт (по 2). Все остальные классы
+        # не должны получать приёмов оружия, даже если репозиторий вернёт
+        # ненулевой список (например, при некорректном masteries_count в БД).
+        from services.auto_choices import (
+            class_has_weapon_mastery,
+            get_weapon_mastery_limit,
+        )
+        if not class_has_weapon_mastery(class_name):
+            return []
+        masteries = _equipment_repo.auto_assign_masteries(weapon_name, class_name)
+        # Дополнительная страховка по лимиту количества (RAW: Воин 3, остальные 2).
+        limit = get_weapon_mastery_limit(class_name)
+        if limit and len(masteries) > limit:
+            masteries = masteries[:limit]
+        return masteries
 
     @staticmethod
     def get_spells_grouped_by_category(class_name: str, is_cantrip: bool = True) -> Dict[str, List[Dict[str, Any]]]:
@@ -367,6 +388,19 @@ class CharacterFinalizationService:
         # Навыки от предыстории
         bg_skills = background_data.get('skills', []) if background_data else []
 
+        # Языки персонажа: D&D 5.5e (2024) — Общий + 2 языка от предыстории.
+        # Игрок может позже переопределить через update; здесь — RAW-валидный default.
+        languages = state_data.get('languages')
+        if not languages:
+            languages = get_default_languages_for_background(background) if background else ["Общий"]
+
+        # Владение инструментами от предыстории. В таблице backgrounds лежит
+        # описательная строка `tools` — превращаем в список названий.
+        selected_tools = state_data.get('selected_tools')
+        if selected_tools is None:
+            tools_str = background_data.get('tools', '') if background_data else ''
+            selected_tools = parse_background_tools(tools_str)
+
         # Origin feat и alignment
         origin_feat = state_data.get('background_origin_feat', '')
         alignment = state_data.get('alignment', 'Нейтральный')
@@ -420,6 +454,9 @@ class CharacterFinalizationService:
             'pact_tome_cantrips': pact_tome_cantrips,
             'pact_tome_rituals': pact_tome_rituals,
             'pact_blade_weapon': pact_blade_weapon,
+            # Новые поля 2024 PHB: языки и владение инструментами
+            'languages': languages,
+            'selected_tools': selected_tools,
         }
 
     @staticmethod
@@ -460,5 +497,8 @@ class CharacterFinalizationService:
             'pact_tome_cantrips': character_data.get('pact_tome_cantrips', []),
             'pact_tome_rituals': character_data.get('pact_tome_rituals', []),
             'pact_blade_weapon': character_data.get('pact_blade_weapon'),
+            # Новые поля 2024 PHB
+            'languages': character_data.get('languages', []),
+            'selected_tools': character_data.get('selected_tools', []),
         }
         return _character_repo.create(repo_data)

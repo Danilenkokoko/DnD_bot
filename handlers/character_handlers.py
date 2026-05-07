@@ -48,6 +48,11 @@ from db import get_connection
 
 from engine.validators import validate_name as engine_validate_name
 
+from services.auto_choices import (
+    get_optimal_skills_for_class,
+    recommend_fighting_style,
+)
+
 from strings import *
 
 logger = logging.getLogger(__name__)
@@ -119,10 +124,20 @@ async def proceed_to_skills(callback: CallbackQuery, state: FSMContext):
             "Религия", "Скрытность", "Тайная магия", "Убеждение"
         ]
     await state.set_state(CreateCharacter.skills_select)
-    selected_skills = []
+    # Smart default (D&D 5.5e 2024 + популярные гайды): pre-select оптимальные
+    # навыки для класса. Игрок может снять/сменить через те же кнопки toggle.
+    selected_skills = get_optimal_skills_for_class(
+        class_name, available_skills, skill_choices
+    )
     await state.update_data(selected_class_skills=selected_skills)
     keyboard = create_skills_keyboard(available_skills, skill_choices, selected_skills)
     text_skills = SKILLS_REQUEST_TEMPLATE.format(class_name=class_name, skill_choices=skill_choices)
+    if selected_skills:
+        text_skills += (
+            "\n\n🎯 Бот подобрал оптимальный набор: "
+            + ", ".join(selected_skills)
+            + ".\nМожешь принять кнопкой «Готово» или поменять выбор."
+        )
     await send_new_from_callback(callback, state, text_skills, keyboard)
 
 async def show_druid_order_selection(callback: CallbackQuery, state: FSMContext):
@@ -479,11 +494,24 @@ async def go_to_fighting_style(callback: CallbackQuery, state: FSMContext):
             await send_new_from_callback(callback, state, FIGHTING_STYLE_NO_STYLES.format(class_name=class_name))
             await go_to_background(callback, state)
             return
-        styles_list = "\n".join([f"• {s['name']} – {s['description']}" for s in styles])
+        # Рекомендуем стиль по выбранному оружию (D&D 5.5e 2024 + гайды).
+        recommended_style_name = recommend_fighting_style(data.get("selected_weapon"))
+        # Сортируем так, чтобы рекомендуемый шёл первым (если он вообще доступен).
+        styles_sorted = sorted(
+            styles,
+            key=lambda s: 0 if s.get('name') == recommended_style_name else 1,
+        )
+        styles_list = "\n".join([
+            f"• {'⭐ ' if s['name'] == recommended_style_name else ''}{s['name']} – {s['description']}"
+            for s in styles_sorted
+        ])
         text = FIGHTING_STYLE_TITLE_TEMPLATE.format(class_name=class_name, styles_list=styles_list)
+        if any(s.get('name') == recommended_style_name for s in styles_sorted):
+            text += f"\n\n🎯 Рекомендация бота: {recommended_style_name} (выделен ⭐)."
         buttons = []
-        for s in styles:
-            buttons.append([InlineKeyboardButton(text=f"⚔️ {s['name']}", callback_data=f"style_{s['id']}")])
+        for s in styles_sorted:
+            label_prefix = "⭐ " if s['name'] == recommended_style_name else "⚔️ "
+            buttons.append([InlineKeyboardButton(text=f"{label_prefix}{s['name']}", callback_data=f"style_{s['id']}")])
         buttons.append([InlineKeyboardButton(text=FIGHTING_STYLE_BACK, callback_data="back_to_spells")])
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         await state.set_state(CreateCharacter.fighting_style_select)

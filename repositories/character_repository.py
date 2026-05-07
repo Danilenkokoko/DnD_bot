@@ -25,7 +25,8 @@ class CharacterRepository(BaseRepository):
                 selected_equipment_choice,
                 druid_order, cleric_order, warlock_pact,
                 rogue_expertise, rogue_extra_language,
-                auto_spells, pact_tome_cantrips, pact_tome_rituals, pact_blade_weapon
+                auto_spells, pact_tome_cantrips, pact_tome_rituals, pact_blade_weapon,
+                languages, selected_tools
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
                       %s, %s, %s, %s, %s, %s,
                       %s, %s, %s,
@@ -36,7 +37,8 @@ class CharacterRepository(BaseRepository):
                       %s,
                       %s, %s, %s,
                       %s, %s,
-                      %s, %s, %s, %s)
+                      %s, %s, %s, %s,
+                      %s, %s)
             RETURNING id
         """
         # Для jsonb-полей -> преобразуем в JSON-строку
@@ -44,6 +46,9 @@ class CharacterRepository(BaseRepository):
         selected_masteries = json.dumps(data.get('selected_masteries', []))
         selected_invocations = json.dumps(data.get('selected_invocations', []))
         selected_spells = json.dumps(data.get('selected_spells', []))
+        # Новые JSONB-поля 2024 PHB: языки и владение инструментами
+        languages = json.dumps(data.get('languages', []))
+        selected_tools = json.dumps(data.get('selected_tools', []))
         # Для полей типа ARRAY -> передаём список (psycopg2 преобразует в массив)
         rogue_expertise = data.get('rogue_expertise', [])
         auto_spells = data.get('auto_spells', [])
@@ -88,7 +93,9 @@ class CharacterRepository(BaseRepository):
             auto_spells,
             pact_tome_cantrips,
             pact_tome_rituals,
-            data.get('pact_blade_weapon')
+            data.get('pact_blade_weapon'),
+            languages,
+            selected_tools,
         )
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -113,6 +120,7 @@ class CharacterRepository(BaseRepository):
                         c.druid_order, c.cleric_order, c.warlock_pact,
                         c.rogue_expertise, c.rogue_extra_language,
                         c.auto_spells, c.pact_tome_cantrips, c.pact_tome_rituals, c.pact_blade_weapon,
+                        c.languages, c.selected_tools,
                         r.name as race_name,
                         s.name as subrace_name,
                         cl.name as class_name,
@@ -149,6 +157,7 @@ class CharacterRepository(BaseRepository):
                         c.druid_order, c.cleric_order, c.warlock_pact,
                         c.rogue_expertise, c.rogue_extra_language,
                         c.auto_spells, c.pact_tome_cantrips, c.pact_tome_rituals, c.pact_blade_weapon,
+                        c.languages, c.selected_tools,
                         r.name as race_name,
                         s.name as subrace_name,
                         cl.name as class_name,
@@ -173,13 +182,16 @@ class CharacterRepository(BaseRepository):
             'selected_invocations', 'selected_spells', 'selected_weapon', 'selected_armor',
             'backstory', 'image_file_id', 'origin_feat', 'alignment',
             'druid_order', 'cleric_order', 'warlock_pact',
-            'rogue_extra_language', 'pact_blade_weapon'
+            'rogue_extra_language', 'pact_blade_weapon',
+            'languages', 'selected_tools'
         ]
         for field in allowed_fields:
             if field in data:
                 set_clauses.append(f"{field} = %s")
                 # Для jsonb-полей
-                if field in ('selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells'):
+                if field in ('selected_skills', 'selected_masteries',
+                             'selected_invocations', 'selected_spells',
+                             'languages', 'selected_tools'):
                     params.append(json.dumps(data[field] if data[field] is not None else []))
                 # Для полей типа ARRAY
                 elif field in ('rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals'):
@@ -209,7 +221,10 @@ class CharacterRepository(BaseRepository):
 
     def _deserialize_character(self, row: Dict[str, Any]) -> Dict[str, Any]:
         """Преобразует JSONB-поля из строк в списки, если они ещё не распарсены."""
-        jsonb_fields = ['selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells']
+        jsonb_fields = [
+            'selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells',
+            'languages', 'selected_tools',
+        ]
         for field in jsonb_fields:
             val = row.get(field)
             if isinstance(val, str):

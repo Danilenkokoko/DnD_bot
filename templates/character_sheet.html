@@ -815,6 +815,25 @@
         {% endif %}
       </div>
 
+      <!-- Языки и инструменты (D&D 5.5e 2024) -->
+      {% if languages or tools %}
+      <div class="block">
+        <div class="block-title">Языки и инструменты</div>
+        {% if languages %}
+        <div class="sub-section">
+          <div class="sub-title"><i class="fas fa-language"></i> Языки</div>
+          <p>{{ languages | join(', ') }}</p>
+        </div>
+        {% endif %}
+        {% if tools %}
+        <div class="sub-section">
+          <div class="sub-title"><i class="fas fa-tools"></i> Владение инструментами</div>
+          <p>{{ tools | join(', ') }}</p>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
       <!-- Снаряжение -->
       <div class="block">
         <div class="block-title">Снаряжение</div>
@@ -845,12 +864,7 @@
       {% endif %}
 
     </div><!-- /right-col -->
-  </div><!-- /grid -->
+  </div><!-- /sheet -->
 
-  <div class="footer">
-    <i class="fas fa-hammer"></i> Кузница героев • D&D Character Sheet • {{ created_date }}
-  </div>
-
-</div>
 </body>
 </html>

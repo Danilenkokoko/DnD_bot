@@ -18,7 +18,7 @@ from keyboards.character_keyboards import (
     create_class_keyboard,
     create_race_keyboard,
     create_background_keyboard,
-    create_character_list_with_webapp_keyboard,
+    create_character_list_with_webapp_keyboard,  # было create_character_list_keyboard
     create_delete_keyboard,
     create_skills_keyboard,
     cancel_kb,
@@ -35,9 +35,9 @@ from keyboards.character_keyboards import (
     create_background_equipment_keyboard,
     create_draconic_ancestry_keyboard,
     create_warlock_invocation_keyboard,
-    create_favored_enemy_keyboard,
     create_tome_picker_keyboard,
     create_personality_intro_keyboard,
+    create_favored_enemy_keyboard,
 )
 
 from services.character_service import CharacterStatsService, CharacterFinalizationService

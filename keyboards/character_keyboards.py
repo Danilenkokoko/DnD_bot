@@ -373,3 +373,37 @@ def create_favored_enemy_keyboard() -> InlineKeyboardMarkup:
             row = []
     buttons.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def create_character_list_with_webapp_keyboard(user_id: int) -> InlineKeyboardMarkup:
+    """
+    Клавиатура со списком персонажей пользователя и кнопкой WebApp.
+    Использует данные из БД, callback'и для просмотра и WebApp для полного редактирования.
+    """
+    characters = get_user_characters(user_id)
+    buttons = []
+    for char in characters:
+        buttons.append([InlineKeyboardButton(
+            text=f"📜 {char['name']}",
+            callback_data=f"view_char_{char['id']}"
+        )])
+    # Добавляем кнопку WebApp, если есть хотя бы один персонаж
+    if characters:
+        web_app_url = os.getenv("WEBAPP_URL", "http://localhost:8000")
+        buttons.append([InlineKeyboardButton(
+            text="🌐 Открыть в WebApp",
+            web_app=WebAppInfo(url=f"{web_app_url}/character/{characters[0]['id']}")
+        )])
+    buttons.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def create_delete_keyboard(character_id: int) -> InlineKeyboardMarkup:
+    """
+    Клавиатура подтверждения удаления персонажа.
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_{character_id}")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_delete")]
+    ])
+
+# Алиас для обратной совместимости со старыми импортами
+create_character_list_keyboard = create_character_list_with_webapp_keyboard

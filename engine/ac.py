@@ -200,23 +200,36 @@ class StandardArmor:
     
     @classmethod
     def get_ac_for_armor(cls, armor_name: str, dexterity: int, has_shield: bool = False) -> int:
+        # Имена брони синхронизированы с seed_data.ARMOR_DATA (реальная БД).
+        # Значения AC и тип — по PHB 2024 (D&D 5.5e).
         armor_map = {
-            "Стёганая броня": (ArmorType.LIGHT, 11),
-            "Кожаная броня": (ArmorType.LIGHT, 11),
-            "Кольчуга": (ArmorType.MEDIUM, 16),
-            "Ламелляр": (ArmorType.MEDIUM, 14),
-            "Латы": (ArmorType.HEAVY, 18),
-            "Кираса": (ArmorType.MEDIUM, 14),
-            "Полулаты": (ArmorType.MEDIUM, 15),
-            "Кольчужная рубаха": (ArmorType.LIGHT, 13),
-            "Кольчужная броня": (ArmorType.MEDIUM, 16),
-            "Сплит-броня": (ArmorType.HEAVY, 17),
+            # ── Лёгкая броня (LIGHT, +DEX полностью) ──────────────────
+            "Стёганый доспех":              (ArmorType.LIGHT, 11),
+            "Кожаный доспех":               (ArmorType.LIGHT, 11),
+            "Проклёпанный кожаный доспех":  (ArmorType.LIGHT, 12),
+            # ── Средняя броня (MEDIUM, +DEX max 2) ────────────────────
+            "Шкурный доспех":               (ArmorType.MEDIUM, 12),
+            "Кольчужная рубаха":            (ArmorType.MEDIUM, 13),
+            "Кираса":                       (ArmorType.MEDIUM, 14),
+            "Чешуйчатый доспех":            (ArmorType.MEDIUM, 14),
+            "Полулаты":                     (ArmorType.MEDIUM, 15),
+            # ── Тяжёлая броня (HEAVY, без DEX) ────────────────────────
+            "Кольчужный доспех":            (ArmorType.HEAVY, 16),  # Chain Mail (PHB 2024: AC 16)
+            "Колечный доспех":              (ArmorType.HEAVY, 14),  # Ring Mail
+            "Пластинчатый доспех":          (ArmorType.HEAVY, 17),  # Splint (PHB 2024: AC 17)
+            "Латный доспех":                (ArmorType.HEAVY, 18),  # Plate
         }
-        
+
+        # Точное совпадение приоритетнее (избегает «Кожаный доспех» ⊂ «Проклёпанный кожаный доспех»).
+        if armor_name in armor_map:
+            armor_type, base_ac = armor_map[armor_name]
+            return calculate_ac(dexterity, armor_type, base_ac, has_shield)
+
+        # Fallback: подстрочное совпадение (для совместимости со старыми именами).
         for name, (armor_type, base_ac) in armor_map.items():
-            if armor_name == name or armor_name in name:
+            if armor_name in name or name in armor_name:
                 return calculate_ac(dexterity, armor_type, base_ac, has_shield)
-        
+
         # Если броня не найдена, используем базовый расчёт
         return calculate_base_ac(dexterity)
 
@@ -236,7 +249,7 @@ def calculate_ac_with_armor(
         if class_name in ["Варвар", "Монах"] and second_stat is not None:
             return calculate_unarmored_ac(class_name, dexterity, second_stat) + (2 if has_shield else 0)
         return calculate_base_ac(dexterity) + (2 if has_shield else 0)
-    
+
     return StandardArmor.get_ac_for_armor(armor_name, dexterity, has_shield)
 
 

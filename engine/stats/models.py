@@ -84,7 +84,14 @@ class AbilityScores:
         return mapping[stat]
 
     def set(self, stat: Stat, value: int) -> 'AbilityScores':
-        """Устанавливает значение (возвращает новый объект)"""
+        """
+        Устанавливает значение характеристики (возвращает новый объект).
+
+        D&D 5.5e (2024) PHB: на этапе создания персонажа максимум — 20.
+        В принципе значение может быть до 30 (магические артефакты, эпические
+        бонусы), но через add_bonus / set в коде создания мы строго не
+        превышаем 20, чтобы соответствовать RAW.
+        """
         kwargs = {
             'strength': self.strength,
             'dexterity': self.dexterity,
@@ -94,7 +101,7 @@ class AbilityScores:
             'charisma': self.charisma,
         }
         attr_name = stat.name.lower()
-        kwargs[attr_name] = max(1, min(30, value))
+        kwargs[attr_name] = max(1, min(20, value))
         return AbilityScores(**kwargs)
 
     def add_bonus(self, stat: Stat, bonus: int) -> 'AbilityScores':

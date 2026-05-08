@@ -252,36 +252,124 @@ def create_rogue_language_keyboard(languages: List[str]) -> InlineKeyboardMarkup
 
 
 # =========================================================
-# КЛАВИАТУРЫ ДЛЯ ПРОСМОТРА И УДАЛЕНИЯ ПЕРСОНАЖЕЙ
+# КЛАВИАТУРЫ ДЛЯ ПРАВИЛ 2024 (П3)
 # =========================================================
-def create_character_list_keyboard(user_id: int) -> Optional[InlineKeyboardMarkup]:
-    characters = get_user_characters(user_id)
-    if not characters:
-        return None
+
+def create_draconic_ancestry_keyboard() -> InlineKeyboardMarkup:
+    """
+    Драконорождённый: 10 типов дракона по PHB 2024.
+    Формат строки: "Тип (стихия)". Callback: draconic_<id>.
+    """
+    ancestries = [
+        ("black",     "Чёрный (кислота)"),
+        ("blue",      "Синий (молния)"),
+        ("brass",     "Латунный (огонь)"),
+        ("bronze",    "Бронзовый (молния)"),
+        ("copper",    "Медный (кислота)"),
+        ("gold",      "Золотой (огонь)"),
+        ("green",     "Зелёный (яд)"),
+        ("red",       "Красный (огонь)"),
+        ("silver",    "Серебряный (холод)"),
+        ("white",     "Белый (холод)"),
+    ]
     buttons = []
-    for char in characters:
-        text = BTN_VIEW_CHAR.format(name=char['name'], class_name=char['class_name'], level=char['level'])
-        buttons.append([InlineKeyboardButton(text=text, callback_data=f"view_{char['id']}")])
+    row = []
+    for i, (key, label) in enumerate(ancestries):
+        row.append(InlineKeyboardButton(text=label, callback_data=f"draconic_{key}"))
+        if len(row) == 2 or i == len(ancestries) - 1:
+            buttons.append(row)
+            row = []
+    buttons.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def create_character_list_with_webapp_keyboard(user_id: int, webapp_base_url: str) -> Optional[InlineKeyboardMarkup]:
-    characters = get_user_characters(user_id)
-    if not characters:
-        return None
+def create_warlock_invocation_keyboard(invocations: List[dict]) -> InlineKeyboardMarkup:
+    """
+    Колдун: 1 воззвание на 1 уровне (PHB 2024).
+    invocations — список dict {id, name, [description]} из БД.
+    """
     buttons = []
-    for char in characters:
-        text_btn_text = BTN_VIEW_CHAR.format(name=char['name'], class_name=char['class_name'], level=char['level'])
-        text_btn = InlineKeyboardButton(text=text_btn_text, callback_data=f"view_{char['id']}")
-        webapp_btn = InlineKeyboardButton(text=BTN_WEBAPP_CHAR, web_app=WebAppInfo(url=f"{webapp_base_url}/character/{char['id']}"))
-        buttons.append([text_btn, webapp_btn])
+    for inv in invocations:
+        buttons.append([
+            InlineKeyboardButton(
+                text=inv.get("name", "?"),
+                callback_data=f"warlock_inv_{inv.get('id', 0)}"
+            )
+        ])
+    buttons.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def create_delete_keyboard(characters: list) -> InlineKeyboardMarkup:
+def create_tome_picker_keyboard(
+    items: List[dict],
+    selected: List[str],
+    callback_prefix: str,
+    ready_callback: str,
+    limit: int,
+) -> InlineKeyboardMarkup:
+    """
+    Универсальная клавиатура выбора нескольких заклинаний/ритуалов из списка
+    (Pact of the Tome у Колдуна). Каждое callback: f"{callback_prefix}{name}".
+    Кнопка «Готово» — `ready_callback`.
+    """
     buttons = []
-    for char in characters:
-        text = BTN_DELETE_ITEM.format(name=char['name'], class_name=char['class_name'])
-        buttons.append([InlineKeyboardButton(text=text, callback_data=f"delete_{char['id']}")])
-    buttons.append([InlineKeyboardButton(text=BTN_CANCEL_DELETE, callback_data="cancel_delete")])
+    counter = InlineKeyboardButton(
+        text=f"📖 Выбрано: {len(selected)} / {limit}",
+        callback_data="tome_pick_info",
+    )
+    buttons.append([counter])
+    for it in items:
+        name = it.get("name", "?")
+        icon = "✅" if name in selected else "🔘"
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{icon} {name}",
+                callback_data=f"{callback_prefix}{name}",
+            )
+        ])
+    if len(selected) == limit:
+        buttons.append([InlineKeyboardButton(text="✅ Готово", callback_data=ready_callback)])
+    else:
+        buttons.append([InlineKeyboardButton(
+            text=f"⚠️ Выбери ещё {limit - len(selected)}",
+            callback_data="tome_pick_info",
+        )])
+    buttons.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def create_personality_intro_keyboard() -> InlineKeyboardMarkup:
+    """
+    Шаг 4 черт личности (D&D 5.5e 2024). Три варианта:
+    — 🎲 Сгенерировать автоматом (рандом из общего пула)
+    — ✍️ Ввести свои (последовательный ввод 4 текстов)
+    — ⏩ Пропустить (оставить пустыми; при сохранении подставится auto)
+    """
+    buttons = [
+        [InlineKeyboardButton(text="🎲 Сгенерировать автоматом", callback_data="pers_auto")],
+        [InlineKeyboardButton(text="✍️ Ввести свои", callback_data="pers_manual")],
+        [InlineKeyboardButton(text="⏩ Пропустить", callback_data="pers_skip")],
+        [InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def create_favored_enemy_keyboard() -> InlineKeyboardMarkup:
+    """
+    Следопыт: Избранный враг (PHB 2024 — список типов существ).
+    """
+    enemies = [
+        "Аберрации", "Великаны", "Гуманоиды", "Драконы",
+        "Звери", "Конструкты", "Литераторы", "Монстры",
+        "Нежить", "Растения", "Слизи", "Феи",
+        "Элементали", "Небожители", "Исчадия",
+    ]
+    buttons = []
+    row = []
+    for i, name in enumerate(enemies):
+        row.append(InlineKeyboardButton(text=name, callback_data=f"favored_enemy_{name}"))
+        if len(row) == 2 or i == len(enemies) - 1:
+            buttons.append(row)
+            row = []
+    buttons.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)

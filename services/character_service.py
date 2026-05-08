@@ -29,6 +29,7 @@ from dnd_logic import get_class_starting_stats
 from services.auto_choices import (
     get_default_languages_for_background,
     parse_background_tools,
+    generate_personality_traits,
 )
 
 logger = logging.getLogger(__name__)
@@ -376,14 +377,34 @@ class CharacterFinalizationService:
         selected_invocations = state_data.get('selected_invocations', [])
         selected_weapon = state_data.get('selected_weapon')
         selected_armor = state_data.get('selected_armor')
+        selected_secondary_weapon = state_data.get('selected_secondary_weapon')
+        selected_other_items = state_data.get('selected_other_items')
+        selected_coins = state_data.get('selected_coins', 0)
+
+        # 2024 PHB: щит — это «Щит» в secondary_weapon ИЛИ упоминание щита
+        # в other_items. Бот раньше передавал has_shield=False захардкожено,
+        # из-за чего Паладин стартовал с AC 16 вместо 18.
+        secondary_lower = (selected_secondary_weapon or "").lower()
+        other_lower = (selected_other_items or "").lower()
+        has_shield = ("щит" in secondary_lower) or ("щит" in other_lower)
 
         # Пересчёт HP и AC
         dexterity = stats.get('DEX', 10)
         constitution = stats.get('CON', 10)
         wisdom = stats.get('WIS', 10)
         hp = CharacterStatsService.calculate_hp(class_name, constitution, level=1)
-        ac = CharacterStatsService.calculate_ac(dexterity, selected_armor, False, class_name,
-                                                constitution if class_name == "Варвар" else wisdom)
+        ac = CharacterStatsService.calculate_ac(
+            dexterity,
+            selected_armor,
+            has_shield,
+            class_name,
+            constitution if class_name == "Варвар" else wisdom,
+        )
+
+        # Скорость берём из расы (D&D 5.5e), не из хардкода.
+        # Гном/Полурослик — 25, Дампир — 35, остальные — 30.
+        race_data = _race_repo.get_by_name(race) if race else None
+        speed = int(race_data.get('speed', 30)) if race_data else 30
 
         # Навыки от предыстории
         bg_skills = background_data.get('skills', []) if background_data else []
@@ -457,11 +478,42 @@ class CharacterFinalizationService:
             # Новые поля 2024 PHB: языки и владение инструментами
             'languages': languages,
             'selected_tools': selected_tools,
+            # Снаряжение и стартовые монеты (PHB 2024)
+            'selected_secondary_weapon': selected_secondary_weapon,
+            'selected_other_items': selected_other_items,
+            'selected_coins': selected_coins,
+            'speed': speed,
+            # Расовые/классовые опции 2024 PHB
+            'draconic_ancestry': state_data.get('draconic_ancestry'),
+            'warlock_invocation': state_data.get('warlock_invocation'),
+            'favored_enemy': state_data.get('favored_enemy'),
+            # 4 черты личности (D&D 5.5e 2024). Если игрок не ввёл свои —
+            # подставим авто-дефолты (см. ниже после return-словаря).
+            'personality_trait': state_data.get('personality_trait'),
+            'ideal': state_data.get('ideal'),
+            'bond': state_data.get('bond'),
+            'flaw': state_data.get('flaw'),
+            'inspiration': bool(state_data.get('inspiration', False)),
         }
+
+    @staticmethod
+    def _ensure_personality_traits(data: Dict[str, Any]) -> None:
+        """
+        Если хотя бы одна из 4 черт пуста — заполняем все четыре авто-выбором
+        из общего пула. Изменяет data inplace.
+        """
+        keys = ('personality_trait', 'ideal', 'bond', 'flaw')
+        if not all(data.get(k) for k in keys):
+            auto = generate_personality_traits()
+            for k in keys:
+                if not data.get(k):
+                    data[k] = auto[k]
 
     @staticmethod
     def save_character(character_data: Dict[str, Any]) -> int:
         """Сохраняет персонажа через репозиторий"""
+        # Заполняем 4 черты авто-генерацией, если что-то пустое.
+        CharacterFinalizationService._ensure_personality_traits(character_data)
         repo_data = {
             'user_id': character_data['user_id'],
             'name': character_data['name'],
@@ -500,5 +552,23 @@ class CharacterFinalizationService:
             # Новые поля 2024 PHB
             'languages': character_data.get('languages', []),
             'selected_tools': character_data.get('selected_tools', []),
+            # Снаряжение и стартовые монеты
+            'selected_secondary_weapon': character_data.get('selected_secondary_weapon'),
+            'selected_other_items': character_data.get('selected_other_items'),
+            'coins': {'cp': 0, 'sp': 0, 'ep': 0, 'gp': int(character_data.get('selected_coins', 0) or 0), 'pp': 0},
+            # Расовые/классовые опции 2024 PHB
+            'draconic_ancestry': character_data.get('draconic_ancestry'),
+            'warlock_invocation': character_data.get('warlock_invocation'),
+            'favored_enemy': character_data.get('favored_enemy'),
+            # 4 черты личности — пробрасываем как есть; авто-дефолты
+            # уже зашиты в prepare_character_data, поэтому здесь они уже
+            # заполнены строками.
+            'personality_trait': character_data.get('personality_trait'),
+            'ideal': character_data.get('ideal'),
+            'bond': character_data.get('bond'),
+            'flaw': character_data.get('flaw'),
+            'inspiration': bool(character_data.get('inspiration', False)),
         }
+        if 'speed' in character_data and character_data['speed']:
+            repo_data['speed'] = int(character_data['speed'])
         return _character_repo.create(repo_data)

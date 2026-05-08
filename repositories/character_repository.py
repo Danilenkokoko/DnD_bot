@@ -26,7 +26,10 @@ class CharacterRepository(BaseRepository):
                 druid_order, cleric_order, warlock_pact,
                 rogue_expertise, rogue_extra_language,
                 auto_spells, pact_tome_cantrips, pact_tome_rituals, pact_blade_weapon,
-                languages, selected_tools
+                languages, selected_tools,
+                selected_secondary_weapon, selected_other_items, coins,
+                draconic_ancestry, warlock_invocation, favored_enemy,
+                personality_trait, ideal, bond, flaw, inspiration
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
                       %s, %s, %s, %s, %s, %s,
                       %s, %s, %s,
@@ -38,7 +41,10 @@ class CharacterRepository(BaseRepository):
                       %s, %s, %s,
                       %s, %s,
                       %s, %s, %s, %s,
-                      %s, %s)
+                      %s, %s,
+                      %s, %s, %s,
+                      %s, %s, %s,
+                      %s, %s, %s, %s, %s)
             RETURNING id
         """
         # Для jsonb-полей -> преобразуем в JSON-строку
@@ -49,6 +55,15 @@ class CharacterRepository(BaseRepository):
         # Новые JSONB-поля 2024 PHB: языки и владение инструментами
         languages = json.dumps(data.get('languages', []))
         selected_tools = json.dumps(data.get('selected_tools', []))
+        # Снаряжение и стартовые монеты (2024 PHB).
+        # coins хранится JSONB с пятью ключами; неуказанные слитки = 0.
+        coins_default = {"cp": 0, "sp": 0, "ep": 0, "gp": 0, "pp": 0}
+        coins_value = data.get('coins')
+        if not isinstance(coins_value, dict):
+            coins_value = coins_default
+        else:
+            coins_value = {**coins_default, **coins_value}
+        coins = json.dumps(coins_value)
         # Для полей типа ARRAY -> передаём список (psycopg2 преобразует в массив)
         rogue_expertise = data.get('rogue_expertise', [])
         auto_spells = data.get('auto_spells', [])
@@ -96,6 +111,17 @@ class CharacterRepository(BaseRepository):
             data.get('pact_blade_weapon'),
             languages,
             selected_tools,
+            data.get('selected_secondary_weapon'),
+            data.get('selected_other_items'),
+            coins,
+            data.get('draconic_ancestry'),
+            data.get('warlock_invocation'),
+            data.get('favored_enemy'),
+            data.get('personality_trait'),
+            data.get('ideal'),
+            data.get('bond'),
+            data.get('flaw'),
+            bool(data.get('inspiration', False)),
         )
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -121,6 +147,9 @@ class CharacterRepository(BaseRepository):
                         c.rogue_expertise, c.rogue_extra_language,
                         c.auto_spells, c.pact_tome_cantrips, c.pact_tome_rituals, c.pact_blade_weapon,
                         c.languages, c.selected_tools,
+                        c.selected_secondary_weapon, c.selected_other_items, c.coins,
+                        c.draconic_ancestry, c.warlock_invocation, c.favored_enemy,
+                        c.personality_trait, c.ideal, c.bond, c.flaw, c.inspiration,
                         r.name as race_name,
                         s.name as subrace_name,
                         cl.name as class_name,
@@ -158,6 +187,9 @@ class CharacterRepository(BaseRepository):
                         c.rogue_expertise, c.rogue_extra_language,
                         c.auto_spells, c.pact_tome_cantrips, c.pact_tome_rituals, c.pact_blade_weapon,
                         c.languages, c.selected_tools,
+                        c.selected_secondary_weapon, c.selected_other_items, c.coins,
+                        c.draconic_ancestry, c.warlock_invocation, c.favored_enemy,
+                        c.personality_trait, c.ideal, c.bond, c.flaw, c.inspiration,
                         r.name as race_name,
                         s.name as subrace_name,
                         cl.name as class_name,
@@ -183,7 +215,10 @@ class CharacterRepository(BaseRepository):
             'backstory', 'image_file_id', 'origin_feat', 'alignment',
             'druid_order', 'cleric_order', 'warlock_pact',
             'rogue_extra_language', 'pact_blade_weapon',
-            'languages', 'selected_tools'
+            'languages', 'selected_tools',
+            'selected_secondary_weapon', 'selected_other_items', 'coins',
+            'draconic_ancestry', 'warlock_invocation', 'favored_enemy',
+            'personality_trait', 'ideal', 'bond', 'flaw', 'inspiration',
         ]
         for field in allowed_fields:
             if field in data:
@@ -193,6 +228,11 @@ class CharacterRepository(BaseRepository):
                              'selected_invocations', 'selected_spells',
                              'languages', 'selected_tools'):
                     params.append(json.dumps(data[field] if data[field] is not None else []))
+                # Монеты — JSONB-объект (5 ключей).
+                elif field == 'coins':
+                    coins_default = {"cp": 0, "sp": 0, "ep": 0, "gp": 0, "pp": 0}
+                    val = data[field] if isinstance(data[field], dict) else {}
+                    params.append(json.dumps({**coins_default, **val}))
                 # Для полей типа ARRAY
                 elif field in ('rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals'):
                     params.append(data[field] if data[field] is not None else [])
@@ -223,7 +263,7 @@ class CharacterRepository(BaseRepository):
         """Преобразует JSONB-поля из строк в списки, если они ещё не распарсены."""
         jsonb_fields = [
             'selected_skills', 'selected_masteries', 'selected_invocations', 'selected_spells',
-            'languages', 'selected_tools',
+            'languages', 'selected_tools', 'coins',
         ]
         for field in jsonb_fields:
             val = row.get(field)
@@ -231,10 +271,9 @@ class CharacterRepository(BaseRepository):
                 try:
                     row[field] = json.loads(val)
                 except:
-                    row[field] = []
+                    row[field] = [] if field != 'coins' else {"cp": 0, "sp": 0, "ep": 0, "gp": 0, "pp": 0}
             elif val is None:
-                row[field] = []
-        # Поля-массивы уже должны быть списками, но на всякий случай:
+                row[field] = [] if field != 'coins' else {"cp": 0, "sp": 0, "ep": 0, "gp": 0, "pp": 0}
         array_fields = ['rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals']
         for field in array_fields:
             if row.get(field) is None:

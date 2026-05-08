@@ -21,6 +21,7 @@ from repositories.background_repository import BackgroundRepository
 from repositories.race_repository import RaceRepository
 
 from engine.proficiency import calculate_proficiency_bonus
+from engine.spell_slots import get_spell_slots, is_pact_magic
 
 from strings import (
     DRUID_ORDER_GUIDE_DESC, DRUID_ORDER_GUARDIAN_DESC,
@@ -162,7 +163,9 @@ def build_class_resources(class_name: str, level: int, mods: Dict[str, int]) -> 
         resources.append({"name": "Второе дыхание", "icon": "fas fa-wind", "total": 1, "used": 0})
 
     elif class_name == "Чародей":
-        points = level
+        # 2024 PHB: Sorcery Points appear at L2 (= level), not at L1.
+        # На 1 уровне total = 0; ресурс показываем для наглядности с total = level (2+).
+        points = level if level >= 2 else 0
         resources.append({"name": "Очки чародейства", "icon": "fas fa-star", "total": points, "used": 0})
 
     return resources
@@ -179,27 +182,53 @@ def build_attacks(char: Dict[str, Any], stats: Dict[str, int], proficiency_bonus
     str_mod = (stats["STR"] - 10) // 2
     dex_mod = (stats["DEX"] - 10) // 2
 
-    # Справочник оружия: (dice, тип урона, тип характеристики, дистанция)
+    # Справочник оружия по PHB 2024:
+    # (dice, тип урона, тип характеристики, дистанция, [finesse]).
+    # Ключ stat_key="DEX_OR_STR" означает Finesse — берётся max(STR, DEX).
     WEAPON_DATA = {
-        "Кинжал":       ("1к4",  "колющий",   "DEX", "Ближн. 5 / Метат. 20/60"),
-        "Короткий меч": ("1к6",  "колющий",   "DEX", "5 фут."),
-        "Рапира":       ("1к8",  "колющий",   "DEX", "5 фут."),
-        "Длинный меч":  ("1к8",  "рубящий",   "STR", "5 фут."),
-        "Двуручный меч":("2к6",  "рубящий",   "STR", "5 фут."),
-        "Боевой топор": ("1к8",  "рубящий",   "STR", "5 фут."),
-        "Копьё":        ("1к6",  "колющий",   "STR", "5 / 20/60 фут."),
-        "Лук":          ("1к8",  "колющий",   "DEX", "80/320 фут."),
-        "Арбалет":      ("1к10", "колющий",   "DEX", "100/400 фут."),
-        "Посох":        ("1к6",  "дробящий",  "STR", "5 фут."),
-        "Булава":       ("1к6",  "дробящий",  "STR", "5 фут."),
-        "Боевой молот": ("1к8",  "дробящий",  "STR", "5 фут."),
-        "Ятаган":       ("1к6",  "рубящий",   "DEX", "5 фут."),
+        # ── Простое рукопашное ──────────────────────────────────────
+        "Кинжал":         ("1к4",  "колющий",   "DEX_OR_STR", "Ближн. 5 / Метат. 20/60"),
+        "Посох":          ("1к6",  "дробящий",  "STR",        "5 фут."),
+        "Булава":         ("1к6",  "дробящий",  "STR",        "5 фут."),
+        "Копьё":          ("1к6",  "колющий",   "STR",        "5 / 20/60 фут."),
+        "Лёгкий молот":   ("1к4",  "дробящий",  "STR",        "5 / 20/60 фут."),
+        "Серп":           ("1к4",  "рубящий",   "STR",        "5 фут."),
+        "Большая дубина": ("1к8",  "дробящий",  "STR",        "5 фут."),
+        # ── Простое дальнобойное ────────────────────────────────────
+        "Лук":            ("1к8",  "колющий",   "DEX",        "80/320 фут."),
+        "Лёгкий арбалет": ("1к8",  "колющий",   "DEX",        "80/320 фут."),
+        # ── Воинское рукопашное ─────────────────────────────────────
+        "Короткий меч":   ("1к6",  "колющий",   "DEX_OR_STR", "5 фут."),
+        "Рапира":         ("1к8",  "колющий",   "DEX_OR_STR", "5 фут."),
+        "Ятаган":         ("1к6",  "рубящий",   "DEX_OR_STR", "5 фут."),
+        "Длинный меч":    ("1к8",  "рубящий",   "STR",        "5 фут."),
+        "Двуручный меч":  ("2к6",  "рубящий",   "STR",        "5 фут."),
+        "Боевой топор":   ("1к8",  "рубящий",   "STR",        "5 фут."),
+        "Секира":         ("1к12", "рубящий",   "STR",        "5 фут."),
+        "Цеп":            ("1к8",  "дробящий",  "STR",        "5 фут."),
+        "Боевой молот":   ("1к8",  "дробящий",  "STR",        "5 фут."),
+        "Двуручный молот":("2к6",  "дробящий",  "STR",        "5 фут."),
+        "Глефа":          ("1к10", "рубящий",   "STR",        "10 фут."),
+        "Алебарда":       ("1к10", "рубящий",   "STR",        "10 фут."),
+        "Пика":           ("1к10", "колющий",   "STR",        "10 фут."),
+        # ── Воинское дальнобойное ───────────────────────────────────
+        "Длинный лук":    ("1к8",  "колющий",   "DEX",        "150/600 фут."),
+        "Тяжёлый арбалет":("1к10", "колющий",   "DEX",        "100/400 фут."),
+        "Ручной арбалет": ("1к6",  "колющий",   "DEX",        "30/120 фут."),
+        # Generic fallback для устаревшего имени:
+        "Арбалет":        ("1к10", "колющий",   "DEX",        "100/400 фут."),
     }
 
     data = WEAPON_DATA.get(weapon)
     if data:
         dice, dmg_type, stat_key, rng = data
-        mod = str_mod if stat_key == "STR" else dex_mod
+        # 2024 PHB: Finesse — игрок выбирает STR или DEX (берём max).
+        if stat_key == "DEX_OR_STR":
+            mod = max(str_mod, dex_mod)
+        elif stat_key == "STR":
+            mod = str_mod
+        else:  # "DEX"
+            mod = dex_mod
         bonus = mod + proficiency_bonus
         sign = "+" if bonus >= 0 else ""
         attacks.append({
@@ -218,6 +247,23 @@ def build_attacks(char: Dict[str, Any], stats: Dict[str, int], proficiency_bonus
             "bonus":       f"{sign}{bonus}",
             "damage":      "—",
             "damage_type": "—",
+            "range":       "5 фут.",
+        })
+
+    # 2024 PHB: Монах имеет Unarmed Strike как основную атаку
+    # (Martial Arts: 1d6 на 1-4 уровне, бьёт по DEX).
+    # Подмешиваем её в список атак для Монаха.
+    class_name = char.get("class_name")
+    if class_name == "Монах":
+        unarmed_mod = max(str_mod, dex_mod)
+        unarmed_bonus = unarmed_mod + proficiency_bonus
+        unarmed_sign = "+" if unarmed_bonus >= 0 else ""
+        unarmed_dmg_sign = "+" if unarmed_mod >= 0 else ""
+        attacks.append({
+            "name":        "Безоружный удар (Боевые искусства)",
+            "bonus":       f"{unarmed_sign}{unarmed_bonus}",
+            "damage":      f"1к6{unarmed_dmg_sign}{unarmed_mod}",
+            "damage_type": "дробящий",
             "range":       "5 фут.",
         })
 
@@ -372,6 +418,52 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     languages = char.get("languages", []) or []
     selected_tools = char.get("selected_tools", []) or []
 
+    # 2024 PHB: ячейки заклинаний по уровню класса (для блока «Слоты заклинаний»).
+    spell_slots_dict = get_spell_slots(class_name_ru, int(char.get("level", 1)))
+    # Превращаем в список словарей для шаблона: [{level, total, used}, …].
+    # Без отслеживания «использовано» в БД — пока used=0 везде.
+    spell_slots_list = [
+        {"level": lvl, "total": total, "used": 0}
+        for lvl, total in sorted(spell_slots_dict.items())
+    ]
+    pact_magic = is_pact_magic(class_name_ru)
+
+    # Weapon Mastery: список приёмов оружия (#15 на лист).
+    weapon_masteries = char.get("selected_masteries", []) or []
+
+    # Монеты (2024 PHB: cp/sp/ep/gp/pp); если в БД пока нет — все нули.
+    coins = char.get("coins") or {"cp": 0, "sp": 0, "ep": 0, "gp": 0, "pp": 0}
+
+    # Inspiration (2024 PHB) — флаг состояния (true/false).
+    inspiration = bool(char.get("inspiration", False))
+
+    # 4 черты личности (2024 PHB).
+    personality = {
+        "trait": char.get("personality_trait") or "",
+        "ideal": char.get("ideal") or "",
+        "bond": char.get("bond") or "",
+        "flaw": char.get("flaw") or "",
+    }
+
+    # Расовые черты (2024 PHB) — список из репозитория расы.
+    race_traits = []
+    try:
+        race_data = _race_repo.get_by_name(race_name) if race_name else None
+        if race_data:
+            race_traits = race_data.get("traits") or []
+            # Поддержим dict (pg-jsonb) и list-форму
+            if isinstance(race_traits, dict):
+                race_traits = list(race_traits.values())
+        subrace_name_db = char.get("subrace_name")
+        if subrace_name_db and race_name:
+            sub = _race_repo.get_subrace_by_name(race_name, subrace_name_db)
+            if sub:
+                sub_trait = sub.get("trait")
+                if sub_trait:
+                    race_traits = list(race_traits) + [sub_trait]
+    except Exception as e:
+        logger.warning(f"Не удалось получить расовые черты: {e}")
+
     categorized = format_features_by_category(char)
 
     equipment = []
@@ -385,19 +477,47 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         if equip_desc:
             equipment.append(f"Снаряжение предыстории ({equip_choice}): {equip_desc}")
 
+    # D&D 5.5e (2024) PHB — каноническая привязка навыка к характеристике.
+    # Используем точные русские имена из БД (см. db.init_db и handlers).
+    SKILL_TO_STAT = {
+        # STR
+        "Атлетика": "STR",
+        # DEX
+        "Акробатика": "DEX",
+        "Ловкость рук": "DEX",
+        "Скрытность": "DEX",
+        # INT
+        "История": "INT",
+        "Природа": "INT",
+        "Расследование": "INT",
+        "Религия": "INT",
+        "Тайная магия": "INT",
+        # WIS
+        "Восприятие": "WIS",
+        "Выживание": "WIS",
+        "Медицина": "WIS",
+        "Обращение с животными": "WIS",
+        "Проницательность": "WIS",
+        # CHA
+        "Выступление": "CHA",
+        "Запугивание": "CHA",
+        "Обман": "CHA",
+        "Убеждение": "CHA",
+    }
+
+    # Экспертиза (Плут L1 / Бард L1, 2024 PHB) — удвоенный бонус мастерства.
+    # Поле в БД называется `rogue_expertise` исторически, но фактически хранит
+    # экспертизу любого класса с этой фичей.
+    expertise_set = set(char.get("rogue_expertise", []) or [])
+
     skill_mods = {}
     for skill in skills_list:
-        base_stat = "DEX"
-        if skill == "Атлетика":
-            base_stat = "STR"
-        elif skill in ["Анализ", "Знание магии", "История", "Исследование", "Природа", "Религия"]:
-            base_stat = "INT"
-        elif skill in ["Внимательность", "Выживание", "Медицина", "Обращение с животными", "Проницательность"]:
-            base_stat = "WIS"
-        elif skill in ["Выступление", "Запугивание", "Обман", "Убеждение"]:
-            base_stat = "CHA"
+        base_stat = SKILL_TO_STAT.get(skill, "DEX")
         mod = (stats[base_stat] - 10) // 2
-        if skill in skills_list:
+        # Навыки в skills_list уже выбраны как proficient — даём бонус мастерства.
+        mod += proficiency_bonus
+        # Если экспертиза — добавляем бонус ещё раз (всего ×2 от proficiency).
+        if skill in expertise_set:
             mod += proficiency_bonus
         skill_mods[skill] = f"{mod:+d}"
 
@@ -469,6 +589,17 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         # ── Языки и инструменты (2024 PHB) ────────────────────────────────
         "languages":               languages,
         "tools":                   selected_tools,
+        # ── Слоты заклинаний / Pact Magic (2024 PHB) ──────────────────────
+        "spell_slots":             spell_slots_list,
+        "pact_magic":              pact_magic,
+        # ── Weapon Mastery, монеты ────────────────────────────────────────
+        "weapon_masteries":        weapon_masteries,
+        "coins":                   coins,
+        # ── Inspiration и расовые черты (2024 PHB) ────────────────────────
+        "inspiration":             inspiration,
+        "race_traits":             race_traits,
+        # ── 4 черты личности (2024 PHB) ───────────────────────────────────
+        "personality":             personality,
         # ── Особенности ───────────────────────────────────────────────────
         "order_features":          categorized['order'],
         "pact_features":           categorized['pact'],

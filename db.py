@@ -296,6 +296,35 @@ def init_db():
             add_column_if_missing('languages', 'JSONB DEFAULT \'[]\'::jsonb')
             add_column_if_missing('selected_tools', 'JSONB DEFAULT \'[]\'::jsonb')
 
+            # Снаряжение: вторичное оружие, прочие предметы и стартовые монеты.
+            # До этого они хранились только в FSM-state и терялись при сохранении.
+            # `coins` — JSONB со структурой {cp, sp, ep, gp, pp} (2024 PHB).
+            add_column_if_missing('selected_secondary_weapon', 'VARCHAR(100)')
+            add_column_if_missing('selected_other_items', 'TEXT')
+            add_column_if_missing(
+                'coins',
+                "JSONB DEFAULT '{\"cp\":0,\"sp\":0,\"ep\":0,\"gp\":0,\"pp\":0}'::jsonb"
+            )
+
+            # 2024 PHB-специфичные расовые/классовые шаги:
+            # - draconic_ancestry: тип дракона у Драконорождённого (10 опций).
+            # - warlock_invocation: 1 воззвание Колдуна на 1 уровне.
+            # - favored_enemy: Избранный враг Следопыта.
+            add_column_if_missing('draconic_ancestry', 'VARCHAR(30)')
+            add_column_if_missing('warlock_invocation', 'VARCHAR(100)')
+            add_column_if_missing('favored_enemy', 'VARCHAR(50)')
+
+            # 4 нарративных поля «Черты личности» (D&D 5.5e 2024).
+            # Генерируются автоматически из таблиц предыстории; игрок может
+            # отредактировать в отдельном инструменте (вне рамок этой версии).
+            add_column_if_missing('personality_trait', 'TEXT')
+            add_column_if_missing('ideal', 'TEXT')
+            add_column_if_missing('bond', 'TEXT')
+            add_column_if_missing('flaw', 'TEXT')
+
+            # Inspiration (2024 PHB) — флаг (true/false).
+            add_column_if_missing('inspiration', 'BOOLEAN DEFAULT FALSE')
+
             conn.commit()
             logger.info("Database initialized and migrated successfully")
 

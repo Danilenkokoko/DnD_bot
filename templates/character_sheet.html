@@ -846,11 +846,131 @@
         {% endif %}
       </div>
 
+      <!-- Слоты заклинаний (D&D 5.5e 2024) -->
+      {% if spell_slots and spell_slots|length > 0 %}
+      <div class="block">
+        <div class="block-title">
+          Ячейки заклинаний{% if pact_magic %} <span style="font-size:11px;color:var(--ink-muted);">(Pact Magic — короткий отдых)</span>{% endif %}
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border-deco);">
+              <th style="text-align:left;padding:4px 8px;font-weight:600;">Уровень</th>
+              <th style="text-align:center;padding:4px 8px;font-weight:600;">Всего</th>
+              <th style="text-align:center;padding:4px 8px;font-weight:600;">Использовано</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for slot in spell_slots %}
+            <tr>
+              <td style="padding:4px 8px;">{{ slot.level }} ур.</td>
+              <td style="text-align:center;padding:4px 8px;">{{ slot.total }}</td>
+              <td style="text-align:center;padding:4px 8px;">{{ slot.used }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      <!-- Inspiration (D&D 5.5e 2024) -->
+      <div class="block">
+        <div class="block-title">Вдохновение</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;">
+          <span style="display:inline-block;width:18px;height:18px;border:1.5px solid var(--ink-muted);border-radius:50%;background:{% if inspiration %}#fbbf24{% else %}transparent{% endif %};"></span>
+          <span style="color:var(--ink-muted);">{% if inspiration %}Активно{% else %}Не активно{% endif %}</span>
+        </div>
+      </div>
+
+      <!-- Расовые черты (D&D 5.5e 2024) -->
+      {% if race_traits and race_traits|length > 0 %}
+      <div class="block">
+        <div class="block-title">Расовые черты ({{ race }}{% if subrace_name %} — {{ subrace_name }}{% endif %})</div>
+        <ul>{% for trait in race_traits %}<li>{{ trait }}</li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+
+      <!-- Спасброски смерти (D&D 5.5e 2024) -->
+      <div class="block">
+        <div class="block-title">Спасброски смерти</div>
+        <div style="display:flex;justify-content:space-around;font-size:13px;">
+          <div>
+            <div style="color:#1f7a3a;font-weight:600;">Успехи</div>
+            <div style="display:flex;gap:6px;margin-top:4px;">
+              <span style="display:inline-block;width:14px;height:14px;border:1px solid var(--ink-muted);border-radius:50%;"></span>
+              <span style="display:inline-block;width:14px;height:14px;border:1px solid var(--ink-muted);border-radius:50%;"></span>
+              <span style="display:inline-block;width:14px;height:14px;border:1px solid var(--ink-muted);border-radius:50%;"></span>
+            </div>
+          </div>
+          <div>
+            <div style="color:#a32d2d;font-weight:600;">Провалы</div>
+            <div style="display:flex;gap:6px;margin-top:4px;">
+              <span style="display:inline-block;width:14px;height:14px;border:1px solid var(--ink-muted);"></span>
+              <span style="display:inline-block;width:14px;height:14px;border:1px solid var(--ink-muted);"></span>
+              <span style="display:inline-block;width:14px;height:14px;border:1px solid var(--ink-muted);"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Weapon Mastery (D&D 5.5e 2024) -->
+      {% if weapon_masteries and weapon_masteries|length > 0 %}
+      <div class="block">
+        <div class="block-title">Оружейные приёмы</div>
+        <ul>{% for m in weapon_masteries %}<li>{{ m }}</li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+
+      <!-- Монеты (D&D 5.5e 2024) -->
+      {% if coins %}
+      <div class="block">
+        <div class="block-title">Монеты</div>
+        <div style="display:flex;justify-content:space-around;font-size:13px;text-align:center;">
+          <div><div style="font-weight:600;">{{ coins.cp or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">CP</div></div>
+          <div><div style="font-weight:600;">{{ coins.sp or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">SP</div></div>
+          <div><div style="font-weight:600;">{{ coins.ep or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">EP</div></div>
+          <div><div style="font-weight:600;">{{ coins.gp or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">GP</div></div>
+          <div><div style="font-weight:600;">{{ coins.pp or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">PP</div></div>
+        </div>
+      </div>
+      {% endif %}
+
       <!-- Заклинания -->
       {% if spells and spells|length > 0 %}
       <div class="block">
         <div class="block-title">Заклинания</div>
         <ul>{% for spell in spells %}<li>{{ spell }}</li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+
+      <!-- Черты личности (D&D 5.5e 2024) -->
+      {% if personality and (personality.trait or personality.ideal or personality.bond or personality.flaw) %}
+      <div class="block">
+        <div class="block-title">Черты личности</div>
+        {% if personality.trait %}
+        <div class="sub-section">
+          <div class="sub-title"><i class="fas fa-comment"></i> Черта</div>
+          <p>{{ personality.trait }}</p>
+        </div>
+        {% endif %}
+        {% if personality.ideal %}
+        <div class="sub-section">
+          <div class="sub-title"><i class="fas fa-balance-scale"></i> Идеал</div>
+          <p>{{ personality.ideal }}</p>
+        </div>
+        {% endif %}
+        {% if personality.bond %}
+        <div class="sub-section">
+          <div class="sub-title"><i class="fas fa-link"></i> Привязанность</div>
+          <p>{{ personality.bond }}</p>
+        </div>
+        {% endif %}
+        {% if personality.flaw %}
+        <div class="sub-section">
+          <div class="sub-title"><i class="fas fa-exclamation-triangle"></i> Недостаток</div>
+          <p>{{ personality.flaw }}</p>
+        </div>
+        {% endif %}
       </div>
       {% endif %}
 

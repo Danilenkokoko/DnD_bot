@@ -32,7 +32,12 @@ from keyboards.character_keyboards import (
     create_warlock_pact_keyboard,
     create_rogue_expertise_keyboard,
     create_rogue_language_keyboard,
-    create_background_equipment_keyboard
+    create_background_equipment_keyboard,
+    create_draconic_ancestry_keyboard,
+    create_warlock_invocation_keyboard,
+    create_favored_enemy_keyboard,
+    create_tome_picker_keyboard,
+    create_personality_intro_keyboard,
 )
 
 from services.character_service import CharacterStatsService, CharacterFinalizationService
@@ -51,6 +56,7 @@ from engine.validators import validate_name as engine_validate_name
 from services.auto_choices import (
     get_optimal_skills_for_class,
     recommend_fighting_style,
+    generate_personality_traits,
 )
 
 from strings import *
@@ -152,19 +158,51 @@ async def show_warlock_pact_selection(callback: CallbackQuery, state: FSMContext
     text = "🔮 Выбери свой договор:\n\n• Договор гримуара – книга теней\n• Договор клинка – призыв оружия\n• Договор цепи – улучшенный фамильяр\n• Доспех теней – бесплатный «Доспех мага»\n• Мистический разум – преимущество на концентрацию"
     await send_new_from_callback(callback, state, text, reply_markup=create_warlock_pact_keyboard())
 
-async def handle_rogue_extras(callback: CallbackQuery, state: FSMContext):
-    """Показывает выбор навыков для экспертности и языка для плута."""
+async def handle_class_expertise(callback: CallbackQuery, state: FSMContext):
+    """
+    Шаг выбора 2 навыков для экспертности.
+    D&D 5.5e (2024): Плут (Expertise на L1) и Бард (Expertise на L1) получают
+    экспертизу в 2 навыках. Используем единый шаг; после выбора Плут идёт на
+    шаг языка, Бард — сразу к equipment.
+    """
     data = await state.get_data()
+    class_name = data.get("class_name")
     # Получаем список навыков, выбранных классом (хранятся в selected_class_skills)
     class_skills = data.get("selected_class_skills", [])
     if not class_skills:
-        # Если почему-то нет, можно взять из БД навыки плута
-        class_info = _class_repo.get_by_name("Плут")
+        class_info = _class_repo.get_by_name(class_name) if class_name else None
         class_skills = class_info.get('skills', []) if class_info else []
     await state.update_data(available_skills_for_expertise=class_skills, rogue_expertise_selected=[])
     await state.set_state(CreateCharacter.rogue_expertise_select)
-    text = "🎭 Выбери два навыка для экспертности (удвоенный бонус мастерства):"
+    text = (
+        "🎭 Выбери два навыка для экспертности (удвоенный бонус мастерства):"
+    )
     await send_new_from_callback(callback, state, text, reply_markup=create_rogue_expertise_keyboard(class_skills, []))
+
+
+# Алиас для обратной совместимости с прежним именем.
+handle_rogue_extras = handle_class_expertise
+
+
+async def proceed_to_favored_enemy(callback: CallbackQuery, state: FSMContext):
+    """Следопыт L1 (PHB 2024): шаг выбора Избранного врага."""
+    await state.set_state(CreateCharacter.ranger_favored_enemy_select)
+    await send_new_from_callback(
+        callback, state,
+        "🎯 Следопыт L1 (2024): выбери своего Избранного врага:",
+        reply_markup=create_favored_enemy_keyboard(),
+    )
+
+
+@router.callback_query(CreateCharacter.ranger_favored_enemy_select, lambda c: c.data and c.data.startswith("favored_enemy_"))
+async def select_favored_enemy(callback: CallbackQuery, state: FSMContext):
+    enemy = callback.data.replace("favored_enemy_", "")
+    await state.update_data(favored_enemy=enemy)
+    await callback.answer(f"✅ Избранный враг: {enemy}")
+    logger.info(f"[FLOW] Следопыт Избранный враг: {enemy}")
+    # Дальше — обычный путь: equipment.
+    await state.set_state(CreateCharacter.class_equipment_select)
+    await show_class_equipment(callback, state)
 
 # =========================================================
 # КОМАНДЫ
@@ -298,11 +336,193 @@ async def select_warlock_pact(callback: CallbackQuery, state: FSMContext):
     logger.info(f"[FLOW] Колдун договор: {pact}")
     pact_names = {"tome": "Договор гримуара", "blade": "Договор клинка", "chain": "Договор цепи", "shadow_armor": "Доспех теней", "arcane_mind": "Мистический разум"}
     await callback.answer(f"✅ Выбран договор: {pact_names.get(pact, pact)}")
+    # 2024 PHB: после выбора пакта показываем шаг 1 воззвания (Eldritch Invocation)
+    # на 1 уровне Колдуна. Pact-of-Tome заговоры и ритуалы — отдельный шаг,
+    # будет встроен из обработчика воззвания.
+    await proceed_to_warlock_invocation(callback, state)
+
+
+async def proceed_to_warlock_invocation(callback: CallbackQuery, state: FSMContext):
+    """
+    Колдун L1 (PHB 2024): выбор 1 воззвания.
+    Список тянем из БД (invocations). Если по какой-то причине список пуст —
+    помечаем поле None и идём дальше, чтобы не сломать флоу.
+    """
+    invocations = CharacterStatsService.get_all_invocations(level=1)
+    if not invocations:
+        logger.warning("Список воззваний пуст в БД — пропускаем шаг.")
+        await state.update_data(warlock_invocation=None)
+        await proceed_after_warlock_invocation(callback, state)
+        return
+    await state.set_state(CreateCharacter.warlock_invocation_select)
+    text = "✨ Колдун L1 (2024): выбери одно воззвание:"
+    await send_new_from_callback(
+        callback, state, text,
+        reply_markup=create_warlock_invocation_keyboard(invocations),
+    )
+
+
+@router.callback_query(CreateCharacter.warlock_invocation_select, lambda c: c.data.startswith("warlock_inv_"))
+async def select_warlock_invocation(callback: CallbackQuery, state: FSMContext):
+    inv_id = int(callback.data.replace("warlock_inv_", "") or 0)
+    # Получаем имя воззвания по ID — простой линейный поиск по списку.
+    invocations = CharacterStatsService.get_all_invocations(level=1)
+    inv_name = next((i.get('name') for i in invocations if i.get('id') == inv_id), None)
+    await state.update_data(warlock_invocation=inv_name)
+    await callback.answer(f"✅ Воззвание: {inv_name}" if inv_name else "✅ Воззвание выбрано")
+    logger.info(f"[FLOW] Колдун воззвание: {inv_name}")
+    await proceed_after_warlock_invocation(callback, state)
+
+
+async def proceed_after_warlock_invocation(callback: CallbackQuery, state: FSMContext):
+    """После воззвания: для пакта Гримуара — заговоры и ритуалы; иначе → к навыкам."""
+    data = await state.get_data()
+    pact = data.get("warlock_pact")
     if pact == "tome":
-        await state.set_state(CreateCharacter.warlock_tome_cantrips_select)
-        await send_new_from_callback(callback, state, "📖 Выбери 3 заговора для Книги теней (выбор будет доработан позже)")
+        await proceed_to_tome_cantrips(callback, state)
+        return
+    await proceed_to_skills(callback, state)
+
+
+# ─── Гримуар: 3 заговора + 2 ритуала (D&D 5.5e 2024) ─────────────────
+
+async def proceed_to_tome_cantrips(callback: CallbackQuery, state: FSMContext):
+    """Pact of the Tome: выбор 3 заговоров из списка любого класса."""
+    # Используем заговоры Колдуна как разумное приближение списка любых заговоров.
+    cantrips = _spell_repo.get_cantrips_for_class("Колдун") or []
+    if not cantrips:
+        logger.warning("Список заговоров пуст — пропускаем шаг tome cantrips.")
+        await state.update_data(pact_tome_cantrips=[])
+        await proceed_to_tome_rituals(callback, state)
+        return
+    await state.update_data(pact_tome_cantrips_selected=[])
+    await state.set_state(CreateCharacter.warlock_tome_cantrips_select)
+    await send_new_from_callback(
+        callback, state,
+        "📖 Книга теней: выбери 3 заговора:",
+        reply_markup=create_tome_picker_keyboard(
+            items=cantrips, selected=[],
+            callback_prefix="tome_cantrip_",
+            ready_callback="tome_cantrip_ready",
+            limit=3,
+        ),
+    )
+
+
+@router.callback_query(CreateCharacter.warlock_tome_cantrips_select, lambda c: c.data and (c.data.startswith("tome_cantrip_") or c.data == "tome_pick_info"))
+async def select_tome_cantrip(callback: CallbackQuery, state: FSMContext):
+    if callback.data == "tome_pick_info":
+        await callback.answer()
+        return
+    if callback.data == "tome_cantrip_ready":
+        data = await state.get_data()
+        selected = data.get("pact_tome_cantrips_selected", [])
+        if len(selected) != 3:
+            await callback.answer(f"❌ Нужно выбрать ровно 3 заговора (выбрано {len(selected)})", show_alert=True)
+            return
+        await state.update_data(pact_tome_cantrips=selected)
+        await callback.answer("✅ Заговоры Книги теней выбраны")
+        await proceed_to_tome_rituals(callback, state)
+        return
+    name = callback.data.replace("tome_cantrip_", "")
+    data = await state.get_data()
+    selected = list(data.get("pact_tome_cantrips_selected", []))
+    if name in selected:
+        selected.remove(name)
+    elif len(selected) >= 3:
+        await callback.answer("❌ Уже выбрано 3 заговора", show_alert=True)
+        return
     else:
+        selected.append(name)
+    await state.update_data(pact_tome_cantrips_selected=selected)
+    cantrips = _spell_repo.get_cantrips_for_class("Колдун") or []
+    try:
+        await callback.message.edit_reply_markup(
+            reply_markup=create_tome_picker_keyboard(
+                items=cantrips, selected=selected,
+                callback_prefix="tome_cantrip_",
+                ready_callback="tome_cantrip_ready",
+                limit=3,
+            ),
+        )
+    except Exception as e:
+        logger.warning(f"Не удалось обновить клавиатуру tome cantrips: {e}")
+    await callback.answer()
+
+
+async def proceed_to_tome_rituals(callback: CallbackQuery, state: FSMContext):
+    """Pact of the Tome: 2 ритуала 1 уровня из любого списка."""
+    # Берём заклинания 1 уровня с флагом is_ritual для Колдуна.
+    # Если spell_repo не имеет такого метода — fallback на пустой список.
+    rituals = []
+    try:
+        all_lvl1 = _spell_repo.get_level1_spells_for_class("Колдун") or []
+        rituals = [s for s in all_lvl1 if s.get("is_ritual")]
+    except Exception as e:
+        logger.warning(f"Не удалось получить ритуалы из БД: {e}")
+    if not rituals:
+        logger.info("Ритуалов 1 уровня нет — пропускаем шаг.")
+        await state.update_data(pact_tome_rituals=[])
         await proceed_to_skills(callback, state)
+        return
+    await state.update_data(pact_tome_rituals_selected=[])
+    await state.set_state(CreateCharacter.warlock_tome_rituals_select)
+    await send_new_from_callback(
+        callback, state,
+        "📜 Книга теней: выбери 2 ритуала 1 уровня:",
+        reply_markup=create_tome_picker_keyboard(
+            items=rituals, selected=[],
+            callback_prefix="tome_ritual_",
+            ready_callback="tome_ritual_ready",
+            limit=2,
+        ),
+    )
+
+
+@router.callback_query(CreateCharacter.warlock_tome_rituals_select, lambda c: c.data and (c.data.startswith("tome_ritual_") or c.data == "tome_pick_info"))
+async def select_tome_ritual(callback: CallbackQuery, state: FSMContext):
+    if callback.data == "tome_pick_info":
+        await callback.answer()
+        return
+    if callback.data == "tome_ritual_ready":
+        data = await state.get_data()
+        selected = data.get("pact_tome_rituals_selected", [])
+        if len(selected) != 2:
+            await callback.answer(f"❌ Нужно выбрать ровно 2 ритуала (выбрано {len(selected)})", show_alert=True)
+            return
+        await state.update_data(pact_tome_rituals=selected)
+        await callback.answer("✅ Ритуалы Книги теней выбраны")
+        await proceed_to_skills(callback, state)
+        return
+    name = callback.data.replace("tome_ritual_", "")
+    data = await state.get_data()
+    selected = list(data.get("pact_tome_rituals_selected", []))
+    if name in selected:
+        selected.remove(name)
+    elif len(selected) >= 2:
+        await callback.answer("❌ Уже выбрано 2 ритуала", show_alert=True)
+        return
+    else:
+        selected.append(name)
+    await state.update_data(pact_tome_rituals_selected=selected)
+    rituals = []
+    try:
+        all_lvl1 = _spell_repo.get_level1_spells_for_class("Колдун") or []
+        rituals = [s for s in all_lvl1 if s.get("is_ritual")]
+    except Exception:
+        rituals = []
+    try:
+        await callback.message.edit_reply_markup(
+            reply_markup=create_tome_picker_keyboard(
+                items=rituals, selected=selected,
+                callback_prefix="tome_ritual_",
+                ready_callback="tome_ritual_ready",
+                limit=2,
+            ),
+        )
+    except Exception as e:
+        logger.warning(f"Не удалось обновить клавиатуру tome rituals: {e}")
+    await callback.answer()
 
 # =========================================================
 # ШАГ 2: ВЫБОР НАВЫКОВ КЛАССА
@@ -334,9 +554,13 @@ async def handle_skills_selection(callback: CallbackQuery, state: FSMContext):
     if data == "class_skills_ready":
         if len(selected_skills) == skill_choices:
             await state.update_data(selected_class_skills=selected_skills)
-            # После выбора навыков, если класс Плут, переходим к дополнительным шагам
-            if class_name == "Плут":
-                await handle_rogue_extras(callback, state)
+            # 2024 PHB: Плут и Бард на 1 уровне получают экспертизу в 2 навыках.
+            if class_name in ("Плут", "Бард"):
+                await handle_class_expertise(callback, state)
+            elif class_name == "Следопыт":
+                # 2024 PHB: Ranger L1 — Favored Enemy. Игрок выбирает тип
+                # существ. После выбора — переход к equipment.
+                await proceed_to_favored_enemy(callback, state)
             else:
                 await state.set_state(CreateCharacter.class_equipment_select)
                 await show_class_equipment(callback, state)
@@ -388,8 +612,20 @@ async def select_rogue_expertise(callback: CallbackQuery, state: FSMContext):
     keyboard = create_rogue_expertise_keyboard(available, selected)
     await callback.message.edit_reply_markup(reply_markup=keyboard)
     if len(selected) == 2:
-        # Сохраняем выбранные навыки в state
+        # Сохраняем выбранные навыки в state.
+        # Имя поля — `rogue_expertise` сохранено для совместимости с БД и
+        # другими хендлерами; на самом деле это «class_expertise» — фича Плута
+        # и Барда (2024 PHB).
         await state.update_data(rogue_expertise=selected)
+        data = await state.get_data()
+        class_name = data.get("class_name")
+        # Бард не получает доп. язык от класса — сразу к выбору снаряжения.
+        if class_name != "Плут":
+            await state.set_state(CreateCharacter.class_equipment_select)
+            await show_class_equipment(callback, state)
+            await callback.answer()
+            return
+        # Плут — выбор воровского доп. языка.
         await state.set_state(CreateCharacter.rogue_language_select)
         # Получаем список языков из БД
         with get_connection() as conn:
@@ -587,6 +823,9 @@ async def calculate_and_show_stats(callback: CallbackQuery, state: FSMContext):
         hp=stats_result['hp'],
         ac=stats_result['ac']
     )
+    # 2024 PHB: на этом шаге AC показан без снаряжения. Финальное значение
+    # пересчитывается на этапе сохранения с учётом брони и щита.
+    text += "\n\n💡 AC показан без брони и щита; финальный AC учитывает снаряжение."
     await send_new_from_callback(callback, state, text, reply_markup=create_race_keyboard())
     await state.set_state(CreateCharacter.race_select)
 
@@ -614,7 +853,7 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
         await send_new_from_callback(callback, state, RACE_SUBRACE_PROMPT, reply_markup=create_subrace_keyboard(race))
         await state.set_state(CreateCharacter.subrace_select)
     else:
-        await go_to_name(callback, state)
+        await proceed_after_race(callback, state)
     await callback.answer()
 
 @router.callback_query(CreateCharacter.subrace_select, lambda c: c.data.startswith("subrace_"))
@@ -622,6 +861,44 @@ async def select_subrace(callback: CallbackQuery, state: FSMContext):
     subrace = callback.data.replace("subrace_", "")
     await state.update_data(subrace=subrace)
     await callback.answer(SUBRACE_SELECTED.format(subrace=subrace))
+    await proceed_after_race(callback, state)
+
+
+async def proceed_after_race(callback: CallbackQuery, state: FSMContext):
+    """
+    Хук после выбора расы/подрасы. По правилам D&D 5.5e (2024) у некоторых
+    рас есть дополнительный обязательный выбор:
+    — Драконорождённый: тип дракона (10 опций), определяет урон Оружия Дыхания
+      и сопротивление.
+    """
+    data = await state.get_data()
+    race = data.get("race")
+    if race == "Драконорожденный":
+        await state.set_state(CreateCharacter.draconic_ancestry_select)
+        await send_new_from_callback(
+            callback,
+            state,
+            "🐉 Выбери тип дракона своего предка (он определит вид урона и сопротивление):",
+            reply_markup=create_draconic_ancestry_keyboard(),
+        )
+        return
+    await go_to_name(callback, state)
+
+
+@router.callback_query(CreateCharacter.draconic_ancestry_select, lambda c: c.data.startswith("draconic_"))
+async def select_draconic_ancestry(callback: CallbackQuery, state: FSMContext):
+    ancestry = callback.data.replace("draconic_", "")
+    # Канонические русские имена для хранения в БД (короткие, чтобы влезло в VARCHAR(30))
+    ancestry_labels = {
+        "black": "Чёрный", "blue": "Синий", "brass": "Латунный",
+        "bronze": "Бронзовый", "copper": "Медный", "gold": "Золотой",
+        "green": "Зелёный", "red": "Красный", "silver": "Серебряный",
+        "white": "Белый",
+    }
+    label = ancestry_labels.get(ancestry, ancestry)
+    await state.update_data(draconic_ancestry=label)
+    await callback.answer(f"✅ Тип дракона: {label}")
+    logger.info(f"[FLOW] Драконорождённый: {label}")
     await go_to_name(callback, state)
 
 @router.callback_query(lambda c: c.data == "back_to_races")
@@ -651,16 +928,27 @@ async def set_name(message: Message, state: FSMContext):
     confirm = NAME_CONFIRM.format(name=message.text.strip())
     await send_new(state, message, confirm)
     await state.set_state(CreateCharacter.backstory_input)
-    await send_new(state, message, BACKSTORY_REQUEST, reply_markup=cancel_kb())
+    # 2024 PHB: backstory — необязательное нарративное поле, даём кнопку «Пропустить».
+    await send_new(state, message, BACKSTORY_REQUEST, reply_markup=skip_kb())
 
 @router.message(CreateCharacter.backstory_input)
 async def set_backstory(message: Message, state: FSMContext):
     if message.text == BTN_CANCEL:
         await cancel_creation(message, state)
         return
+    # Игрок может нажать «⏩ Пропустить» — пишем дефолтную историю и идём дальше.
+    if message.text == BTN_SKIP:
+        await state.update_data(backstory="Нет истории")
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        await state.set_state(CreateCharacter.alignment_select)
+        await send_new(state, message, ALIGNMENT_REQUEST, reply_markup=create_alignment_keyboard())
+        return
     backstory = message.text.strip()
     if len(backstory) > 2000:
-        await message.answer(BACKSTORY_TOO_LONG, reply_markup=cancel_kb())
+        await message.answer(BACKSTORY_TOO_LONG, reply_markup=skip_kb())
         return
     await state.update_data(backstory=backstory)
     await message.delete()
@@ -677,14 +965,176 @@ async def select_alignment(callback: CallbackQuery, state: FSMContext):
     await state.update_data(alignment=alignment_name)
     logger.info(f"[FLOW] Выбрано мировоззрение: {alignment_name}")
     await callback.answer(ALIGNMENT_SELECTED.format(alignment=alignment_name))
+    # 2024 PHB: после мировоззрения — шаг 4 черт личности (Trait/Ideal/Bond/Flaw),
+    # затем картинка.
+    await proceed_to_personality_intro(callback, state)
+
+
+# =========================================================
+# 4 ЧЕРТЫ ЛИЧНОСТИ (D&D 5.5e 2024) — пункт #30
+# =========================================================
+
+async def proceed_to_personality_intro(callback: CallbackQuery, state: FSMContext):
+    """Экран выбора режима: 🎲 авто / ✍️ ручной ввод / ⏩ пропустить."""
+    text = (
+        "🎭 Черты личности (D&D 5.5e 2024)\n\n"
+        "Выбери, как сформировать 4 нарративных поля:\n"
+        "• Черта личности\n• Идеал\n• Привязанность\n• Недостаток"
+    )
+    await state.set_state(CreateCharacter.personality_intro)
+    await send_new_from_callback(
+        callback, state, text,
+        reply_markup=create_personality_intro_keyboard(),
+    )
+
+
+@router.callback_query(CreateCharacter.personality_intro, lambda c: c.data == "pers_auto")
+async def personality_auto(callback: CallbackQuery, state: FSMContext):
+    auto = generate_personality_traits()
+    await state.update_data(
+        personality_trait=auto["personality_trait"],
+        ideal=auto["ideal"],
+        bond=auto["bond"],
+        flaw=auto["flaw"],
+    )
+    await callback.answer("✅ Черты сгенерированы")
+    await _go_to_image_step(callback, state)
+
+
+@router.callback_query(CreateCharacter.personality_intro, lambda c: c.data == "pers_skip")
+async def personality_skip(callback: CallbackQuery, state: FSMContext):
+    # Оставляем поля пустыми; auto-дефолты подставятся в save_character.
+    await callback.answer("⏩ Шаг пропущен")
+    await _go_to_image_step(callback, state)
+
+
+@router.callback_query(CreateCharacter.personality_intro, lambda c: c.data == "pers_manual")
+async def personality_manual(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(CreateCharacter.personality_trait_input)
+    await send_new_from_callback(
+        callback, state,
+        "✍️ Введи свою Черту личности (одной фразой). До 500 символов.",
+        reply_markup=skip_kb(),
+    )
+    await callback.answer()
+
+
+def _validate_personality_text(text: str, max_len: int = 500) -> Optional[str]:
+    """Валидирует текстовый ввод. Возвращает обрезанную строку или None если пусто."""
+    if not text:
+        return None
+    text = text.strip()
+    if not text:
+        return None
+    return text[:max_len]
+
+
+@router.message(CreateCharacter.personality_trait_input)
+async def input_personality_trait(message: Message, state: FSMContext):
+    if message.text == BTN_CANCEL:
+        await cancel_creation(message, state)
+        return
+    if message.text == BTN_SKIP:
+        # Заполним пустую черту через auto и пропустим к идеалу.
+        auto = generate_personality_traits()
+        await state.update_data(personality_trait=auto["personality_trait"])
+    else:
+        val = _validate_personality_text(message.text)
+        if not val:
+            await message.answer("❌ Пустой ввод. Введи текст или нажми «⏩ Пропустить».", reply_markup=skip_kb())
+            return
+        await state.update_data(personality_trait=val)
+        try:
+            await message.delete()
+        except Exception:
+            pass
+    await state.set_state(CreateCharacter.personality_ideal_input)
+    await send_new(state, message, "✍️ Введи свой Идеал. Можно с указанием мировоззрения в скобках.", reply_markup=skip_kb())
+
+
+@router.message(CreateCharacter.personality_ideal_input)
+async def input_personality_ideal(message: Message, state: FSMContext):
+    if message.text == BTN_CANCEL:
+        await cancel_creation(message, state)
+        return
+    if message.text == BTN_SKIP:
+        auto = generate_personality_traits()
+        await state.update_data(ideal=auto["ideal"])
+    else:
+        val = _validate_personality_text(message.text)
+        if not val:
+            await message.answer("❌ Пустой ввод. Введи текст или нажми «⏩ Пропустить».", reply_markup=skip_kb())
+            return
+        await state.update_data(ideal=val)
+        try:
+            await message.delete()
+        except Exception:
+            pass
+    await state.set_state(CreateCharacter.personality_bond_input)
+    await send_new(state, message, "✍️ Введи свою Привязанность (что или кто важно для персонажа).", reply_markup=skip_kb())
+
+
+@router.message(CreateCharacter.personality_bond_input)
+async def input_personality_bond(message: Message, state: FSMContext):
+    if message.text == BTN_CANCEL:
+        await cancel_creation(message, state)
+        return
+    if message.text == BTN_SKIP:
+        auto = generate_personality_traits()
+        await state.update_data(bond=auto["bond"])
+    else:
+        val = _validate_personality_text(message.text)
+        if not val:
+            await message.answer("❌ Пустой ввод. Введи текст или нажми «⏩ Пропустить».", reply_markup=skip_kb())
+            return
+        await state.update_data(bond=val)
+        try:
+            await message.delete()
+        except Exception:
+            pass
+    await state.set_state(CreateCharacter.personality_flaw_input)
+    await send_new(state, message, "✍️ Введи Недостаток своего персонажа.", reply_markup=skip_kb())
+
+
+@router.message(CreateCharacter.personality_flaw_input)
+async def input_personality_flaw(message: Message, state: FSMContext):
+    if message.text == BTN_CANCEL:
+        await cancel_creation(message, state)
+        return
+    if message.text == BTN_SKIP:
+        auto = generate_personality_traits()
+        await state.update_data(flaw=auto["flaw"])
+    else:
+        val = _validate_personality_text(message.text)
+        if not val:
+            await message.answer("❌ Пустой ввод. Введи текст или нажми «⏩ Пропустить».", reply_markup=skip_kb())
+            return
+        await state.update_data(flaw=val)
+        try:
+            await message.delete()
+        except Exception:
+            pass
+    await _go_to_image_step_from_message(message, state)
+
+
+async def _go_to_image_step(callback: CallbackQuery, state: FSMContext):
+    """Переход на шаг загрузки картинки персонажа."""
     await state.set_state(CreateCharacter.image_input)
     await send_new_from_callback(callback, state, IMAGE_REQUEST, reply_markup=skip_kb())
+
+
+async def _go_to_image_step_from_message(message: Message, state: FSMContext):
+    """Тот же переход, но из контекста message-хендлера."""
+    await state.set_state(CreateCharacter.image_input)
+    await send_new(state, message, IMAGE_REQUEST, reply_markup=skip_kb())
 
 # =========================================================
 # ИЗОБРАЖЕНИЕ И ФИНАЛИЗАЦИЯ
 # =========================================================
-@router.message(F.text == BTN_SKIP)
+@router.message(CreateCharacter.image_input, F.text == BTN_SKIP)
 async def skip_image(message: Message, state: FSMContext):
+    # Срабатывает только в состоянии загрузки картинки. На других шагах
+    # «Пропустить» обрабатывается локальными хендлерами (например, backstory).
     await finalize_character(message, state, image_file_id=None)
 
 @router.message(CreateCharacter.image_input, F.photo)
@@ -777,16 +1227,34 @@ async def select_background(callback: CallbackQuery, state: FSMContext):
     )
 
     trait = bg_info.get('trait', 'Нет')
-    skills = ", ".join(bg_info.get('skills', []))
+    skills = ", ".join(bg_info.get("skills", []))
     tools = bg_info.get('tools', 'Нет')
     description = bg_info.get('description', 'Нет описания')[:300]
     origin_feat = bg_info.get('origin_feat', '')
     origin_feat_text = f"✨ Черта происхождения: {origin_feat}\n\n" if origin_feat else ""
 
+    user_data = await state.get_data()
+    class_name = user_data.get("class_name")
+    bonus_text = ""
+    try:
+        from engine.stats import BackgroundBonusDistributor
+        primary = CharacterStatsService.get_class_primary_stats(class_name) if class_name else []
+        bg_chars = bg_info.get('characteristics', []) or []
+        if primary and bg_chars:
+            distributor = BackgroundBonusDistributor()
+            bonuses = distributor.distribute(primary_stats=primary, background_stats=bg_chars)
+            parts = [f"+{v} {k}" for k, v in bonuses.to_str_dict().items() if v > 0]
+            bonus_text = f"✨ Бонусы характеристик: {', '.join(parts)}\n\n"
+    except Exception as e:
+        logger.warning(f"Не удалось рассчитать распределение бонусов предыстории: {e}")
+        chars = bg_info.get('characteristics', [])
+        if len(chars) >= 2:
+            bonus_text = f"✨ Бонусы характеристик: +2 {chars[0]}, +1 {chars[1]}\n\n"
+
     text = (f"📜 {background}\n\n"
             f"📖 {description}...\n\n"
             f"{origin_feat_text}"
-            f"✨ Бонусы характеристик: +2 {bg_info['characteristics'][0]}, +1 {bg_info['characteristics'][1]}\n\n"
+            f"{bonus_text}"
             f"🔧 Черта: {trait}\n"
             f"📚 Навыки: {skills}\n"
             f"🛠️ Инструменты: {tools}\n\n"

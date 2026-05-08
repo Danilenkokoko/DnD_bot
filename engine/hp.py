@@ -103,23 +103,24 @@ def calculate_hp_at_level(
             f"level должен быть в диапазоне 1-20, получено {level}"
         )
 
-    # Расчёт модификатора CON (с гарантией минимум +1 для HP)
+    # Модификатор CON (D&D 5.5e 2024 PHB):
+    # бонус за уровень = CON_mod НАПРЯМУЮ (может быть отрицательным).
+    # Только итоговое HP не должно быть меньше 1 — это финальная защита.
     con_modifier = calculate_modifier(constitution)
-    hp_per_level_bonus = max(1, con_modifier)
+    hp_per_level_bonus = con_modifier
 
-    # 1 уровень: максимальное значение hit_die + CON бонус
+    # 1 уровень: максимальное значение hit_die + CON модификатор
     if level == 1:
         return max(1, hit_die + hp_per_level_bonus)
 
-    # 2+ уровень
-    # HP на 1 уровне
-    hp = max(1, hit_die + hp_per_level_bonus)
+    # 2+ уровень: HP на 1 уровне + прирост за каждый последующий уровень
+    hp = hit_die + hp_per_level_bonus
 
-    # HP за дополнительные уровни
     for current_level in range(2, level + 1):
         hp += _calculate_hp_gain_for_level(hit_die, hp_per_level_bonus, method, current_level)
 
-    return hp
+    # Финальная защита: персонаж не может иметь меньше 1 HP
+    return max(1, hp)
 
 
 def _calculate_hp_gain_for_level(

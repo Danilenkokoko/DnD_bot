@@ -29,7 +29,8 @@ class CharacterRepository(BaseRepository):
                 languages, selected_tools,
                 selected_secondary_weapon, selected_other_items, coins,
                 draconic_ancestry, warlock_invocation, favored_enemy,
-                personality_trait, ideal, bond, flaw, inspiration
+                personality_trait, ideal, bond, flaw, inspiration,
+                max_hp, current_hp, temp_hp, hit_dice_used, exhaustion, conditions
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
                       %s, %s, %s, %s, %s, %s,
                       %s, %s, %s,
@@ -44,7 +45,8 @@ class CharacterRepository(BaseRepository):
                       %s, %s,
                       %s, %s, %s,
                       %s, %s, %s,
-                      %s, %s, %s, %s, %s)
+                      %s, %s, %s, %s, %s,
+                      %s, %s, %s, %s, %s, %s)
             RETURNING id
         """
         # Для jsonb-полей -> преобразуем в JSON-строку
@@ -122,6 +124,13 @@ class CharacterRepository(BaseRepository):
             data.get('bond'),
             data.get('flaw'),
             bool(data.get('inspiration', False)),
+            # PHB 2024 — расширенный HP/state-трекинг.
+            data.get('max_hp', data.get('hp', 0)),
+            data.get('current_hp', data.get('hp', 0)),
+            int(data.get('temp_hp', 0) or 0),
+            int(data.get('hit_dice_used', 0) or 0),
+            int(data.get('exhaustion', 0) or 0),
+            data.get('conditions', []) or [],
         )
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -150,6 +159,8 @@ class CharacterRepository(BaseRepository):
                         c.selected_secondary_weapon, c.selected_other_items, c.coins,
                         c.draconic_ancestry, c.warlock_invocation, c.favored_enemy,
                         c.personality_trait, c.ideal, c.bond, c.flaw, c.inspiration,
+                        c.max_hp, c.current_hp, c.temp_hp,
+                        c.hit_dice_used, c.exhaustion, c.conditions,
                         r.name as race_name,
                         s.name as subrace_name,
                         cl.name as class_name,
@@ -190,6 +201,8 @@ class CharacterRepository(BaseRepository):
                         c.selected_secondary_weapon, c.selected_other_items, c.coins,
                         c.draconic_ancestry, c.warlock_invocation, c.favored_enemy,
                         c.personality_trait, c.ideal, c.bond, c.flaw, c.inspiration,
+                        c.max_hp, c.current_hp, c.temp_hp,
+                        c.hit_dice_used, c.exhaustion, c.conditions,
                         r.name as race_name,
                         s.name as subrace_name,
                         cl.name as class_name,
@@ -212,6 +225,7 @@ class CharacterRepository(BaseRepository):
             'name', 'level', 'experience', 'hp', 'ac', 'speed',
             'selected_skills', 'selected_masteries', 'selected_fighting_style',
             'selected_invocations', 'selected_spells', 'selected_weapon', 'selected_armor',
+            'selected_equipment_choice',
             'backstory', 'image_file_id', 'origin_feat', 'alignment',
             'druid_order', 'cleric_order', 'warlock_pact',
             'rogue_extra_language', 'pact_blade_weapon',
@@ -219,6 +233,9 @@ class CharacterRepository(BaseRepository):
             'selected_secondary_weapon', 'selected_other_items', 'coins',
             'draconic_ancestry', 'warlock_invocation', 'favored_enemy',
             'personality_trait', 'ideal', 'bond', 'flaw', 'inspiration',
+            # PHB 2024 — HP/state-трекинг.
+            'max_hp', 'current_hp', 'temp_hp', 'hit_dice_used',
+            'exhaustion', 'conditions',
         ]
         for field in allowed_fields:
             if field in data:
@@ -234,7 +251,9 @@ class CharacterRepository(BaseRepository):
                     val = data[field] if isinstance(data[field], dict) else {}
                     params.append(json.dumps({**coins_default, **val}))
                 # Для полей типа ARRAY
-                elif field in ('rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals'):
+                elif field in ('rogue_expertise', 'auto_spells',
+                               'pact_tome_cantrips', 'pact_tome_rituals',
+                               'conditions'):
                     params.append(data[field] if data[field] is not None else [])
                 else:
                     params.append(data[field])
@@ -274,7 +293,11 @@ class CharacterRepository(BaseRepository):
                     row[field] = [] if field != 'coins' else {"cp": 0, "sp": 0, "ep": 0, "gp": 0, "pp": 0}
             elif val is None:
                 row[field] = [] if field != 'coins' else {"cp": 0, "sp": 0, "ep": 0, "gp": 0, "pp": 0}
-        array_fields = ['rogue_expertise', 'auto_spells', 'pact_tome_cantrips', 'pact_tome_rituals']
+        array_fields = [
+            'rogue_expertise', 'auto_spells',
+            'pact_tome_cantrips', 'pact_tome_rituals',
+            'conditions',
+        ]
         for field in array_fields:
             if row.get(field) is None:
                 row[field] = []

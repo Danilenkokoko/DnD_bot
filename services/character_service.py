@@ -482,6 +482,14 @@ class CharacterFinalizationService:
             'selected_secondary_weapon': selected_secondary_weapon,
             'selected_other_items': selected_other_items,
             'selected_coins': selected_coins,
+            # JSONB-поле coins для листа: стартовое золото из снаряжения класса
+            # кладём в gp; остальные монеты остаются 0. Раньше lock-репозиторий
+            # держал coins как пустой default, и на листе всегда было 0/0/0/0/0.
+            'coins': {
+                "cp": 0, "sp": 0, "ep": 0,
+                "gp": int(selected_coins or 0),
+                "pp": 0,
+            },
             'speed': speed,
             # Расовые/классовые опции 2024 PHB
             'draconic_ancestry': state_data.get('draconic_ancestry'),
@@ -494,6 +502,14 @@ class CharacterFinalizationService:
             'bond': state_data.get('bond'),
             'flaw': state_data.get('flaw'),
             'inspiration': bool(state_data.get('inspiration', False)),
+            # PHB 2024: новые поля HP/состояния. На L1 max_hp = current_hp = hp,
+            # temp_hp/hit_dice_used/exhaustion = 0, conditions — пусто.
+            'max_hp': hp,
+            'current_hp': hp,
+            'temp_hp': 0,
+            'hit_dice_used': 0,
+            'exhaustion': 0,
+            'conditions': [],
         }
 
     @staticmethod
@@ -555,7 +571,13 @@ class CharacterFinalizationService:
             # Снаряжение и стартовые монеты
             'selected_secondary_weapon': character_data.get('selected_secondary_weapon'),
             'selected_other_items': character_data.get('selected_other_items'),
-            'coins': {'cp': 0, 'sp': 0, 'ep': 0, 'gp': int(character_data.get('selected_coins', 0) or 0), 'pp': 0},
+            # PHB 2024: coins уже собраны в prepare_character_data из selected_coins.
+            # Если их там почему-то нет — собираем заново из selected_coins (fallback).
+            'coins': character_data.get('coins') or {
+                'cp': 0, 'sp': 0, 'ep': 0,
+                'gp': int(character_data.get('selected_coins', 0) or 0),
+                'pp': 0,
+            },
             # Расовые/классовые опции 2024 PHB
             'draconic_ancestry': character_data.get('draconic_ancestry'),
             'warlock_invocation': character_data.get('warlock_invocation'),
@@ -568,6 +590,14 @@ class CharacterFinalizationService:
             'bond': character_data.get('bond'),
             'flaw': character_data.get('flaw'),
             'inspiration': bool(character_data.get('inspiration', False)),
+            # PHB 2024 — расширенный HP/state-трекинг (Stage 5 миграции).
+            # Явно прокидываем поля, чтобы не зависеть от fallback в репозитории.
+            'max_hp':         character_data.get('max_hp',     character_data.get('hp', 0)),
+            'current_hp':     character_data.get('current_hp', character_data.get('hp', 0)),
+            'temp_hp':        int(character_data.get('temp_hp', 0) or 0),
+            'hit_dice_used':  int(character_data.get('hit_dice_used', 0) or 0),
+            'exhaustion':     int(character_data.get('exhaustion', 0) or 0),
+            'conditions':     character_data.get('conditions', []) or [],
         }
         if 'speed' in character_data and character_data['speed']:
             repo_data['speed'] = int(character_data['speed'])

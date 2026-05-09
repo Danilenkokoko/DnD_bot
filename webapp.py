@@ -85,7 +85,6 @@ CLASS_SYMBOLS = {
     "Плут":         "◈",
     "Чародей":      "✦",
     "Колдун":       "⛧",
-    "Чернокнижник": "⛧",
     "Волшебник":    "✦",
     "Артефактор":   "⚙",
 }
@@ -103,7 +102,6 @@ CLASS_PATTERNS = {
     "Плут":         "rogue",
     "Чародей":      "mage",
     "Колдун":       "warlock",
-    "Чернокнижник": "warlock",
     "Волшебник":    "mage",
     "Артефактор":   "default",
 }
@@ -122,7 +120,6 @@ HIT_DICE = {
     "Плут":       "к8",
     "Чародей":    "к6",
     "Колдун":     "к8",
-    "Чернокнижник": "к8",
     "Волшебник":  "к6",
     "Артефактор": "к8",
 }
@@ -133,40 +130,62 @@ def build_class_resources(class_name: str, level: int, mods: Dict[str, int]) -> 
     resources = []
 
     if class_name == "Монах":
-        ki = level
-        resources.append({"name": "Очки Ки", "icon": "fas fa-yin-yang", "total": ki, "used": 0})
+        # PHB 2024: Focus Points (бывшие Ki) у Монаха появляются с L2.
+        # На L1 ресурса нет — раньше блок показывался с total=1.
+        if level >= 2:
+            resources.append({"name": "Очки фокуса", "icon": "fas fa-yin-yang", "total": level, "used": 0})
 
     elif class_name == "Варвар":
         rages = 2 if level < 3 else (3 if level < 6 else 4)
         resources.append({"name": "Ярость", "icon": "fas fa-fire", "total": rages, "used": 0})
 
     elif class_name == "Бард":
+        # PHB 2024: Bardic Inspiration кость растёт по уровню барда —
+        # L1: d6, L5: d8, L10: d10, L15: d12. Количество = max(1, CHA_mod).
         insp = max(1, mods.get("CHA", 0))
-        resources.append({"name": "Вдохновение барда", "icon": "fas fa-music", "total": insp, "used": 0})
+        if   level >= 15: die = "d12"
+        elif level >= 10: die = "d10"
+        elif level >= 5:  die = "d8"
+        else:             die = "d6"
+        resources.append({
+            "name": f"Вдохновение барда ({die})",
+            "icon": "fas fa-music",
+            "total": insp, "used": 0,
+        })
 
     elif class_name == "Паладин":
         hp_reserve = level * 5
         resources.append({"name": f"Возложение рук ({hp_reserve} хп)", "icon": "fas fa-hand-holding-heart", "total": min(hp_reserve, 20), "used": 0})
 
-    elif class_name == "Колдун" or class_name == "Чернокнижник":
-        slots = 1 if level < 2 else 2
-        resources.append({"name": "Ячейки договора", "icon": "fas fa-moon", "total": slots, "used": 0})
+    # PHB 2024: для Колдуна Pact Magic слоты уже отображаются в блоке
+    # «Ячейки заклинаний» (Pact Magic — короткий отдых). Дублировать в
+    # ресурсах не нужно. Также удалена мёртвая ветка "Чернокнижник" —
+    # этого класса нет в seed_data.
+
 
     elif class_name == "Волшебник":
         recovery = max(1, level // 2)
         resources.append({"name": f"Арканное восстановление (ур.{recovery})", "icon": "fas fa-hat-wizard", "total": 1, "used": 0})
 
     elif class_name == "Друид":
-        resources.append({"name": "Облик зверя", "icon": "fas fa-paw", "total": 2, "used": 0})
+        # PHB 2024: Wild Shape с L2 (на L1 у друида ресурса нет).
+        if level >= 2:
+            resources.append({"name": "Облик зверя", "icon": "fas fa-paw", "total": 2, "used": 0})
 
     elif class_name == "Воин":
-        resources.append({"name": "Второе дыхание", "icon": "fas fa-wind", "total": 1, "used": 0})
+        # PHB 2024: Second Wind использований по уровню — L1-3: 2, L4-9: 3,
+        # L10-14: 4, L15+: 5. Раньше было захардкожено 1.
+        if level >= 15:   sw = 5
+        elif level >= 10: sw = 4
+        elif level >= 4:  sw = 3
+        else:             sw = 2
+        resources.append({"name": "Второе дыхание", "icon": "fas fa-wind", "total": sw, "used": 0})
 
     elif class_name == "Чародей":
-        # 2024 PHB: Sorcery Points appear at L2 (= level), not at L1.
-        # На 1 уровне total = 0; ресурс показываем для наглядности с total = level (2+).
-        points = level if level >= 2 else 0
-        resources.append({"name": "Очки чародейства", "icon": "fas fa-star", "total": points, "used": 0})
+        # PHB 2024: Sorcery Points появляются на L2 (= level). На L1 ресурса
+        # нет вообще — не добавляем (раньше показывался блок 0/0).
+        if level >= 2:
+            resources.append({"name": "Очки чародейства", "icon": "fas fa-star", "total": level, "used": 0})
 
     return resources
 
@@ -250,9 +269,9 @@ def build_attacks(char: Dict[str, Any], stats: Dict[str, int], proficiency_bonus
             "range":       "5 фут.",
         })
 
-    # 2024 PHB: Монах имеет Unarmed Strike как основную атаку
-    # (Martial Arts: 1d6 на 1-4 уровне, бьёт по DEX).
-    # Подмешиваем её в список атак для Монаха.
+    # PHB 2024: Unarmed Strike доступен ЛЮБОМУ персонажу.
+    # Базовый урон = 1 + STR_mod (дробящий, ближний 5 фт.).
+    # Монах с Martial Arts (L1: d6) использует max(STR, DEX) — отдельная запись.
     class_name = char.get("class_name")
     if class_name == "Монах":
         unarmed_mod = max(str_mod, dex_mod)
@@ -263,6 +282,18 @@ def build_attacks(char: Dict[str, Any], stats: Dict[str, int], proficiency_bonus
             "name":        "Безоружный удар (Боевые искусства)",
             "bonus":       f"{unarmed_sign}{unarmed_bonus}",
             "damage":      f"1к6{unarmed_dmg_sign}{unarmed_mod}",
+            "damage_type": "дробящий",
+            "range":       "5 фут.",
+        })
+    else:
+        # Стандартный безоружный удар: 1 + STR_mod.
+        u_bonus = str_mod + proficiency_bonus
+        u_sign  = "+" if u_bonus >= 0 else ""
+        d_sign  = "+" if str_mod >= 0 else ""
+        attacks.append({
+            "name":        "Безоружный удар",
+            "bonus":       f"{u_sign}{u_bonus}",
+            "damage":      f"1{d_sign}{str_mod}",
             "damage_type": "дробящий",
             "range":       "5 фут.",
         })
@@ -434,8 +465,17 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     # Монеты (2024 PHB: cp/sp/ep/gp/pp); если в БД пока нет — все нули.
     coins = char.get("coins") or {"cp": 0, "sp": 0, "ep": 0, "gp": 0, "pp": 0}
 
-    # Inspiration (2024 PHB) — флаг состояния (true/false).
-    inspiration = bool(char.get("inspiration", False))
+    # Heroic Inspiration (PHB 2024) — целочисленный счётчик. БД сейчас хранит
+    # BOOLEAN (наследие); приводим к int (0 или 1) — позже в схеме можно
+    # заменить на INTEGER без поломки шаблона.
+    raw_inspiration = char.get("inspiration", 0)
+    if isinstance(raw_inspiration, bool):
+        inspiration = int(raw_inspiration)
+    else:
+        try:
+            inspiration = max(0, int(raw_inspiration))
+        except (TypeError, ValueError):
+            inspiration = 0
 
     # 4 черты личности (2024 PHB).
     personality = {
@@ -510,21 +550,98 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     # экспертизу любого класса с этой фичей.
     expertise_set = set(char.get("rogue_expertise", []) or [])
 
+    # PHB 2024: на офиц. листе всегда показаны ВСЕ 18 навыков с галочкой
+    # proficiency. Поэтому идём по полному словарю SKILL_TO_STAT, а не только
+    # по выбранным `skills_list`.
+    proficient_skills = set(skills_list)
     skill_mods = {}
-    for skill in skills_list:
-        base_stat = SKILL_TO_STAT.get(skill, "DEX")
+    for skill, base_stat in SKILL_TO_STAT.items():
         mod = (stats[base_stat] - 10) // 2
-        # Навыки в skills_list уже выбраны как proficient — даём бонус мастерства.
-        mod += proficiency_bonus
-        # Если экспертиза — добавляем бонус ещё раз (всего ×2 от proficiency).
-        if skill in expertise_set:
+        if skill in proficient_skills:
             mod += proficiency_bonus
+            # Если экспертиза — добавляем бонус ещё раз (всего ×2 от proficiency).
+            if skill in expertise_set:
+                mod += proficiency_bonus
         skill_mods[skill] = f"{mod:+d}"
+
+    # PHB 2024: Пассивные значения = 10 + бонус навыка.
+    # На лист идут: Внимание (Восприятие), Расследование, Проницательность.
+    def _passive(skill_name: str, base_stat: str) -> int:
+        m = (stats[base_stat] - 10) // 2
+        if skill_name in proficient_skills:
+            m += proficiency_bonus
+            if skill_name in expertise_set:
+                m += proficiency_bonus
+        return 10 + m
+
+    passive_perception    = _passive("Восприятие",      "WIS")
+    passive_investigation = _passive("Расследование",   "INT")
+    passive_insight       = _passive("Проницательность", "WIS")
+
+    # PHB 2024 Spellcasting: считаем DC и бонус атаки заклинаниями.
+    # Spell Save DC      = 8 + proficiency_bonus + spellcasting_ability_mod
+    # Spell Attack Bonus =     proficiency_bonus + spellcasting_ability_mod
+    is_spellcaster = bool(class_info.get("is_spellcaster", False))
+    spell_ability_key = class_info.get("spellcasting_ability")
+    spellcasting = None
+    if is_spellcaster and spell_ability_key in stats:
+        sp_mod = mods[spell_ability_key]
+        ability_name_ru = {
+            "INT": "Интеллект",
+            "WIS": "Мудрость",
+            "CHA": "Харизма",
+        }.get(spell_ability_key, spell_ability_key)
+        spellcasting = {
+            "ability":      spell_ability_key,
+            "ability_name": ability_name_ru,
+            "ability_mod":  f"{sp_mod:+d}",
+            "save_dc":      8 + proficiency_bonus + sp_mod,
+            "attack_bonus": f"{proficiency_bonus + sp_mod:+d}",
+        }
 
     initiative = (stats['DEX'] - 10) // 2
     hp = int(char.get("hp", 0))
     ac = int(char.get("ac", 10))
     speed = int(char.get("speed", 30))
+
+    # PHB 2024 — AC breakdown текстом под значением.
+    # Если есть выбранная броня — указываем её имя; иначе формула "10 + DEX".
+    # Щит читаем из selected_secondary_weapon или selected_other_items.
+    _armor_name = char.get("selected_armor") or ""
+    _sec  = (char.get("selected_secondary_weapon") or "").lower()
+    _oth  = (char.get("selected_other_items") or "").lower()
+    _has_shield = ("щит" in _sec) or ("щит" in _oth)
+    _ac_parts = []
+    if _armor_name:
+        _ac_parts.append(_armor_name)
+    else:
+        _ac_parts.append(f"10 + DEX {mods['DEX']:+d}")
+    if _has_shield:
+        _ac_parts.append("Щит +2")
+    ac_breakdown = " + ".join(_ac_parts)
+
+    # PHB 2024 — Senses (Тёмное зрение N футов) и Movement modes (полёт/лазание/
+    # плавание) парсим из расовых черт. Не нашли — 0 (на лист не выводим).
+    import re as _re
+    def _parse_trait_value(traits, pattern):
+        for t in traits or []:
+            m = _re.search(pattern, str(t))
+            if m:
+                try:
+                    return int(m.group(1))
+                except ValueError:
+                    continue
+        return 0
+
+    darkvision_ft = _parse_trait_value(race_traits, r"[Тт]ёмн\w*\s+зрени\w*\s+(\d+)")
+    fly_speed     = _parse_trait_value(race_traits, r"[Сс]корост\w*\s+полёт\w*\s+(\d+)")
+    climb_speed   = _parse_trait_value(race_traits, r"[Сс]корост\w*\s+лазани\w*\s+(\d+)")
+    swim_speed    = _parse_trait_value(race_traits, r"[Сс]корост\w*\s+плавани\w*\s+(\d+)")
+    extra_speeds = []
+    if fly_speed:   extra_speeds.append({"label": "Полёт",   "value": fly_speed,   "icon": "fas fa-feather"})
+    if climb_speed: extra_speeds.append({"label": "Лазание", "value": climb_speed, "icon": "fas fa-mountain"})
+    if swim_speed:  extra_speeds.append({"label": "Плавание","value": swim_speed,  "icon": "fas fa-water"})
+
     level = int(char.get("level", 1))
     experience = int(char.get("experience", 0))
 
@@ -533,10 +650,15 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     hit_dice_total = level          # на 1 уровне = 1, растёт с уровнем
     hit_dice_used  = int(char.get("hit_dice_used", 0))
 
-    # Текущие и временные хиты (если не хранятся — равны максимуму)
-    max_hp     = int(char.get("max_hp", hp))
-    current_hp = int(char.get("current_hp", hp))
-    temp_hp    = int(char.get("temp_hp", 0))
+    # PHB 2024: HP/state-трекинг. После миграции БД эти колонки заполняются;
+    # для совместимости со старыми записями — fallback на hp.
+    max_hp     = int(char.get("max_hp")     if char.get("max_hp")     is not None else hp)
+    current_hp = int(char.get("current_hp") if char.get("current_hp") is not None else hp)
+    temp_hp    = int(char.get("temp_hp")    if char.get("temp_hp")    is not None else 0)
+    exhaustion = int(char.get("exhaustion") if char.get("exhaustion") is not None else 0)
+    conditions = char.get("conditions") or []
+    # Encumbrance / Carry Capacity (PHB 2024): носимая нагрузка = STR × 15 фунтов.
+    carry_capacity = stats["STR"] * 15
 
     # ── НОВЫЕ ПОЛЯ: ресурсы класса ─────────────────────────────────────────
     class_resources = build_class_resources(class_name_ru, level, mods)
@@ -553,6 +675,7 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "class_symbol":            CLASS_SYMBOLS.get(class_name_ru, "✦"),
         "class_pattern":           CLASS_PATTERNS.get(class_name_ru, "default"),
         "race":                    race_name,
+        "subrace_name":            char.get("subrace_name") or "",
         "level":                   level,
         "alignment":               alignment,
         "background":              background_name,
@@ -567,19 +690,32 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         "max_hp":                  max_hp,
         "current_hp":              current_hp,
         "temp_hp":                 temp_hp,
+        # ── PHB 2024 state ─────────────────────────────────────────────────
+        "exhaustion":              exhaustion,
+        "conditions":              conditions,
+        "carry_capacity":          carry_capacity,
         # ── Кость хитов ───────────────────────────────────────────────────
         "hit_die":                 hit_die,
         "hit_dice_total":          hit_dice_total,
         "hit_dice_used":           hit_dice_used,
         # ── Боевые ────────────────────────────────────────────────────────
         "ac":                      ac,
+        "ac_breakdown":            ac_breakdown,
         "speed":                   speed,
+        "extra_speeds":            extra_speeds,
+        "darkvision_ft":           darkvision_ft,
         "initiative":              initiative,
         "experience":              experience,
         "proficiency_bonus":       proficiency_bonus,
         "prof_saves":              saving_throws,
         "prof_skills":             skills_list,
         "skills":                  skill_mods,
+        # ── Пассивные значения (PHB 2024) ─────────────────────────────────
+        "passive_perception":      passive_perception,
+        "passive_investigation":   passive_investigation,
+        "passive_insight":         passive_insight,
+        # ── Spellcasting (PHB 2024) ───────────────────────────────────────
+        "spellcasting":            spellcasting,
         # ── Атаки и ресурсы ───────────────────────────────────────────────
         "attacks":                 attacks,
         "class_resources":         class_resources,

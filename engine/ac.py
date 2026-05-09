@@ -261,9 +261,40 @@ def validate_ac(ac: int, min_ac: int = 0, max_ac: int = 30) -> Tuple[bool, Optio
     return True, None
 
 
-def get_ac_range(dexterity: int, has_shield: bool = False) -> Tuple[int, int]:
+def get_ac_range(
+    dexterity: int,
+    has_shield: bool = False,
+    armor_type: Optional[ArmorType] = None,
+) -> Tuple[int, int]:
+    """
+    Возвращает диапазон AC с учётом типа брони.
+
+    PHB 2024:
+      • Без брони:  10 + DEX_mod (+ щит).
+      • Лёгкая:     армор_base + DEX_mod (+ щит). База 11..12.
+      • Средняя:    армор_base + min(2, DEX_mod) (+ щит). База 12..15.
+      • Тяжёлая:    армор_base (+ щит), без DEX. База 14..18.
+    """
     dex_mod = calculate_modifier(dexterity)
-    shield_bonus = 2 if has_shield else 0
-    min_ac = max(0, 10 + dex_mod + shield_bonus)
-    max_ac = 18 + shield_bonus
-    return (min_ac, max_ac)
+    shield = 2 if has_shield else 0
+
+    if armor_type is None or armor_type == ArmorType.NONE:
+        ac = 10 + dex_mod + shield
+        return (max(0, ac), ac)
+
+    if armor_type == ArmorType.LIGHT:
+        # 11..12 base + полный DEX
+        return (max(0, 11 + dex_mod + shield), 12 + dex_mod + shield)
+
+    if armor_type == ArmorType.MEDIUM:
+        # 12..15 base + min(2, DEX_mod)
+        dex_bonus = min(2, dex_mod)
+        return (max(0, 12 + dex_bonus + shield), 15 + dex_bonus + shield)
+
+    if armor_type == ArmorType.HEAVY:
+        # 14..18 base, DEX игнорируется
+        return (14 + shield, 18 + shield)
+
+    # Fallback на безбронник
+    ac = 10 + dex_mod + shield
+    return (max(0, ac), ac)

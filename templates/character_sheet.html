@@ -584,6 +584,9 @@
       <div class="combat-icon"><i class="fas fa-shield-alt"></i></div>
       <div class="combat-value">{{ ac }}</div>
       <div class="combat-label">Класс брони</div>
+      {% if ac_breakdown %}
+      <div style="font-size:9px;color:var(--ink-muted);margin-top:2px;text-align:center;line-height:1.2;">{{ ac_breakdown }}</div>
+      {% endif %}
     </div>
 
     <!-- Хиты + Временные хиты -->
@@ -638,6 +641,31 @@
       <div class="combat-value">{{ speed }}</div>
       <div class="combat-label">Скорость (фут.)</div>
     </div>
+
+    <!-- Бонус мастерства (PHB 2024) -->
+    <div class="combat-card">
+      <div class="combat-icon"><i class="fas fa-medal"></i></div>
+      <div class="combat-value">+{{ proficiency_bonus }}</div>
+      <div class="combat-label">Бонус мастерства</div>
+    </div>
+
+    {% if darkvision_ft and darkvision_ft > 0 %}
+    <!-- Тёмное зрение (PHB 2024 — Senses) -->
+    <div class="combat-card">
+      <div class="combat-icon"><i class="fas fa-eye"></i></div>
+      <div class="combat-value">{{ darkvision_ft }}</div>
+      <div class="combat-label">Тёмное зрение (фут.)</div>
+    </div>
+    {% endif %}
+
+    {% for s in extra_speeds %}
+    <!-- Дополнительная скорость (PHB 2024 — Movement modes) -->
+    <div class="combat-card">
+      <div class="combat-icon"><i class="{{ s.icon }}"></i></div>
+      <div class="combat-value">{{ s.value }}</div>
+      <div class="combat-label">{{ s.label }} (фут.)</div>
+    </div>
+    {% endfor %}
 
   </div><!-- /combat-grid -->
 
@@ -750,7 +778,8 @@
             </span>
           </div>
           <div class="save-value">
-            {{ mods[stat] + proficiency_bonus if stat in prof_saves else mods[stat] }}
+            {% set _save = mods[stat] + proficiency_bonus if stat in prof_saves else mods[stat] %}
+            {% if _save >= 0 %}+{% endif %}{{ _save }}
           </div>
         </div>
         {% endfor %}
@@ -768,6 +797,23 @@
           <div class="skill-value">{{ mod }}</div>
         </div>
         {% endfor %}
+      </div>
+
+      <!-- Пассивные значения (PHB 2024) -->
+      <div class="saving-card">
+        <div class="section-title">Пассивные значения</div>
+        <div class="saving-row">
+          <div class="skill-left"><span><i class="fas fa-eye"></i> Внимание (Восприятие)</span></div>
+          <div class="save-value">{{ passive_perception }}</div>
+        </div>
+        <div class="saving-row">
+          <div class="skill-left"><span><i class="fas fa-search"></i> Расследование</span></div>
+          <div class="save-value">{{ passive_investigation }}</div>
+        </div>
+        <div class="saving-row">
+          <div class="skill-left"><span><i class="fas fa-brain"></i> Проницательность</span></div>
+          <div class="save-value">{{ passive_insight }}</div>
+        </div>
       </div>
 
     </div><!-- /left-col -->
@@ -846,6 +892,29 @@
         {% endif %}
       </div>
 
+      <!-- Заклинательство (PHB 2024): способность, DC, бонус атаки -->
+      {% if spellcasting %}
+      <div class="block">
+        <div class="block-title">Заклинательство</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <tbody>
+            <tr>
+              <td style="padding:4px 8px;color:var(--ink-muted);">Заклинательная способность</td>
+              <td style="text-align:right;padding:4px 8px;font-weight:600;">{{ spellcasting.ability_name }} ({{ spellcasting.ability_mod }})</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 8px;color:var(--ink-muted);">Сложность спасброска</td>
+              <td style="text-align:right;padding:4px 8px;font-weight:600;">{{ spellcasting.save_dc }}</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 8px;color:var(--ink-muted);">Бонус атаки заклинанием</td>
+              <td style="text-align:right;padding:4px 8px;font-weight:600;">{{ spellcasting.attack_bonus }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
       <!-- Слоты заклинаний (D&D 5.5e 2024) -->
       {% if spell_slots and spell_slots|length > 0 %}
       <div class="block">
@@ -873,12 +942,15 @@
       </div>
       {% endif %}
 
-      <!-- Inspiration (D&D 5.5e 2024) -->
+      <!-- Heroic Inspiration (D&D 5.5e 2024) — целочисленный счётчик -->
       <div class="block">
-        <div class="block-title">Вдохновение</div>
-        <div style="display:flex;align-items:center;gap:10px;font-size:13px;">
-          <span style="display:inline-block;width:18px;height:18px;border:1.5px solid var(--ink-muted);border-radius:50%;background:{% if inspiration %}#fbbf24{% else %}transparent{% endif %};"></span>
-          <span style="color:var(--ink-muted);">{% if inspiration %}Активно{% else %}Не активно{% endif %}</span>
+        <div class="block-title">Героическое вдохновение</div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+          {% set _insp = inspiration if inspiration is defined else 0 %}
+          {% for i in range(3) %}
+          <span style="display:inline-block;width:18px;height:18px;border:1.5px solid var(--ink-muted);border-radius:50%;background:{% if i < _insp %}#fbbf24{% else %}transparent{% endif %};"></span>
+          {% endfor %}
+          <span style="margin-left:6px;color:var(--ink-muted);">{{ _insp }}</span>
         </div>
       </div>
 
@@ -889,6 +961,40 @@
         <ul>{% for trait in race_traits %}<li>{{ trait }}</li>{% endfor %}</ul>
       </div>
       {% endif %}
+
+      <!-- Истощение (PHB 2024 — 6 уровней) -->
+      <div class="block">
+        <div class="block-title">Истощение</div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:13px;">
+          {% set _ex = exhaustion if exhaustion is defined else 0 %}
+          {% for i in range(6) %}
+          <span title="Уровень {{ i+1 }}" style="display:inline-block;width:18px;height:18px;border:1.5px solid var(--ink-muted);border-radius:3px;background:{% if i < _ex %}#a32d2d{% else %}transparent{% endif %};"></span>
+          {% endfor %}
+          <span style="margin-left:8px;color:var(--ink-muted);">{{ _ex }} / 6</span>
+        </div>
+      </div>
+
+      <!-- Состояния (PHB 2024) -->
+      {% if conditions and conditions|length > 0 %}
+      <div class="block">
+        <div class="block-title">Состояния</div>
+        <ul>{% for c in conditions %}<li>{{ c }}</li>{% endfor %}</ul>
+      </div>
+      {% else %}
+      <div class="block">
+        <div class="block-title">Состояния</div>
+        <p style="color:var(--ink-muted);font-style:italic;">Нет активных состояний</p>
+      </div>
+      {% endif %}
+
+      <!-- Носимая нагрузка (PHB 2024 — Carry Capacity = STR × 15) -->
+      <div class="block">
+        <div class="block-title">Носимая нагрузка</div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;">
+          <span style="color:var(--ink-muted);">Грузоподъёмность (STR × 15)</span>
+          <span style="font-weight:600;">{{ carry_capacity }} фунт.</span>
+        </div>
+      </div>
 
       <!-- Спасброски смерти (D&D 5.5e 2024) -->
       <div class="block">
@@ -926,11 +1032,11 @@
       <div class="block">
         <div class="block-title">Монеты</div>
         <div style="display:flex;justify-content:space-around;font-size:13px;text-align:center;">
-          <div><div style="font-weight:600;">{{ coins.cp or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">CP</div></div>
-          <div><div style="font-weight:600;">{{ coins.sp or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">SP</div></div>
-          <div><div style="font-weight:600;">{{ coins.ep or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">EP</div></div>
-          <div><div style="font-weight:600;">{{ coins.gp or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">GP</div></div>
-          <div><div style="font-weight:600;">{{ coins.pp or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">PP</div></div>
+          <div><div style="font-weight:600;">{{ coins.cp or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">МД</div></div>
+          <div><div style="font-weight:600;">{{ coins.sp or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">СМ</div></div>
+          <div><div style="font-weight:600;">{{ coins.ep or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">ЭМ</div></div>
+          <div><div style="font-weight:600;">{{ coins.gp or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">ЗМ</div></div>
+          <div><div style="font-weight:600;">{{ coins.pp or 0 }}</div><div style="color:var(--ink-muted);font-size:10px;">ПМ</div></div>
         </div>
       </div>
       {% endif %}

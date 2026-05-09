@@ -171,33 +171,30 @@ def calculate_average_hp_gain(hit_die: int, constitution: int) -> int:
     Returns:
         int: средний прирост HP
     """
+    # PHB 2024: бонус за уровень = CON_mod НАПРЯМУЮ (может быть отрицательным).
+    # Минимум 1 HP за уровень — это floor на ИТОГ, а не на сам CON_mod.
     con_modifier = calculate_modifier(constitution)
-    hp_per_level_bonus = max(1, con_modifier)
     average_roll = (hit_die // 2) + 1
-    return max(1, average_roll + hp_per_level_bonus)
+    return max(1, average_roll + con_modifier)
 
 
 def calculate_minimum_hp(hit_die: int, constitution: int, level: int) -> int:
     """
     Рассчитывает минимально возможные HP при плохих бросках
 
-    Args:
-        hit_die: значение хитового кубика
-        constitution: значение характеристики CON
-        level: уровень персонажа
-
-    Returns:
-        int: минимальные HP
+    PHB 2024: на 1 уровне HP = max_die + CON_mod (без броска). На L2+ при
+    минимальном броске = 1 + CON_mod, с floor на каждый уровень в 1 HP.
+    CON_mod применяется НАПРЯМУЮ (может быть отрицательным); floor 1 HP
+    действует на итог за уровень, не на сам модификатор.
     """
     con_modifier = calculate_modifier(constitution)
-    hp_per_level_bonus = max(1, con_modifier)
 
-    # Минимум на 1 уровне: 1 + CON бонус
-    min_hp = max(1, 1 + hp_per_level_bonus)
+    # Минимум на 1 уровне: hit_die (он не «бросается») + CON_mod, не меньше 1
+    min_hp = max(1, hit_die + con_modifier)
 
-    # На каждом последующем уровне минимум: 1 + CON бонус
+    # На каждом последующем уровне минимум прибавки: 1 + CON_mod, floor 1
     for _ in range(2, level + 1):
-        min_hp += max(1, 1 + hp_per_level_bonus)
+        min_hp += max(1, 1 + con_modifier)
 
     return min_hp
 
@@ -206,23 +203,17 @@ def calculate_maximum_hp(hit_die: int, constitution: int, level: int) -> int:
     """
     Рассчитывает максимально возможные HP при идеальных бросках
 
-    Args:
-        hit_die: значение хитового кубика
-        constitution: значение характеристики CON
-        level: уровень персонажа
-
-    Returns:
-        int: максимальные HP
+    PHB 2024: CON_mod НАПРЯМУЮ (может быть отрицательным). Floor 1 HP
+    применяется к итоговой прибавке за уровень, не к самому модификатору.
     """
     con_modifier = calculate_modifier(constitution)
-    hp_per_level_bonus = max(1, con_modifier)
 
-    # Максимум на 1 уровне: hit_die + CON бонус
-    max_hp = max(1, hit_die + hp_per_level_bonus)
+    # Максимум на 1 уровне: hit_die + CON_mod (минимум 1)
+    max_hp = max(1, hit_die + con_modifier)
 
-    # На каждом последующем уровне максимум: hit_die + CON бонус
+    # На каждом последующем уровне максимум: hit_die + CON_mod (минимум 1)
     for _ in range(2, level + 1):
-        max_hp += max(1, hit_die + hp_per_level_bonus)
+        max_hp += max(1, hit_die + con_modifier)
 
     return max_hp
 

@@ -842,6 +842,14 @@ async def select_race(callback: CallbackQuery, state: FSMContext):
     race_size = CharacterStatsService.get_race_size(race)
     has_sub = CharacterStatsService.has_subraces(race)
     subraces_list = CharacterStatsService.get_subraces(race) if has_sub else []
+    # PHB 2024: у Драконорожденного НЕТ подрас — есть только Draconic Ancestry,
+    # который запрашивается отдельным шагом в `proceed_after_race`. Если в БД
+    # ошибочно остались записи в `subraces` (наследие старого seed_data.py),
+    # принудительно пропускаем шаг подрасы, чтобы не спрашивать игрока цвет
+    # дракона дважды.
+    if race == "Драконорожденный":
+        has_sub = False
+        subraces_list = []
     text = RACE_INFO_TEMPLATE.format(race=race, desc=race_desc, speed=race_speed, size=race_size)
     img_path = CharacterStatsService.get_race_image_path(race)
     if img_path and os.path.exists(img_path):

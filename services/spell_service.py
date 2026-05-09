@@ -95,15 +95,9 @@ class SpellSelectionService:
         base_cantrips = spell_counts.get('cantrips', 0)
         base_level1 = spell_counts.get('level1', 0)
 
-        logger.info(f"🔍 base_cantrips = {base_cantrips}, base_level1 = {base_level1}")
-
-        # Волшебник: увеличиваем количество заклинаний 1 уровня до 6
-        if class_name == "Волшебник":
-            base_level1 = 6
-
-        # Следопыт: заклинаний 1 уровня должно быть 2
-        if class_name == "Следопыт":
-            base_level1 = 2
+        # Прежний хардкод (Волшебник=6, Следопыт=2) убран: значения теперь
+        # хранятся в БД через seed_data.SPELL_COUNTS_L1 и backfill в db.init_db.
+        logger.info(f"🔍 base_cantrips = {base_cantrips}, base_level1 = {base_level1} (из БД)")
 
         cantrips_required = base_cantrips + extra_cantrips
         level1_required = base_level1

@@ -325,6 +325,60 @@ def init_db():
             # Inspiration (2024 PHB) — флаг (true/false).
             add_column_if_missing('inspiration', 'BOOLEAN DEFAULT FALSE')
 
+            # PHB 2024: расширенный трекинг HP/состояния персонажа.
+            # • max_hp / current_hp / temp_hp — отдельные значения, чтобы прогресс-бар
+            #   на листе показывал реальный процент.
+            # • hit_dice_used — сколько HD потрачено (для коротких отдыхов).
+            # • exhaustion — уровень истощения 0..6 (PHB 2024).
+            # • conditions — список текущих состояний (Очарован, Отравлен и т.д.).
+            add_column_if_missing('max_hp',         'INTEGER')
+            add_column_if_missing('current_hp',     'INTEGER')
+            add_column_if_missing('temp_hp',        'INTEGER DEFAULT 0')
+            add_column_if_missing('hit_dice_used',  'INTEGER DEFAULT 0')
+            add_column_if_missing('exhaustion',     'INTEGER DEFAULT 0')
+            add_column_if_missing('conditions',     "TEXT[] DEFAULT '{}'")
+
+            # Бэкфилл существующих записей: если max_hp/current_hp пустые —
+            # подтянуть из hp. Идемпотентно: WHERE … IS NULL не тронет уже
+            # заполненные значения.
+            cur.execute("UPDATE characters SET max_hp = hp WHERE max_hp IS NULL AND hp IS NOT NULL")
+            cur.execute("UPDATE characters SET current_hp = hp WHERE current_hp IS NULL AND hp IS NOT NULL")
+
+            # PHB 2024 — backfill cantrips_count/spells_count_level1 для классов,
+            # у которых в БД эти поля = 0 (старые установки до seed-фикса).
+            # Идемпотентно: WHERE … = 0 не задеть уже заполненные.
+            class_l1_counts = {
+                "Артефактор": (2, 2), "Бард": (2, 4), "Жрец": (3, 2),
+                "Друид": (2, 2), "Колдун": (2, 2), "Паладин": (0, 2),
+                "Следопыт": (0, 2), "Чародей": (4, 2), "Волшебник": (3, 6),
+            }
+            for cname, (c_cnt, l1_cnt) in class_l1_counts.items():
+                cur.execute("""
+                    UPDATE classes
+                    SET cantrips_count = %s, spells_count_level1 = %s
+                    WHERE name = %s AND (cantrips_count = 0 OR spells_count_level1 = 0)
+                """, (c_cnt, l1_cnt, cname))
+
+            # PHB 2024 — backfill полных описаний заклинаний (оригинальный
+            # текст бота). Если описание короче 100 символов — считаем
+            # старым/коротким и обновляем. Полные тексты длиной ~250-500.
+            try:
+                from scripts.spell_descriptions_full import SPELL_DESCRIPTIONS_2024
+            except ImportError:
+                SPELL_DESCRIPTIONS_2024 = {}
+            updated_spells = 0
+            for spell_name, full_desc in SPELL_DESCRIPTIONS_2024.items():
+                cur.execute("""
+                    UPDATE spells
+                    SET description = %s
+                    WHERE name = %s
+                      AND (description IS NULL OR LENGTH(description) < 100)
+                """, (full_desc, spell_name))
+                if cur.rowcount > 0:
+                    updated_spells += cur.rowcount
+            if updated_spells:
+                logger.info(f"Обновлены описания заклинаний: {updated_spells}")
+
             conn.commit()
             logger.info("Database initialized and migrated successfully")
 

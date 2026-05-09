@@ -127,11 +127,25 @@ def roll_dice_with_modifier(
         count: количество кубов
 
     Returns:
-        int: сумма бросков + модификатор (минимум 1)
+        int: сумма бросков + модификатор (без клампа — d20 атаки и неудачные
+        проверки могут давать значения <1; для урона используйте
+        roll_damage_with_modifier с клампом на 0).
     """
     roll = roll_dice(dice_type, count)
-    result = roll + modifier
-    return max(1, result)  # Минимум 1
+    return roll + modifier
+
+
+def roll_damage_with_modifier(
+        dice_type: DiceType,
+        modifier: int = 0,
+        count: int = 1
+) -> int:
+    """
+    Бросает урон с модификатором. Пол — 0 (а не 1): после резистов и
+    отрицательных модификаторов цель может получить 0 урона, что в правилах
+    D&D 5.5e разрешено.
+    """
+    return max(0, roll_dice_with_modifier(dice_type, modifier, count))
 
 
 # =========================================================
@@ -157,7 +171,8 @@ def parse_dice_expression(expression: str) -> Tuple[DiceType, int, int]:
     Raises:
         ValueError: если выражение некорректно
     """
-    expression = expression.lower().strip()
+    # Убираем пробелы целиком: PHB 2024 нотация терпит "1d20 + 5" как и "1d20+5".
+    expression = re.sub(r"\s+", "", expression.lower().strip())
 
     # Регулярное выражение для парсинга
     # Формат: [количество]d[тип][+/-модификатор]

@@ -115,18 +115,11 @@ RACES_DATA = {
     "Драконорожденный": {
         "speed": 30, "size": "Средний",
         "description": "Драконорождённые выглядят как бескрылые двуногие драконы — чешуйчатые, ширококостные, с рожками на головах.",
-        "subraces": {
-            "Чёрный": {"trait": "Кислотное дыхание", "description": "Чёрные драконорожденные дышат кислотой."},
-            "Синий": {"trait": "Электрическое дыхание", "description": "Синие драконорожденные дышат молнией."},
-            "Красный": {"trait": "Огненное дыхание", "description": "Красные драконорожденные дышат огнём."},
-            "Зелёный": {"trait": "Ядовитое дыхание", "description": "Зелёные драконорожденные дышат ядом."},
-            "Белый": {"trait": "Ледяное дыхание", "description": "Белые драконорожденные дышат холодом."},
-            "Золотой": {"trait": "Огненное дыхание", "description": "Золотые драконорожденные дышат огнём."},
-            "Серебряный": {"trait": "Ледяное дыхание", "description": "Серебряные драконорожденные дышат холодом."},
-            "Латунный": {"trait": "Огненное дыхание", "description": "Латунные драконорожденные дышат огнём."},
-            "Медный": {"trait": "Кислотное дыхание", "description": "Медные драконорожденные дышат кислотой."},
-            "Бронзовый": {"trait": "Электрическое дыхание", "description": "Бронзовые драконорожденные дышат молнией."}
-        }
+        # PHB 2024: у Драконорожденного нет подрас. Цвет дракона выбирается
+        # отдельным шагом Draconic Ancestry (см. proceed_after_race в
+        # handlers/character_handlers.py). Раньше здесь были «псевдо-подрасы»
+        # — они приводили к двойному запросу цвета дракона.
+        "subraces": {}
     },
     "Калаштар": {
         "speed": 30, "size": "Средний",
@@ -326,18 +319,39 @@ def migrate_classes(conn):
     logger.info("2. ПЕРЕНОС КЛАССОВ")
     logger.info("=" * 50)
 
+    # PHB 2024 — количество заклинаний на L1 для каждого класса.
+    # cantrips_count: сколько заговоров игрок выбирает при создании.
+    # spells_count_level1: сколько заклинаний 1 уровня (известных/в книге).
+    SPELL_COUNTS_L1 = {
+        "Артефактор": (2, 2),
+        "Бард":       (2, 4),
+        "Жрец":       (3, 2),
+        "Друид":      (2, 2),
+        "Колдун":     (2, 2),
+        "Паладин":    (0, 2),
+        "Следопыт":   (0, 2),
+        "Чародей":    (4, 2),
+        "Волшебник":  (3, 6),
+        # Не-кастеры: 0/0
+        "Варвар": (0, 0), "Воин": (0, 0), "Монах": (0, 0), "Плут": (0, 0),
+    }
+
     with conn.cursor() as cur:
         for class_name, class_data in CLASSES_DATA.items():
+            cantrips_l1, level1_l1 = SPELL_COUNTS_L1.get(class_name, (0, 0))
             cur.execute("""
-                INSERT INTO classes (name, hit_die, primary_stats, saving_throws, 
-                                     skill_choices, description, is_spellcaster, spellcasting_ability)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO classes (name, hit_die, primary_stats, saving_throws,
+                                     skill_choices, description, is_spellcaster,
+                                     spellcasting_ability, cantrips_count, spells_count_level1)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (name) DO UPDATE SET
                     hit_die = EXCLUDED.hit_die,
                     primary_stats = EXCLUDED.primary_stats,
                     saving_throws = EXCLUDED.saving_throws,
                     skill_choices = EXCLUDED.skill_choices,
-                    description = EXCLUDED.description
+                    description = EXCLUDED.description,
+                    cantrips_count = EXCLUDED.cantrips_count,
+                    spells_count_level1 = EXCLUDED.spells_count_level1
                 RETURNING id
             """, (
                 class_name,
@@ -347,10 +361,12 @@ def migrate_classes(conn):
                 class_data["skill_choices"],
                 class_data["description"],
                 class_data["is_spellcaster"],
-                class_data["spellcasting_ability"]
+                class_data["spellcasting_ability"],
+                cantrips_l1,
+                level1_l1,
             ))
             class_id = cur.fetchone()[0]
-            logger.info(f"  ✅ Класс '{class_name}' (ID: {class_id})")
+            logger.info(f"  ✅ Класс '{class_name}' (ID: {class_id})  [cantrips={cantrips_l1}, lvl1={level1_l1}]")
 
         conn.commit()
     logger.info("✅ Классы перенесены")
@@ -1275,6 +1291,14 @@ CLASS_SPELLS = {
 }
 
 
+# Полные описания (PHB 2024-механики, оригинальный текст бота).
+# Если для заклинания нет ключа — используется короткое описание из SPELLS_DATA.
+try:
+    from scripts.spell_descriptions_full import SPELL_DESCRIPTIONS_2024
+except ImportError:
+    SPELL_DESCRIPTIONS_2024 = {}
+
+
 def migrate_spells(conn, class_id_map):
     """Перенос заклинаний, связей с классами и рекомендаций"""
     logger.info("\n" + "=" * 50)
@@ -1285,12 +1309,15 @@ def migrate_spells(conn, class_id_map):
 
     with conn.cursor() as cur:
         for spell in SPELLS_DATA:
+            # Берём полное описание из spell_descriptions_full.py (PHB 2024).
+            # Если ключа нет — fallback на короткое описание из SPELLS_DATA.
+            full_desc = SPELL_DESCRIPTIONS_2024.get(spell["name"], spell["description"])
             cur.execute("""
                 INSERT INTO spells (name, level, is_cantrip, description)
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT (id) DO NOTHING
                 RETURNING id
-            """, (spell["name"], spell["level"], spell["is_cantrip"], spell["description"]))
+            """, (spell["name"], spell["level"], spell["is_cantrip"], full_desc))
 
             result = cur.fetchone()
             if result:

@@ -379,6 +379,26 @@ def init_db():
             if updated_spells:
                 logger.info(f"Обновлены описания заклинаний: {updated_spells}")
 
+            # PHB 2024 — backfill категорий (Урон/Защита/Лечение/...). Старые
+            # установки имели NULL/'Прочее' для всех заклинаний; теперь
+            # присваиваем правильные категории по словарю.
+            try:
+                from scripts.spell_categories import SPELL_CATEGORIES_2024
+            except ImportError:
+                SPELL_CATEGORIES_2024 = {}
+            updated_cats = 0
+            for spell_name, cat in SPELL_CATEGORIES_2024.items():
+                cur.execute("""
+                    UPDATE spells
+                    SET category = %s
+                    WHERE name = %s
+                      AND (category IS NULL OR category = 'Прочее' OR category = '')
+                """, (cat, spell_name))
+                if cur.rowcount > 0:
+                    updated_cats += cur.rowcount
+            if updated_cats:
+                logger.info(f"Обновлены категории заклинаний: {updated_cats}")
+
             conn.commit()
             logger.info("Database initialized and migrated successfully")
 

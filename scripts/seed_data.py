@@ -1298,6 +1298,12 @@ try:
 except ImportError:
     SPELL_DESCRIPTIONS_2024 = {}
 
+# Категории для UX выбора заклинаний (Урон/Защита/Лечение/...).
+try:
+    from scripts.spell_categories import SPELL_CATEGORIES_2024
+except ImportError:
+    SPELL_CATEGORIES_2024 = {}
+
 
 def migrate_spells(conn, class_id_map):
     """Перенос заклинаний, связей с классами и рекомендаций"""
@@ -1312,12 +1318,14 @@ def migrate_spells(conn, class_id_map):
             # Берём полное описание из spell_descriptions_full.py (PHB 2024).
             # Если ключа нет — fallback на короткое описание из SPELLS_DATA.
             full_desc = SPELL_DESCRIPTIONS_2024.get(spell["name"], spell["description"])
+            # Категория для UX выбора (Урон/Защита/...). Default — "Прочее".
+            category = SPELL_CATEGORIES_2024.get(spell["name"], "Прочее")
             cur.execute("""
-                INSERT INTO spells (name, level, is_cantrip, description)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO spells (name, level, is_cantrip, description, category)
+                VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO NOTHING
                 RETURNING id
-            """, (spell["name"], spell["level"], spell["is_cantrip"], full_desc))
+            """, (spell["name"], spell["level"], spell["is_cantrip"], full_desc, category))
 
             result = cur.fetchone()
             if result:

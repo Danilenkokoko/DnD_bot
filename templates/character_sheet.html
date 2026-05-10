@@ -1041,8 +1041,51 @@
       </div>
       {% endif %}
 
-      <!-- Заклинания -->
-      {% if spells and spells|length > 0 %}
+      <!-- Заклинания (PHB 2024) — раскрываемые по клику описания, группировка по категориям -->
+      {% if spells_full and spells_full|length > 0 %}
+      <div class="block">
+        <div class="block-title">Заклинания и заговоры</div>
+
+        {# Заговоры (level 0) #}
+        {% set _cantrips = spells_full | selectattr("is_cantrip") | list %}
+        {% if _cantrips %}
+        <div style="font-weight:600;margin:6px 0 4px 0;color:var(--accent);">Заговоры</div>
+        {% set _cats_c = _cantrips | map(attribute='category') | unique | list %}
+        {% for cat in _cats_c %}
+          <div style="font-size:11px;color:var(--ink-muted);margin:8px 0 2px 0;text-transform:uppercase;letter-spacing:0.5px;">{{ cat }}</div>
+          {% for sp in _cantrips if sp.category == cat %}
+          <details style="margin:2px 0;padding:4px 8px;background:rgba(0,0,0,0.03);border-radius:4px;border-left:2px solid var(--accent);">
+            <summary style="cursor:pointer;font-weight:500;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+              <span>✦ {{ sp.name }}</span>
+              <span style="font-size:10px;color:var(--ink-muted);">▼</span>
+            </summary>
+            <div style="margin-top:6px;font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--ink);">{{ sp.description }}</div>
+          </details>
+          {% endfor %}
+        {% endfor %}
+        {% endif %}
+
+        {# Заклинания 1+ уровня #}
+        {% set _spells_lvl = spells_full | rejectattr("is_cantrip") | list %}
+        {% if _spells_lvl %}
+        <div style="font-weight:600;margin:12px 0 4px 0;color:var(--accent);">Заклинания</div>
+        {% set _cats_s = _spells_lvl | map(attribute='category') | unique | list %}
+        {% for cat in _cats_s %}
+          <div style="font-size:11px;color:var(--ink-muted);margin:8px 0 2px 0;text-transform:uppercase;letter-spacing:0.5px;">{{ cat }}</div>
+          {% for sp in _spells_lvl if sp.category == cat %}
+          <details style="margin:2px 0;padding:4px 8px;background:rgba(0,0,0,0.03);border-radius:4px;border-left:2px solid var(--accent);">
+            <summary style="cursor:pointer;font-weight:500;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+              <span>✧ {{ sp.name }} <span style="font-size:10px;color:var(--ink-muted);">[ур. {{ sp.level }}]</span></span>
+              <span style="font-size:10px;color:var(--ink-muted);">▼</span>
+            </summary>
+            <div style="margin-top:6px;font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--ink);">{{ sp.description }}</div>
+          </details>
+          {% endfor %}
+        {% endfor %}
+        {% endif %}
+      </div>
+      {% elif spells and spells|length > 0 %}
+      {# Fallback для старых данных без spells_full #}
       <div class="block">
         <div class="block-title">Заклинания</div>
         <ul>{% for spell in spells %}<li>{{ spell }}</li>{% endfor %}</ul>

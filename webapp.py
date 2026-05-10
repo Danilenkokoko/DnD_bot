@@ -6,12 +6,13 @@
 """
 
 import os
+import re
 import logging
 from typing import Dict, Any, List
 from fastapi import FastAPI, HTTPException, Path
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
-from jinja2 import Template, Environment, FileSystemLoader
+from jinja2 import Environment
 from dotenv import load_dotenv
 
 # Репозитории
@@ -19,6 +20,7 @@ from repositories.character_repository import CharacterRepository
 from repositories.class_repository import ClassRepository
 from repositories.background_repository import BackgroundRepository
 from repositories.race_repository import RaceRepository
+from repositories.spell_repository import SpellRepository
 
 from engine.proficiency import calculate_proficiency_bonus
 from engine.spell_slots import get_spell_slots, is_pact_magic
@@ -54,6 +56,7 @@ _char_repo = CharacterRepository()
 _class_repo = ClassRepository()
 _bg_repo = BackgroundRepository()
 _race_repo = RaceRepository()
+_spell_repo = SpellRepository()
 
 # Цвета классов для PDF/HTML (в шестнадцатеричном формате)
 CLASS_COLORS = {
@@ -157,11 +160,9 @@ def build_class_resources(class_name: str, level: int, mods: Dict[str, int]) -> 
         hp_reserve = level * 5
         resources.append({"name": f"Возложение рук ({hp_reserve} хп)", "icon": "fas fa-hand-holding-heart", "total": min(hp_reserve, 20), "used": 0})
 
-    # PHB 2024: для Колдуна Pact Magic слоты уже отображаются в блоке
-    # «Ячейки заклинаний» (Pact Magic — короткий отдых). Дублировать в
-    # ресурсах не нужно. Также удалена мёртвая ветка "Чернокнижник" —
-    # этого класса нет в seed_data.
-
+    # NB: для Колдуна Pact Magic слоты идут в блоке «Ячейки заклинаний»;
+    # отдельный ресурс «Ячейки договора» был удалён как дубль. Класса
+    # «Чернокнижник» в seed_data.py нет — мёртвая ветка тоже удалена.
 
     elif class_name == "Волшебник":
         recovery = max(1, level // 2)
@@ -192,11 +193,14 @@ def build_class_resources(class_name: str, level: int, mods: Dict[str, int]) -> 
 
 # ── Блок атак из снаряжения персонажа ──────────────────────────────────────
 def build_attacks(char: Dict[str, Any], stats: Dict[str, int], proficiency_bonus: int) -> List[Dict]:
-    """Формирует список атак на основе выбранного оружия."""
+    """Формирует список атак: выбранное оружие (если есть) + безоружный удар.
+
+    PHB 2024: Unarmed Strike доступен ЛЮБОМУ персонажу (включая безоружных).
+    Поэтому ранний return при отсутствии оружия убран — мы всегда возвращаем
+    хотя бы один безоружный удар.
+    """
     attacks = []
     weapon = char.get("selected_weapon")
-    if not weapon:
-        return attacks
 
     str_mod = (stats["STR"] - 10) // 2
     dex_mod = (stats["DEX"] - 10) // 2
@@ -238,36 +242,38 @@ def build_attacks(char: Dict[str, Any], stats: Dict[str, int], proficiency_bonus
         "Арбалет":        ("1к10", "колющий",   "DEX",        "100/400 фут."),
     }
 
-    data = WEAPON_DATA.get(weapon)
-    if data:
-        dice, dmg_type, stat_key, rng = data
-        # 2024 PHB: Finesse — игрок выбирает STR или DEX (берём max).
-        if stat_key == "DEX_OR_STR":
-            mod = max(str_mod, dex_mod)
-        elif stat_key == "STR":
-            mod = str_mod
-        else:  # "DEX"
-            mod = dex_mod
-        bonus = mod + proficiency_bonus
-        sign = "+" if bonus >= 0 else ""
-        attacks.append({
-            "name":        weapon,
-            "bonus":       f"{sign}{bonus}",
-            "damage":      f"{dice}{'+' if mod >= 0 else ''}{mod}",
-            "damage_type": dmg_type,
-            "range":       rng,
-        })
-    else:
-        # Неизвестное оружие — базовый расчёт без кубика
-        bonus = str_mod + proficiency_bonus
-        sign = "+" if bonus >= 0 else ""
-        attacks.append({
-            "name":        weapon,
-            "bonus":       f"{sign}{bonus}",
-            "damage":      "—",
-            "damage_type": "—",
-            "range":       "5 фут.",
-        })
+    # Атака оружием — только если оно выбрано.
+    if weapon:
+        data = WEAPON_DATA.get(weapon)
+        if data:
+            dice, dmg_type, stat_key, rng = data
+            # 2024 PHB: Finesse — игрок выбирает STR или DEX (берём max).
+            if stat_key == "DEX_OR_STR":
+                mod = max(str_mod, dex_mod)
+            elif stat_key == "STR":
+                mod = str_mod
+            else:  # "DEX"
+                mod = dex_mod
+            bonus = mod + proficiency_bonus
+            sign = "+" if bonus >= 0 else ""
+            attacks.append({
+                "name":        weapon,
+                "bonus":       f"{sign}{bonus}",
+                "damage":      f"{dice}{'+' if mod >= 0 else ''}{mod}",
+                "damage_type": dmg_type,
+                "range":       rng,
+            })
+        else:
+            # Неизвестное оружие — базовый расчёт без кубика
+            bonus = str_mod + proficiency_bonus
+            sign = "+" if bonus >= 0 else ""
+            attacks.append({
+                "name":        weapon,
+                "bonus":       f"{sign}{bonus}",
+                "damage":      "—",
+                "damage_type": "—",
+                "range":       "5 фут.",
+            })
 
     # PHB 2024: Unarmed Strike доступен ЛЮБОМУ персонажу.
     # Базовый урон = 1 + STR_mod (дробящий, ближний 5 фт.).
@@ -395,6 +401,9 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     if not char:
         raise HTTPException(status_code=404, detail="Персонаж не найден")
 
+    # Уровень — используется во многих местах ниже; читаем один раз.
+    level = int(char.get("level", 1))
+
     stats = {
         "STR": int(char.get("str", 10)),
         "DEX": int(char.get("dex", 10)),
@@ -434,7 +443,7 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     class_info = _class_repo.get_by_name(class_name_ru) or {}
     saving_throws = class_info.get("saving_throws", [])
     # Бонус мастерства считается из уровня (D&D 5.5e таблица: 1-4 → +2, 5-8 → +3, ...)
-    proficiency_bonus = calculate_proficiency_bonus(int(char.get("level", 1)))
+    proficiency_bonus = calculate_proficiency_bonus(level)
 
     background_info = _bg_repo.get_by_name(background_name) or {}
     background_trait = background_info.get("trait", "")
@@ -445,12 +454,35 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     auto_spells = char.get("auto_spells", []) or []
     all_spells = list(set(selected_spells + auto_spells))
 
+    # PHB 2024 — для раскрытия описания на листе персонажа: подтягиваем полную
+    # информацию о каждом заклинании (имя, уровень, категория, описание).
+    # Группируем по категории, чтобы шаблон вывел блоками.
+    spells_full = []
+    for sp_name in all_spells:
+        sp_data = _spell_repo.get_by_name(sp_name) if hasattr(_spell_repo, 'get_by_name') else None
+        if sp_data:
+            spells_full.append({
+                "name":        sp_data.get("name", sp_name),
+                "level":       sp_data.get("level", 0),
+                "is_cantrip":  bool(sp_data.get("is_cantrip", False)),
+                "category":    sp_data.get("category") or "Прочее",
+                "description": sp_data.get("description") or "Описание отсутствует.",
+            })
+        else:
+            spells_full.append({
+                "name": sp_name, "level": 0, "is_cantrip": True,
+                "category": "Прочее", "description": "Описание отсутствует.",
+            })
+    # Сортировка: сначала заговоры (level 0), потом 1-й уровень; внутри — по категории.
+    _cat_order = ["Урон", "Лечение", "Защита", "Контроль", "Утилита", "Иллюзии", "Природа", "Прочее"]
+    spells_full.sort(key=lambda s: (s["level"], _cat_order.index(s["category"]) if s["category"] in _cat_order else 99, s["name"]))
+
     # 2024 PHB: языки (Общий + 2 от предыстории) и владение инструментами
     languages = char.get("languages", []) or []
     selected_tools = char.get("selected_tools", []) or []
 
     # 2024 PHB: ячейки заклинаний по уровню класса (для блока «Слоты заклинаний»).
-    spell_slots_dict = get_spell_slots(class_name_ru, int(char.get("level", 1)))
+    spell_slots_dict = get_spell_slots(class_name_ru, level)
     # Превращаем в список словарей для шаблона: [{level, total, used}, …].
     # Без отслеживания «использовано» в БД — пока used=0 везде.
     spell_slots_list = [
@@ -622,10 +654,9 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
 
     # PHB 2024 — Senses (Тёмное зрение N футов) и Movement modes (полёт/лазание/
     # плавание) парсим из расовых черт. Не нашли — 0 (на лист не выводим).
-    import re as _re
     def _parse_trait_value(traits, pattern):
         for t in traits or []:
-            m = _re.search(pattern, str(t))
+            m = re.search(pattern, str(t))
             if m:
                 try:
                     return int(m.group(1))
@@ -642,7 +673,7 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
     if climb_speed: extra_speeds.append({"label": "Лазание", "value": climb_speed, "icon": "fas fa-mountain"})
     if swim_speed:  extra_speeds.append({"label": "Плавание","value": swim_speed,  "icon": "fas fa-water"})
 
-    level = int(char.get("level", 1))
+    # `level` уже определён в начале функции — не пересчитываем.
     experience = int(char.get("experience", 0))
 
     # ── НОВЫЕ ПОЛЯ: кость хитов ────────────────────────────────────────────
@@ -722,6 +753,7 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         # ── Снаряжение и заклинания ───────────────────────────────────────
         "equipment":               equipment,
         "spells":                  all_spells,
+        "spells_full":             spells_full,
         # ── Языки и инструменты (2024 PHB) ────────────────────────────────
         "languages":               languages,
         "tools":                   selected_tools,

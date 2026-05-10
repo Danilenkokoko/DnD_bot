@@ -77,6 +77,16 @@ class SpellSelectionService:
         auto_level1 = []
         extra_cantrips = 0
 
+        # PHB 2024 — Pact of the Tome у Колдуна: 3 заговора и 2 ритуала уже
+        # выбраны на предыдущем шаге. Добавляем их в auto_cantrips/auto_level1,
+        # чтобы они не появлялись в обычном выборе и не было дублей.
+        pact_tome_cantrips = data.get("pact_tome_cantrips") or []
+        pact_tome_rituals  = data.get("pact_tome_rituals") or []
+        if pact_tome_cantrips:
+            auto_cantrips.extend(pact_tome_cantrips)
+        if pact_tome_rituals:
+            auto_level1.extend(pact_tome_rituals)
+
         if class_name == "Артефактор":
             auto_cantrips.append("Починка")
         elif class_name == "Друид":
@@ -305,12 +315,10 @@ class SpellSelectionService:
                 selector.add_level1_spell(spell)
         await state.update_data(spell_selector=selector.to_dict())
 
-        # Устанавливаем требуемое количество заклинаний
+        # Устанавливаем требуемое количество заклинаний.
+        # Прежний хардкод (Волшебник=6, Следопыт=2) удалён: теперь все
+        # значения берутся из БД через seed_data.SPELL_COUNTS_L1 (Stage 6).
         base_level1 = _class_repo.get_spell_counts(class_name).get('level1', 0)
-        if class_name == "Волшебник":
-            base_level1 = 6
-        if class_name == "Следопыт":
-            base_level1 = 2
         if selector.level1_state:
             selector.level1_state.required_count = base_level1
             await state.update_data(spell_selector=selector.to_dict())

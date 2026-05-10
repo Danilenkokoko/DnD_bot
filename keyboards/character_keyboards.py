@@ -309,7 +309,14 @@ def create_tome_picker_keyboard(
 ) -> InlineKeyboardMarkup:
     """
     Универсальная клавиатура выбора нескольких заклинаний/ритуалов из списка
-    (Pact of the Tome у Колдуна). Каждое callback: f"{callback_prefix}{name}".
+    (Pact of the Tome у Колдуна).
+
+    Telegram callback_data ограничен 64 байтами. Длинные русские названия
+    (например, "Сотворение или уничтожение воды" = ~57 байт + префикс) могут
+    превысить лимит и быть тихо отброшены. Поэтому в callback_data передаётся
+    spell ID, а handler сам резолвит ID → имя.
+
+    Каждое callback: f"{callback_prefix}{spell_id}".
     Кнопка «Готово» — `ready_callback`.
     """
     buttons = []
@@ -320,11 +327,12 @@ def create_tome_picker_keyboard(
     buttons.append([counter])
     for it in items:
         name = it.get("name", "?")
+        sp_id = it.get("id", 0)
         icon = "✅" if name in selected else "🔘"
         buttons.append([
             InlineKeyboardButton(
                 text=f"{icon} {name}",
-                callback_data=f"{callback_prefix}{name}",
+                callback_data=f"{callback_prefix}{sp_id}",
             )
         ])
     if len(selected) == limit:
@@ -374,36 +382,42 @@ def create_favored_enemy_keyboard() -> InlineKeyboardMarkup:
     buttons.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def create_character_list_with_webapp_keyboard(user_id: int) -> InlineKeyboardMarkup:
+def create_character_list_with_webapp_keyboard(
+    user_id: int,
+    webapp_base_url: Optional[str] = None,
+) -> InlineKeyboardMarkup:
     """
-    Клавиатура со списком персонажей пользователя и кнопкой WebApp.
-    Использует данные из БД, callback'и для просмотра и WebApp для полного редактирования.
+    Клавиатура со списком персонажей пользователя.
+    Для каждого персонажа — отдельная WebApp-кнопка с его ID.
+    Если webapp_base_url не передан — берётся из env WEBAPP_URL.
     """
     characters = get_user_characters(user_id)
+    base_url = webapp_base_url or os.getenv("WEBAPP_URL", "http://localhost:8000")
     buttons = []
     for char in characters:
+        # Кнопка-просмотр (открывает лист персонажа в WebApp).
         buttons.append([InlineKeyboardButton(
             text=f"📜 {char['name']}",
-            callback_data=f"view_char_{char['id']}"
-        )])
-    # Добавляем кнопку WebApp, если есть хотя бы один персонаж
-    if characters:
-        web_app_url = os.getenv("WEBAPP_URL", "http://localhost:8000")
-        buttons.append([InlineKeyboardButton(
-            text="🌐 Открыть в WebApp",
-            web_app=WebAppInfo(url=f"{web_app_url}/character/{characters[0]['id']}")
+            web_app=WebAppInfo(url=f"{base_url}/character/{char['id']}"),
         )])
     buttons.append([InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def create_delete_keyboard(character_id: int) -> InlineKeyboardMarkup:
+def create_delete_keyboard(characters: List[dict]) -> InlineKeyboardMarkup:
     """
-    Клавиатура подтверждения удаления персонажа.
+    Клавиатура выбора персонажа для удаления. На вход — список dict'ов
+    с ключами `id` и `name` (как возвращает CharacterRepository.get_by_user_id).
+    Каждый персонаж — отдельная кнопка с callback_data `delete_<id>`,
+    обрабатываемая в handlers/character_handlers.py:confirm_delete.
     """
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_{character_id}")],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_delete")]
-    ])
+    buttons = []
+    for char in characters or []:
+        buttons.append([InlineKeyboardButton(
+            text=f"🗑 {char.get('name', '?')}",
+            callback_data=f"delete_{char.get('id', 0)}",
+        )])
+    buttons.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_delete")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 # Алиас для обратной совместимости со старыми импортами
 create_character_list_keyboard = create_character_list_with_webapp_keyboard

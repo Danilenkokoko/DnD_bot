@@ -345,15 +345,43 @@ async def select_warlock_pact(callback: CallbackQuery, state: FSMContext):
 async def proceed_to_warlock_invocation(callback: CallbackQuery, state: FSMContext):
     """
     Колдун L1 (PHB 2024): выбор 1 воззвания.
-    Список тянем из БД (invocations). Если по какой-то причине список пуст —
-    помечаем поле None и идём дальше, чтобы не сломать флоу.
+    Фильтруем воззвания по выбранному пакту: воззвания с requires_pact_boon=True
+    показываются ТОЛЬКО если pact_boon_type совпадает с выбранным пактом.
+    Универсальные воззвания (без требования) видны всегда.
     """
-    invocations = CharacterStatsService.get_all_invocations(level=1)
-    if not invocations:
+    data = await state.get_data()
+    pact = (data.get("warlock_pact") or "").lower()
+    # Маппинг внутреннего ключа пакта → значение pact_boon_type в БД.
+    # Гомебрю-пакты (shadow_armor, arcane_mind) не дают доступа к
+    # «pact-bound» воззваниям, поэтому маппим их в None.
+    pact_to_db = {
+        "blade": "Blade",
+        "chain": "Chain",
+        "tome":  "Tome",
+        "shadow_armor": None,
+        "arcane_mind":  None,
+    }
+    pact_db_value = pact_to_db.get(pact)
+
+    all_invocations = CharacterStatsService.get_all_invocations(level=1)
+    if not all_invocations:
         logger.warning("Список воззваний пуст в БД — пропускаем шаг.")
         await state.update_data(warlock_invocation=None)
         await proceed_after_warlock_invocation(callback, state)
         return
+
+    # Фильтрация: универсальные + те, что требуют именно текущий пакт.
+    invocations = [
+        inv for inv in all_invocations
+        if not inv.get("requires_pact_boon")
+        or (pact_db_value and inv.get("pact_boon_type") == pact_db_value)
+    ]
+    if not invocations:
+        logger.warning(f"После фильтра по пакту {pact!r} воззваний не осталось.")
+        await state.update_data(warlock_invocation=None)
+        await proceed_after_warlock_invocation(callback, state)
+        return
+
     await state.set_state(CreateCharacter.warlock_invocation_select)
     text = "✨ Колдун L1 (2024): выбери одно воззвание:"
     await send_new_from_callback(
@@ -387,9 +415,11 @@ async def proceed_after_warlock_invocation(callback: CallbackQuery, state: FSMCo
 # ─── Гримуар: 3 заговора + 2 ритуала (D&D 5.5e 2024) ─────────────────
 
 async def proceed_to_tome_cantrips(callback: CallbackQuery, state: FSMContext):
-    """Pact of the Tome: выбор 3 заговоров из списка любого класса."""
-    # Используем заговоры Колдуна как разумное приближение списка любых заговоров.
-    cantrips = _spell_repo.get_cantrips_for_class("Колдун") or []
+    """Pact of the Tome: выбор 3 заговоров ИЗ ЛЮБОГО списка классов (PHB 2024).
+    Раньше тут был `get_cantrips_for_class("Колдун")` — что давало только
+    Warlock-заговоры. Правильно — `get_all(is_cantrip=True)`: вся БД заговоров.
+    """
+    cantrips = _spell_repo.get_all(is_cantrip=True) or []
     if not cantrips:
         logger.warning("Список заговоров пуст — пропускаем шаг tome cantrips.")
         await state.update_data(pact_tome_cantrips=[])
@@ -424,7 +454,18 @@ async def select_tome_cantrip(callback: CallbackQuery, state: FSMContext):
         await callback.answer("✅ Заговоры Книги теней выбраны")
         await proceed_to_tome_rituals(callback, state)
         return
-    name = callback.data.replace("tome_cantrip_", "")
+    # callback_data теперь содержит spell_id (а не имя — длинные русские
+    # названия превышали 64-байтный лимит Telegram). Резолвим ID → имя.
+    try:
+        sp_id = int(callback.data.replace("tome_cantrip_", ""))
+    except ValueError:
+        await callback.answer("❌ Некорректный ID заговора", show_alert=True)
+        return
+    sp_data = _spell_repo.get_by_id(sp_id)
+    if not sp_data:
+        await callback.answer("❌ Заговор не найден", show_alert=True)
+        return
+    name = sp_data.get("name")
     data = await state.get_data()
     selected = list(data.get("pact_tome_cantrips_selected", []))
     if name in selected:
@@ -435,7 +476,9 @@ async def select_tome_cantrip(callback: CallbackQuery, state: FSMContext):
     else:
         selected.append(name)
     await state.update_data(pact_tome_cantrips_selected=selected)
-    cantrips = _spell_repo.get_cantrips_for_class("Колдун") or []
+    # Перерисовка клавиатуры — items должны быть тем же списком,
+    # что и в proceed_to_tome_cantrips (все cantrips, не только Колдун).
+    cantrips = _spell_repo.get_all(is_cantrip=True) or []
     try:
         await callback.message.edit_reply_markup(
             reply_markup=create_tome_picker_keyboard(
@@ -494,7 +537,17 @@ async def select_tome_ritual(callback: CallbackQuery, state: FSMContext):
         await callback.answer("✅ Ритуалы Книги теней выбраны")
         await proceed_to_skills(callback, state)
         return
-    name = callback.data.replace("tome_ritual_", "")
+    # callback_data — spell_id (избегаем 64-байтного лимита Telegram).
+    try:
+        sp_id = int(callback.data.replace("tome_ritual_", ""))
+    except ValueError:
+        await callback.answer("❌ Некорректный ID ритуала", show_alert=True)
+        return
+    sp_data = _spell_repo.get_by_id(sp_id)
+    if not sp_data:
+        await callback.answer("❌ Ритуал не найден", show_alert=True)
+        return
+    name = sp_data.get("name")
     data = await state.get_data()
     selected = list(data.get("pact_tome_rituals_selected", []))
     if name in selected:
@@ -758,6 +811,50 @@ async def go_to_fighting_style(callback: CallbackQuery, state: FSMContext):
 async def go_to_background(callback: CallbackQuery, state: FSMContext):
     await state.set_state(CreateCharacter.background_select)
     await send_new_from_callback(callback, state, BACKGROUND_SELECT_TITLE, reply_markup=create_background_keyboard())
+
+
+# ─── Message-варианты переходов (для случаев, когда хендлер триггерит Message,
+# а не CallbackQuery — например, кнопка «Продолжить» в spell_handlers).
+# Без них callback.message.answer() ломается, т.к. Message не имеет .message ─
+
+async def go_to_fighting_style_from_message(message: Message, state: FSMContext):
+    """Аналог go_to_fighting_style, но для контекста Message."""
+    data = await state.get_data()
+    class_name = data.get("class_name")
+    if ProgressionService.should_select_fighting_style(class_name):
+        styles = CharacterStatsService.get_fighting_styles_for_class(class_name)
+        if not styles:
+            await send_new(state, message, FIGHTING_STYLE_NO_STYLES.format(class_name=class_name))
+            await go_to_background_from_message(message, state)
+            return
+        recommended_style_name = recommend_fighting_style(data.get("selected_weapon"))
+        styles_sorted = sorted(
+            styles,
+            key=lambda s: 0 if s.get('name') == recommended_style_name else 1,
+        )
+        styles_list = "\n".join([
+            f"• {'⭐ ' if s['name'] == recommended_style_name else ''}{s['name']} – {s['description']}"
+            for s in styles_sorted
+        ])
+        text = FIGHTING_STYLE_TITLE_TEMPLATE.format(class_name=class_name, styles_list=styles_list)
+        if any(s.get('name') == recommended_style_name for s in styles_sorted):
+            text += f"\n\n🎯 Рекомендация бота: {recommended_style_name} (выделен ⭐)."
+        buttons = []
+        for s in styles_sorted:
+            label_prefix = "⭐ " if s['name'] == recommended_style_name else "⚔️ "
+            buttons.append([InlineKeyboardButton(text=f"{label_prefix}{s['name']}", callback_data=f"style_{s['id']}")])
+        buttons.append([InlineKeyboardButton(text=FIGHTING_STYLE_BACK, callback_data="back_to_spells")])
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        await state.set_state(CreateCharacter.fighting_style_select)
+        await send_new(state, message, text, keyboard)
+    else:
+        await go_to_background_from_message(message, state)
+
+
+async def go_to_background_from_message(message: Message, state: FSMContext):
+    """Аналог go_to_background, но для контекста Message."""
+    await state.set_state(CreateCharacter.background_select)
+    await send_new(state, message, BACKGROUND_SELECT_TITLE, reply_markup=create_background_keyboard())
 
 # =========================================================
 # БОЕВОЙ СТИЛЬ

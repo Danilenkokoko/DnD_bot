@@ -10,7 +10,10 @@ from aiogram.fsm.context import FSMContext
 
 from states.character_states import CreateCharacter
 from services.spell_service import SpellSelectionService
-from handlers.character_handlers import go_to_fighting_style
+# Используем Message-вариант: continue_after_spells триггерится Message-ом
+# (нажатие кнопки «Продолжить»), а старый go_to_fighting_style ожидает
+# CallbackQuery → ломается на callback.message.answer().
+from handlers.character_handlers import go_to_fighting_style_from_message
 from spell_selector import SpellSelector
 
 # Импорт строковых констант
@@ -113,13 +116,16 @@ async def continue_after_spells(message: Message, state: FSMContext):
             return
 
         if selector.level1_state and selector.level1_state.remaining_count != 0:
-            logger.info("Переход к выбору заклинаний 1 уровня")
-            await SpellSelectionService.start_level1_selection(message, state)
+            # «Продолжить» нажат при незавершённом выборе заклинаний 1 уровня.
+            # Старая версия вызывала start_level1_selection(message,...), но эта
+            # функция ожидает CallbackQuery → ломалась на callback.message.answer.
+            # Корректнее — попросить игрока завершить выбор через инлайн-кнопки.
+            await message.answer(SPELL_NOT_COMPLETE_WARNING)
             return
 
         logger.info("Все заклинания выбраны, переход к боевому стилю")
-        await go_to_fighting_style(message, state)
+        await go_to_fighting_style_from_message(message, state)
         return
 
     logger.info("Нет данных о заклинаниях, переход к боевому стилю")
-    await go_to_fighting_style(message, state)
+    await go_to_fighting_style_from_message(message, state)

@@ -399,6 +399,21 @@ def init_db():
             if updated_cats:
                 logger.info(f"Обновлены категории заклинаний: {updated_cats}")
 
+            # Переименование старых имён воззваний колдуна (PHB 2024 — Pact Boon).
+            # «Недоговорённость» → «Договор». Идемпотентно.
+            invocation_renames = [
+                ("Недоговорённость клинка",   "Договор клинка"),
+                ("Недоговорённость цепи",     "Договор цепи"),
+                ("Недоговорённость гримуара", "Договор гримуара"),
+            ]
+            for old, new in invocation_renames:
+                cur.execute(
+                    "UPDATE invocations SET name = %s WHERE name = %s",
+                    (new, old),
+                )
+                if cur.rowcount > 0:
+                    logger.info(f"Переименовано воззвание: '{old}' → '{new}'")
+
             conn.commit()
             logger.info("Database initialized and migrated successfully")
 

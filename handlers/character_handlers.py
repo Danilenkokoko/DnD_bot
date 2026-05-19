@@ -36,12 +36,26 @@ from keyboards.character_keyboards import (
     create_draconic_ancestry_keyboard,
     create_warlock_invocation_keyboard,
     create_tome_picker_keyboard,
-    create_personality_intro_keyboard,
     create_favored_enemy_keyboard,
+    create_abilities_keyboard,
+    ABILITY_ORDER,
+    STANDARD_ARRAY,
+    # ── Этап 3 ─────────────────────────────────────────────────
+    create_origin_feat_keyboard,
+    create_languages_keyboard,
+    create_sorcerer_origin_keyboard,
+    create_sorcerer_origin_confirm_keyboard,
+    create_trinket_keyboard,
+    create_trinket_rolled_keyboard,
 )
 
 from services.character_service import CharacterStatsService, CharacterFinalizationService
-from services.progression_service import ProgressionService
+from services.telegram_sheet_service import send_full_sheet as _send_telegram_sheet
+from services.progression_service import (
+    ProgressionService,
+    WizardStep,
+    format_step_indicator,
+)
 from services.spell_service import SpellSelectionService
 from repositories.character_repository import CharacterRepository
 from repositories.race_repository import RaceRepository
@@ -56,7 +70,6 @@ from engine.validators import validate_name as engine_validate_name
 from services.auto_choices import (
     get_optimal_skills_for_class,
     recommend_fighting_style,
-    generate_personality_traits,
 )
 
 from strings import *
@@ -298,6 +311,10 @@ async def select_class(callback: CallbackQuery, state: FSMContext):
     elif class_name == "Колдун":
         await state.set_state(CreateCharacter.warlock_pact_select)
         await show_warlock_pact_selection(callback, state)
+    elif class_name == "Чародей":
+        # Этап 3.5: Sorcerous Origin на 1-м уровне (PHB 2024).
+        await state.set_state(CreateCharacter.sorcerer_origin_select)
+        await show_sorcerer_origin_selection(callback, state)
     else:
         await proceed_to_skills(callback, state)
     await callback.answer()
@@ -744,15 +761,24 @@ async def select_class_equipment(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     class_name = data.get("class_name")
     await state.update_data(equipment_choice=choice)
-    equipment = CharacterStatsService.get_class_equipment(class_name, choice)
-    if equipment:
-        eq = equipment[0]
-        await state.update_data(selected_armor=eq.get('armor'), selected_weapon=eq.get('weapon'), selected_secondary_weapon=eq.get('secondary_weapon'), selected_other_items=eq.get('other_items'), selected_coins=eq.get('coins', 0))
-        weapon_name = eq.get('weapon')
-        if weapon_name:
-            masteries = CharacterStatsService.auto_assign_masteries(weapon_name, class_name)
-            await state.update_data(selected_masteries=masteries)
-    await send_new_from_callback(callback, state, EQUIPMENT_SELECTED.format(choice=choice))
+    if choice == "gold":
+        # Этап 3.4: PHB 2024 — игрок берёт 50 GP вместо набора снаряжения.
+        await state.update_data(
+            selected_armor=None, selected_weapon=None,
+            selected_secondary_weapon=None, selected_other_items=None,
+            selected_coins=50, selected_masteries=[],
+        )
+        await callback.answer(EQUIPMENT_GOLD_TOAST)
+    else:
+        equipment = CharacterStatsService.get_class_equipment(class_name, choice)
+        if equipment:
+            eq = equipment[0]
+            await state.update_data(selected_armor=eq.get('armor'), selected_weapon=eq.get('weapon'), selected_secondary_weapon=eq.get('secondary_weapon'), selected_other_items=eq.get('other_items'), selected_coins=eq.get('coins', 0))
+            weapon_name = eq.get('weapon')
+            if weapon_name:
+                masteries = CharacterStatsService.auto_assign_masteries(weapon_name, class_name)
+                await state.update_data(selected_masteries=masteries)
+        await send_new_from_callback(callback, state, EQUIPMENT_SELECTED.format(choice=choice))
     await go_to_spells(callback, state)
     await callback.answer()
 
@@ -881,8 +907,18 @@ async def back_to_spells(callback: CallbackQuery, state: FSMContext):
 async def select_background_equipment(callback: CallbackQuery, state: FSMContext):
     choice = callback.data.replace("bg_equip_", "")
     await state.update_data(background_equipment_choice=choice)
-    await callback.answer(f"✅ Выбран вариант {choice}")
-    await calculate_and_show_stats(callback, state)
+    if choice == "gold":
+        # Этап 3.4: PHB 2024 — 50 GP вместо предметного набора
+        # предыстории. Прибавим к уже выданным class-coins.
+        data = await state.get_data()
+        existing = int(data.get("selected_coins", 0) or 0)
+        await state.update_data(selected_coins=existing + 50)
+        await callback.answer(EQUIPMENT_GOLD_TOAST)
+    else:
+        await callback.answer(f"✅ Выбран вариант {choice}")
+    # Этап 2: вместо авто-расчёта характеристик — переходим на шаг
+    # ручного назначения стандартного массива.
+    await start_abilities_step(callback, state)
 
 @router.callback_query(CreateCharacter.background_equipment_select, lambda c: c.data == "back_to_background")
 async def back_to_background_from_equipment(callback: CallbackQuery, state: FSMContext):
@@ -892,6 +928,153 @@ async def back_to_background_from_equipment(callback: CallbackQuery, state: FSMC
     await callback.answer()
 
 # =========================================================
+# ШАГ НАЗНАЧЕНИЯ ХАРАКТЕРИСТИК (Этап 2, стандартный массив PHB 2024)
+# =========================================================
+def _abilities_text(assigned: dict, current_ability: Optional[str]) -> str:
+    """Собирает текст экрана: интро + текущее состояние назначений."""
+    indicator = format_step_indicator(WizardStep.ABILITIES)
+    header = f"📍 {indicator}\n\n" if indicator else ""
+    lines = [header + ABILITIES_STEP_INTRO, ""]
+    for code in ABILITY_ORDER:
+        name = ABILITY_NAMES_RU[code]
+        value = assigned.get(code)
+        if value is None:
+            marker = "👉" if code == current_ability else "  "
+            lines.append(f"{marker} {name}: —")
+        else:
+            lines.append(f"   {name}: *{value}*")
+    if current_ability is not None:
+        lines.append("")
+        lines.append(ABILITIES_PROMPT_CURRENT.format(
+            ability=ABILITY_NAMES_RU[current_ability]
+        ))
+    else:
+        lines.append("")
+        lines.append(ABILITIES_ALL_DONE_HINT)
+    return "\n".join(lines)
+
+
+def _current_ability(assigned: dict) -> Optional[str]:
+    for code in ABILITY_ORDER:
+        if assigned.get(code) is None:
+            return code
+    return None
+
+
+def _free_values(assigned: dict) -> List[int]:
+    used = {v for v in assigned.values() if v is not None}
+    return [v for v in STANDARD_ARRAY if v not in used]
+
+
+def _empty_assignment() -> dict:
+    return {code: None for code in ABILITY_ORDER}
+
+
+async def start_abilities_step(callback: CallbackQuery, state: FSMContext):
+    """Инициализирует пустое назначение и показывает первый экран шага."""
+    assigned = _empty_assignment()
+    await state.update_data(assigned_scores=assigned)
+    await state.set_state(CreateCharacter.abilities_assign)
+    current = _current_ability(assigned)
+    free = _free_values(assigned)
+    text = _abilities_text(assigned, current)
+    keyboard = create_abilities_keyboard(assigned, free, current)
+    await send_new_from_callback(callback, state, text, reply_markup=keyboard)
+
+
+async def _rerender_abilities(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    assigned = data.get("assigned_scores") or _empty_assignment()
+    current = _current_ability(assigned)
+    free = _free_values(assigned)
+    text = _abilities_text(assigned, current)
+    keyboard = create_abilities_keyboard(assigned, free, current)
+    await send_new_from_callback(callback, state, text, reply_markup=keyboard)
+
+
+@router.callback_query(
+    CreateCharacter.abilities_assign,
+    lambda c: c.data and c.data.startswith("abl_")
+    and c.data not in ("abl_reset", "abl_next")
+)
+async def handle_ability_assign(callback: CallbackQuery, state: FSMContext):
+    """Назначает значение характеристике. Callback: abl_<STAT>_<VALUE>."""
+    parts = (callback.data or "").split("_")
+    if len(parts) != 3:
+        await callback.answer("⚠️ Некорректные данные кнопки")
+        return
+    _, stat, value_str = parts
+    if stat not in ABILITY_ORDER:
+        await callback.answer("⚠️ Неизвестная характеристика")
+        return
+    try:
+        value = int(value_str)
+    except ValueError:
+        await callback.answer("⚠️ Некорректное значение")
+        return
+    if value not in STANDARD_ARRAY:
+        await callback.answer("⚠️ Значение вне стандартного массива")
+        return
+
+    data = await state.get_data()
+    assigned = data.get("assigned_scores") or _empty_assignment()
+    if assigned.get(stat) is not None:
+        await callback.answer("⚠️ Эта характеристика уже назначена")
+        return
+    if value not in _free_values(assigned):
+        await callback.answer("⚠️ Это значение уже использовано")
+        return
+
+    assigned[stat] = value
+    await state.update_data(assigned_scores=assigned)
+    logger.info(f"[FLOW] Назначено {stat}={value}; осталось: {_free_values(assigned)}")
+    await callback.answer(ABILITIES_VALUE_SET_TOAST.format(
+        ability=ABILITY_NAMES_RU[stat], value=value
+    ))
+    await _rerender_abilities(callback, state)
+
+
+@router.callback_query(CreateCharacter.abilities_assign, lambda c: c.data == "abl_reset")
+async def handle_abilities_reset(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(assigned_scores=_empty_assignment())
+    await callback.answer(ABILITIES_RESET_TOAST)
+    await _rerender_abilities(callback, state)
+
+
+@router.callback_query(CreateCharacter.abilities_assign, lambda c: c.data == "abilities_back")
+async def handle_abilities_back(callback: CallbackQuery, state: FSMContext):
+    """Назад — на выбор набора предыстории."""
+    await state.set_state(CreateCharacter.background_equipment_select)
+    data = await state.get_data()
+    bg_name = data.get("background")
+    if bg_name:
+        await send_new_from_callback(
+            callback, state,
+            "Выбери набор предыстории заново:",
+            reply_markup=create_background_equipment_keyboard(bg_name),
+        )
+    else:
+        await state.set_state(CreateCharacter.background_select)
+        await send_new_from_callback(
+            callback, state,
+            "Выбери предысторию заново:",
+            reply_markup=create_background_keyboard(),
+        )
+    await callback.answer()
+
+
+@router.callback_query(CreateCharacter.abilities_assign, lambda c: c.data == "abl_next")
+async def handle_abilities_next(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    assigned = data.get("assigned_scores") or _empty_assignment()
+    if any(v is None for v in assigned.values()):
+        await callback.answer("⚠️ Сначала назначь все 6 характеристик")
+        return
+    await callback.answer()
+    await calculate_and_show_stats(callback, state)
+
+
+# =========================================================
 # РАСЧЁТ ХАРАКТЕРИСТИК
 # =========================================================
 async def calculate_and_show_stats(callback: CallbackQuery, state: FSMContext):
@@ -899,10 +1082,18 @@ async def calculate_and_show_stats(callback: CallbackQuery, state: FSMContext):
     class_name = data.get("class_name")
     background = data.get("background")
     equipment_choice = data.get("equipment_choice", "A")
+    # Этап 2: используем хар-ки, назначенные игроком вручную на шаге
+    # abilities_assign. Fallback на None (а оттуда — на старый
+    # CLASS_STARTING_STATS) сохранён для обратной совместимости со
+    # старыми сессиями, где этого шага ещё не было.
+    assigned = data.get("assigned_scores")
+    base_stats_dict = None
+    if assigned and all(v is not None for v in assigned.values()):
+        base_stats_dict = dict(assigned)
     stats_result = CharacterStatsService.calculate_and_format_stats(
         class_name=class_name,
         background=background,
-        base_stats_dict=None,
+        base_stats_dict=base_stats_dict,
         equipment_choice=equipment_choice
     )
     await state.update_data(final_stats=stats_result['stats'], stats=stats_result['stats'], hp=stats_result['hp'], ac=stats_result['ac'])
@@ -987,7 +1178,8 @@ async def proceed_after_race(callback: CallbackQuery, state: FSMContext):
             reply_markup=create_draconic_ancestry_keyboard(),
         )
         return
-    await go_to_name(callback, state)
+    # Этап 3.1: после расы идём на общий шаг выбора языков.
+    await start_language_step(callback, state)
 
 
 @router.callback_query(CreateCharacter.draconic_ancestry_select, lambda c: c.data.startswith("draconic_"))
@@ -1004,7 +1196,8 @@ async def select_draconic_ancestry(callback: CallbackQuery, state: FSMContext):
     await state.update_data(draconic_ancestry=label)
     await callback.answer(f"✅ Тип дракона: {label}")
     logger.info(f"[FLOW] Драконорождённый: {label}")
-    await go_to_name(callback, state)
+    # Этап 3.1: после расовых уточнений — общий шаг выбора языков.
+    await start_language_step(callback, state)
 
 @router.callback_query(lambda c: c.data == "back_to_races")
 async def back_to_races(callback: CallbackQuery, state: FSMContext):
@@ -1070,156 +1263,9 @@ async def select_alignment(callback: CallbackQuery, state: FSMContext):
     await state.update_data(alignment=alignment_name)
     logger.info(f"[FLOW] Выбрано мировоззрение: {alignment_name}")
     await callback.answer(ALIGNMENT_SELECTED.format(alignment=alignment_name))
-    # 2024 PHB: после мировоззрения — шаг 4 черт личности (Trait/Ideal/Bond/Flaw),
-    # затем картинка.
-    await proceed_to_personality_intro(callback, state)
-
-
-# =========================================================
-# 4 ЧЕРТЫ ЛИЧНОСТИ (D&D 5.5e 2024) — пункт #30
-# =========================================================
-
-async def proceed_to_personality_intro(callback: CallbackQuery, state: FSMContext):
-    """Экран выбора режима: 🎲 авто / ✍️ ручной ввод / ⏩ пропустить."""
-    text = (
-        "🎭 Черты личности (D&D 5.5e 2024)\n\n"
-        "Выбери, как сформировать 4 нарративных поля:\n"
-        "• Черта личности\n• Идеал\n• Привязанность\n• Недостаток"
-    )
-    await state.set_state(CreateCharacter.personality_intro)
-    await send_new_from_callback(
-        callback, state, text,
-        reply_markup=create_personality_intro_keyboard(),
-    )
-
-
-@router.callback_query(CreateCharacter.personality_intro, lambda c: c.data == "pers_auto")
-async def personality_auto(callback: CallbackQuery, state: FSMContext):
-    auto = generate_personality_traits()
-    await state.update_data(
-        personality_trait=auto["personality_trait"],
-        ideal=auto["ideal"],
-        bond=auto["bond"],
-        flaw=auto["flaw"],
-    )
-    await callback.answer("✅ Черты сгенерированы")
-    await _go_to_image_step(callback, state)
-
-
-@router.callback_query(CreateCharacter.personality_intro, lambda c: c.data == "pers_skip")
-async def personality_skip(callback: CallbackQuery, state: FSMContext):
-    # Оставляем поля пустыми; auto-дефолты подставятся в save_character.
-    await callback.answer("⏩ Шаг пропущен")
-    await _go_to_image_step(callback, state)
-
-
-@router.callback_query(CreateCharacter.personality_intro, lambda c: c.data == "pers_manual")
-async def personality_manual(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(CreateCharacter.personality_trait_input)
-    await send_new_from_callback(
-        callback, state,
-        "✍️ Введи свою Черту личности (одной фразой). До 500 символов.",
-        reply_markup=skip_kb(),
-    )
-    await callback.answer()
-
-
-def _validate_personality_text(text: str, max_len: int = 500) -> Optional[str]:
-    """Валидирует текстовый ввод. Возвращает обрезанную строку или None если пусто."""
-    if not text:
-        return None
-    text = text.strip()
-    if not text:
-        return None
-    return text[:max_len]
-
-
-@router.message(CreateCharacter.personality_trait_input)
-async def input_personality_trait(message: Message, state: FSMContext):
-    if message.text == BTN_CANCEL:
-        await cancel_creation(message, state)
-        return
-    if message.text == BTN_SKIP:
-        # Заполним пустую черту через auto и пропустим к идеалу.
-        auto = generate_personality_traits()
-        await state.update_data(personality_trait=auto["personality_trait"])
-    else:
-        val = _validate_personality_text(message.text)
-        if not val:
-            await message.answer("❌ Пустой ввод. Введи текст или нажми «⏩ Пропустить».", reply_markup=skip_kb())
-            return
-        await state.update_data(personality_trait=val)
-        try:
-            await message.delete()
-        except Exception:
-            pass
-    await state.set_state(CreateCharacter.personality_ideal_input)
-    await send_new(state, message, "✍️ Введи свой Идеал. Можно с указанием мировоззрения в скобках.", reply_markup=skip_kb())
-
-
-@router.message(CreateCharacter.personality_ideal_input)
-async def input_personality_ideal(message: Message, state: FSMContext):
-    if message.text == BTN_CANCEL:
-        await cancel_creation(message, state)
-        return
-    if message.text == BTN_SKIP:
-        auto = generate_personality_traits()
-        await state.update_data(ideal=auto["ideal"])
-    else:
-        val = _validate_personality_text(message.text)
-        if not val:
-            await message.answer("❌ Пустой ввод. Введи текст или нажми «⏩ Пропустить».", reply_markup=skip_kb())
-            return
-        await state.update_data(ideal=val)
-        try:
-            await message.delete()
-        except Exception:
-            pass
-    await state.set_state(CreateCharacter.personality_bond_input)
-    await send_new(state, message, "✍️ Введи свою Привязанность (что или кто важно для персонажа).", reply_markup=skip_kb())
-
-
-@router.message(CreateCharacter.personality_bond_input)
-async def input_personality_bond(message: Message, state: FSMContext):
-    if message.text == BTN_CANCEL:
-        await cancel_creation(message, state)
-        return
-    if message.text == BTN_SKIP:
-        auto = generate_personality_traits()
-        await state.update_data(bond=auto["bond"])
-    else:
-        val = _validate_personality_text(message.text)
-        if not val:
-            await message.answer("❌ Пустой ввод. Введи текст или нажми «⏩ Пропустить».", reply_markup=skip_kb())
-            return
-        await state.update_data(bond=val)
-        try:
-            await message.delete()
-        except Exception:
-            pass
-    await state.set_state(CreateCharacter.personality_flaw_input)
-    await send_new(state, message, "✍️ Введи Недостаток своего персонажа.", reply_markup=skip_kb())
-
-
-@router.message(CreateCharacter.personality_flaw_input)
-async def input_personality_flaw(message: Message, state: FSMContext):
-    if message.text == BTN_CANCEL:
-        await cancel_creation(message, state)
-        return
-    if message.text == BTN_SKIP:
-        auto = generate_personality_traits()
-        await state.update_data(flaw=auto["flaw"])
-    else:
-        val = _validate_personality_text(message.text)
-        if not val:
-            await message.answer("❌ Пустой ввод. Введи текст или нажми «⏩ Пропустить».", reply_markup=skip_kb())
-            return
-        await state.update_data(flaw=val)
-        try:
-            await message.delete()
-        except Exception:
-            pass
-    await _go_to_image_step_from_message(message, state)
+    # NOTE (этап 1): шаг «4 черты личности» удалён по запросу владельца проекта.
+    # Этап 3.2: после мировоззрения — шаг безделушки (Trinket), потом картинка.
+    await start_trinket_step(callback, state)
 
 
 async def _go_to_image_step(callback: CallbackQuery, state: FSMContext):
@@ -1259,6 +1305,10 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
         char_data['druid_order'] = data.get("druid_order")
         char_data['cleric_order'] = data.get("cleric_order")
         char_data['warlock_pact'] = data.get("warlock_pact")
+        # Этап 3 PHB 2024: новые нарративные/механические поля.
+        char_data['sorcerer_origin'] = data.get("sorcerer_origin")
+        char_data['trinket'] = data.get("trinket")
+        char_data['languages'] = data.get("chosen_languages", [])
         char_data['rogue_expertise'] = data.get("rogue_expertise", [])
         char_data['rogue_extra_language'] = data.get("rogue_extra_language")
         char_data['auto_spells'] = data.get("auto_spells", [])
@@ -1306,6 +1356,14 @@ async def finalize_character(message: Message, state: FSMContext, image_file_id:
             await message.answer_photo(photo=image_file_id, caption=caption, reply_markup=keyboard, parse_mode=None)
         else:
             await message.answer(caption, reply_markup=keyboard, parse_mode=None)
+        # Этап 5: дополнительно — текстовый лист в 5 сообщениях (PHB 2024).
+        # Веб/PDF остаются основным форматом; это удобство для просмотра
+        # листа прямо в чате без открытия Web App.
+        try:
+            await _send_telegram_sheet(message, char_data)
+        except Exception as e:
+            logger.error(f"telegram_sheet: общая ошибка отправки 5-сообщений: {e}",
+                         exc_info=True)
         await message.answer(MENU_TITLE, reply_markup=main_menu())
         await state.clear()
     except Exception as e:
@@ -1366,9 +1424,14 @@ async def select_background(callback: CallbackQuery, state: FSMContext):
             f"Теперь выбери снаряжение от предыстории:")
 
     await send_new_from_callback(callback, state, text)
-    await state.set_state(CreateCharacter.background_equipment_select)
-    await send_new_from_callback(callback, state, "Выбери один из стартовых наборов:",
-                                 reply_markup=create_background_equipment_keyboard(background))
+    # Этап 3.3: если у предыстории есть Origin Feat — показываем
+    # отдельным экраном, ждём подтверждения, и только потом — снаряжение.
+    if origin_feat:
+        await show_origin_feat_step(callback, state, background, origin_feat)
+    else:
+        await state.set_state(CreateCharacter.background_equipment_select)
+        await send_new_from_callback(callback, state, "Выбери один из стартовых наборов:",
+                                     reply_markup=create_background_equipment_keyboard(background))
     await callback.answer()
 
 # =========================================================
@@ -1442,3 +1505,249 @@ async def unknown_command(message: Message, state: FSMContext):
         await message.answer(UNKNOWN_IN_PROGRESS, reply_markup=cancel_kb())
     else:
         await message.answer(UNKNOWN_IDLE, reply_markup=main_menu())
+
+
+# =============================================================================
+# ЭТАП 3.5: Sorcerous Origin для Чародея (PHB 2024)
+# =============================================================================
+async def show_sorcerer_origin_selection(callback: CallbackQuery, state: FSMContext):
+    """Показывает выбор Sorcerous Origin (после select_class для Чародея)."""
+    await send_new_from_callback(
+        callback, state,
+        SORCERER_ORIGIN_TITLE,
+        reply_markup=create_sorcerer_origin_keyboard(),
+    )
+
+
+@router.callback_query(
+    CreateCharacter.sorcerer_origin_select,
+    lambda c: c.data and c.data.startswith("sorcorigin_")
+    and not c.data.startswith("sorcorigin_confirm_")
+    and c.data != "sorcorigin_back"
+)
+async def select_sorcerer_origin(callback: CallbackQuery, state: FSMContext):
+    """Показывает описание выбранного origin + кнопку «Выбрать»."""
+    from services.auto_choices import get_sorcerer_origin
+    code = callback.data.replace("sorcorigin_", "")
+    origin = get_sorcerer_origin(code)
+    if not origin:
+        await callback.answer("⚠️ Неизвестное происхождение")
+        return
+    text = SORCERER_ORIGIN_INFO_TEMPLATE.format(
+        name=origin["name"], desc=origin["desc"]
+    )
+    await send_new_from_callback(
+        callback, state, text,
+        reply_markup=create_sorcerer_origin_confirm_keyboard(code),
+    )
+    await callback.answer()
+
+
+@router.callback_query(
+    CreateCharacter.sorcerer_origin_select,
+    lambda c: c.data and c.data.startswith("sorcorigin_confirm_")
+)
+async def confirm_sorcerer_origin(callback: CallbackQuery, state: FSMContext):
+    from services.auto_choices import get_sorcerer_origin
+    code = callback.data.replace("sorcorigin_confirm_", "")
+    origin = get_sorcerer_origin(code)
+    if not origin:
+        await callback.answer("⚠️ Неизвестное происхождение")
+        return
+    await state.update_data(sorcerer_origin=origin["name"])
+    logger.info(f"[FLOW] Sorcerous Origin: {origin['name']}")
+    await callback.answer(SORCERER_ORIGIN_SELECTED_TOAST.format(name=origin["name"]))
+    await proceed_to_skills(callback, state)
+
+
+@router.callback_query(
+    CreateCharacter.sorcerer_origin_select,
+    lambda c: c.data == "sorcorigin_back"
+)
+async def back_to_sorcerer_origin(callback: CallbackQuery, state: FSMContext):
+    await show_sorcerer_origin_selection(callback, state)
+    await callback.answer()
+
+
+# =============================================================================
+# ЭТАП 3.3: Origin Feat — экран показа черты от предыстории
+# =============================================================================
+async def show_origin_feat_step(
+    callback: CallbackQuery,
+    state: FSMContext,
+    background: str,
+    feat_name: str,
+):
+    """Показывает экран с описанием Origin Feat и кнопкой «Принять»."""
+    await state.set_state(CreateCharacter.origin_feat_show)
+    text = ORIGIN_FEAT_SHOW_TEMPLATE.format(
+        feat_name=feat_name, background=background
+    )
+    await send_new_from_callback(
+        callback, state, text,
+        reply_markup=create_origin_feat_keyboard(),
+    )
+
+
+@router.callback_query(
+    CreateCharacter.origin_feat_show,
+    lambda c: c.data == "origin_feat_accept"
+)
+async def accept_origin_feat(callback: CallbackQuery, state: FSMContext):
+    """Подтверждение Origin Feat → переход к выбору набора предыстории."""
+    data = await state.get_data()
+    background = data.get("background")
+    await state.set_state(CreateCharacter.background_equipment_select)
+    await send_new_from_callback(
+        callback, state,
+        "Выбери один из стартовых наборов:",
+        reply_markup=create_background_equipment_keyboard(background),
+    )
+    await callback.answer("✅ Origin Feat принят")
+
+
+# =============================================================================
+# ЭТАП 3.1: Общий выбор языков (после расовых уточнений)
+# =============================================================================
+def _get_available_languages() -> list:
+    """Возвращает список языков из БД (таблица languages)."""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT name FROM languages ORDER BY name")
+                return [row[0] for row in cur.fetchall()]
+    except Exception as e:
+        logger.warning(f"Не удалось загрузить языки из БД: {e}")
+        return ["Эльфийский", "Дварфийский", "Гномий", "Полуросликов",
+                "Гоблинский", "Оркский", "Драконий", "Небесный"]
+
+
+MAX_LANGUAGES = 2
+
+
+async def start_language_step(callback: CallbackQuery, state: FSMContext):
+    """Точка входа в шаг выбора языков."""
+    available = _get_available_languages()
+    data = await state.get_data()
+    # Предлагаем дефолтные языки от предыстории как подсказку.
+    bg = data.get("background")
+    default_extras = []
+    if bg:
+        from services.auto_choices import get_default_languages_for_background
+        all_default = get_default_languages_for_background(bg)
+        # Убираем «Общий» — он включён всегда.
+        default_extras = [l for l in all_default if l != "Общий"][:MAX_LANGUAGES]
+    await state.update_data(chosen_languages=list(default_extras))
+    await state.set_state(CreateCharacter.language_select)
+    await _rerender_language_step(callback, state)
+
+
+async def _rerender_language_step(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    selected = list(data.get("chosen_languages", []))
+    available = _get_available_languages()
+    indicator = format_step_indicator(WizardStep.LANGUAGES)
+    header = f"📍 {indicator}\n\n" if indicator else ""
+    text = header + LANGUAGES_SELECT_TITLE.format(
+        selected_count=len(selected),
+        max_count=MAX_LANGUAGES,
+    )
+    keyboard = create_languages_keyboard(available, selected, MAX_LANGUAGES)
+    await send_new_from_callback(callback, state, text, reply_markup=keyboard)
+
+
+@router.callback_query(
+    CreateCharacter.language_select,
+    lambda c: c.data and c.data.startswith("lng_")
+    and c.data not in ("lng_done", "lng_done_disabled")
+)
+async def toggle_language(callback: CallbackQuery, state: FSMContext):
+    lang = callback.data.replace("lng_", "")
+    data = await state.get_data()
+    selected = list(data.get("chosen_languages", []))
+    if lang in selected:
+        selected.remove(lang)
+        await callback.answer(f"➖ {lang}")
+    else:
+        if len(selected) >= MAX_LANGUAGES:
+            await callback.answer(LANGUAGES_LIMIT_TOAST)
+            return
+        selected.append(lang)
+        await callback.answer(LANGUAGES_SELECTED_TOAST.format(language=lang))
+    await state.update_data(chosen_languages=selected)
+    await _rerender_language_step(callback, state)
+
+
+@router.callback_query(
+    CreateCharacter.language_select,
+    lambda c: c.data == "lng_done"
+)
+async def finish_language_step(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    selected = list(data.get("chosen_languages", []))
+    logger.info(f"[FLOW] Выбраны языки: {selected}")
+    await callback.answer(LANGUAGES_DONE.format(languages=", ".join(selected) or "—"))
+    await go_to_name(callback, state)
+
+
+@router.callback_query(
+    CreateCharacter.language_select,
+    lambda c: c.data == "lng_done_disabled"
+)
+async def lng_done_disabled(callback: CallbackQuery, state: FSMContext):
+    await callback.answer(LANGUAGES_LIMIT_TOAST.replace(
+        "Уже выбрано максимальное число",
+        f"Выбери ещё {MAX_LANGUAGES} язык(а/ов)"
+    ))
+
+
+# =============================================================================
+# ЭТАП 3.2: Trinket — нарративная безделушка
+# =============================================================================
+async def start_trinket_step(callback: CallbackQuery, state: FSMContext):
+    """Точка входа в шаг безделушки."""
+    await state.set_state(CreateCharacter.trinket_select)
+    indicator = format_step_indicator(WizardStep.TRINKET)
+    header = f"📍 {indicator}\n\n" if indicator else ""
+    await send_new_from_callback(
+        callback, state,
+        header + TRINKET_STEP_TITLE,
+        reply_markup=create_trinket_keyboard(),
+    )
+
+
+@router.callback_query(
+    CreateCharacter.trinket_select,
+    lambda c: c.data == "trk_roll"
+)
+async def trinket_roll(callback: CallbackQuery, state: FSMContext):
+    from services.auto_choices import roll_trinket
+    trinket = roll_trinket()
+    await state.update_data(trinket=trinket)
+    logger.info(f"[FLOW] Trinket: {trinket}")
+    text = TRINKET_ROLLED_TEMPLATE.format(trinket=trinket)
+    await send_new_from_callback(
+        callback, state, text,
+        reply_markup=create_trinket_rolled_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(
+    CreateCharacter.trinket_select,
+    lambda c: c.data == "trk_skip"
+)
+async def trinket_skip(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(trinket=None)
+    await callback.answer(TRINKET_SKIPPED_TOAST)
+    await _go_to_image_step(callback, state)
+
+
+@router.callback_query(
+    CreateCharacter.trinket_select,
+    lambda c: c.data == "trk_continue"
+)
+async def trinket_continue(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await _go_to_image_step(callback, state)
+

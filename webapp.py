@@ -509,13 +509,8 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         except (TypeError, ValueError):
             inspiration = 0
 
-    # 4 черты личности (2024 PHB).
-    personality = {
-        "trait": char.get("personality_trait") or "",
-        "ideal": char.get("ideal") or "",
-        "bond": char.get("bond") or "",
-        "flaw": char.get("flaw") or "",
-    }
+    # NOTE (этап 1): блок «4 черты личности» удалён по запросу владельца
+    # проекта. Шаблон character_sheet.html больше не отрисовывает этот блок.
 
     # Расовые черты (2024 PHB) — список из репозитория расы.
     race_traits = []
@@ -766,8 +761,7 @@ def get_character_data(char_id: int) -> Dict[str, Any]:
         # ── Inspiration и расовые черты (2024 PHB) ────────────────────────
         "inspiration":             inspiration,
         "race_traits":             race_traits,
-        # ── 4 черты личности (2024 PHB) ───────────────────────────────────
-        "personality":             personality,
+        # NOTE (этап 1): ключ "personality" удалён — блока больше нет в шаблоне.
         # ── Особенности ───────────────────────────────────────────────────
         "order_features":          categorized['order'],
         "pact_features":           categorized['pact'],

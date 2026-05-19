@@ -314,13 +314,15 @@ def init_db():
             add_column_if_missing('warlock_invocation', 'VARCHAR(100)')
             add_column_if_missing('favored_enemy', 'VARCHAR(50)')
 
-            # 4 нарративных поля «Черты личности» (D&D 5.5e 2024).
-            # Генерируются автоматически из таблиц предыстории; игрок может
-            # отредактировать в отдельном инструменте (вне рамок этой версии).
-            add_column_if_missing('personality_trait', 'TEXT')
-            add_column_if_missing('ideal', 'TEXT')
-            add_column_if_missing('bond', 'TEXT')
-            add_column_if_missing('flaw', 'TEXT')
+            # Этап 3.5: Sorcerous Origin для Чародея (PHB 2024).
+            add_column_if_missing('sorcerer_origin', 'VARCHAR(50)')
+            # Этап 3.2: нарративная безделушка персонажа.
+            add_column_if_missing('trinket', 'TEXT')
+
+            # NOTE (этап 1): миграция, добавляющая колонки personality_trait/
+            # ideal/bond/flaw, удалена по запросу владельца проекта. На
+            # существующих базах эти колонки остаются (с данными), но больше
+            # не используются. Скрипт DROP COLUMN — в migrations/0001_drop_personality_columns.sql.
 
             # Inspiration (2024 PHB) — флаг (true/false).
             add_column_if_missing('inspiration', 'BOOLEAN DEFAULT FALSE')

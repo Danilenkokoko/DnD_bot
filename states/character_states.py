@@ -20,6 +20,29 @@ class CreateCharacter(StatesGroup):
     # Шаг 3: Снаряжение класса
     class_equipment_select = State()
 
+    # Шаг 3а (этап 2): назначение характеристик стандартным массивом
+    # [15, 14, 13, 12, 10, 8]. Игрок последовательно назначает каждое
+    # число одной из 6 характеристик; кнопкой «Сбросить» можно начать
+    # заново. Бонусы предыстории прибавляются после на calculate_stats.
+    abilities_assign = State()
+
+    # ── ЭТАП 3: новые состояния PHB 2024 ────────────────────────────
+    # 3.3: показ Origin Feat от предыстории (между bg_select и
+    # bg_equipment_select). Игрок видит описание и принимает черту.
+    origin_feat_show = State()
+
+    # 3.1: общий выбор языков. Открывается после расы/подрасы/драконьего
+    # наследия, перед name_input. Мультиселект из таблицы `languages`.
+    language_select = State()
+
+    # 3.5: Sorcerous Origin для Чародея (PHB 2024 — выбирается на 1 ур).
+    # Показывается из select_class аналогично Жрецу/Друиду/Колдуну.
+    sorcerer_origin_select = State()
+
+    # 3.2: Trinket — нарративная безделушка. Между alignment_select и
+    # image_input. Кнопки Roll и Skip.
+    trinket_select = State()
+
     # Шаг 4-5: Заклинания
     spells_cantrips_category = State()
     spells_cantrips_list = State()
@@ -66,16 +89,3 @@ class CreateCharacter(StatesGroup):
     # ── Дополнительные шаги по правилам D&D 5.5e (2024) ────────────
     # Драконорождённый: выбор типа дракона (10 опций) — пункт #22
     draconic_ancestry_select = State()
-    # Колдун: выбор 1 воззвания на 1 уровне — пункт #26
-    warlock_invocation_select = State()
-    # Следопыт: Избранный враг (Favored Enemy) — пункт #28
-    ranger_favored_enemy_select = State()
-
-    # ── 4 черты личности (D&D 5.5e 2024) — пункт #30 ────────────────
-    # Экран выбора режима: авто / ввести свои / пропустить
-    personality_intro = State()
-    # Последовательный ввод текста для 4 полей
-    personality_trait_input = State()
-    personality_ideal_input = State()
-    personality_bond_input = State()
-    personality_flaw_input = State()

@@ -29,7 +29,8 @@ class CharacterRepository(BaseRepository):
                 languages, selected_tools,
                 selected_secondary_weapon, selected_other_items, coins,
                 draconic_ancestry, warlock_invocation, favored_enemy,
-                personality_trait, ideal, bond, flaw, inspiration,
+                sorcerer_origin, trinket,
+                inspiration,
                 max_hp, current_hp, temp_hp, hit_dice_used, exhaustion, conditions
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
                       %s, %s, %s, %s, %s, %s,
@@ -45,7 +46,8 @@ class CharacterRepository(BaseRepository):
                       %s, %s,
                       %s, %s, %s,
                       %s, %s, %s,
-                      %s, %s, %s, %s, %s,
+                      %s, %s,
+                      %s,
                       %s, %s, %s, %s, %s, %s)
             RETURNING id
         """
@@ -119,10 +121,10 @@ class CharacterRepository(BaseRepository):
             data.get('draconic_ancestry'),
             data.get('warlock_invocation'),
             data.get('favored_enemy'),
-            data.get('personality_trait'),
-            data.get('ideal'),
-            data.get('bond'),
-            data.get('flaw'),
+            # Этап 3.5/3.2: новые PHB 2024 поля.
+            data.get('sorcerer_origin'),
+            data.get('trinket'),
+            # NOTE (этап 1): personality_trait/ideal/bond/flaw удалены.
             bool(data.get('inspiration', False)),
             # PHB 2024 — расширенный HP/state-трекинг.
             data.get('max_hp', data.get('hp', 0)),
@@ -158,7 +160,8 @@ class CharacterRepository(BaseRepository):
                         c.languages, c.selected_tools,
                         c.selected_secondary_weapon, c.selected_other_items, c.coins,
                         c.draconic_ancestry, c.warlock_invocation, c.favored_enemy,
-                        c.personality_trait, c.ideal, c.bond, c.flaw, c.inspiration,
+                        c.sorcerer_origin, c.trinket,
+                        c.inspiration,
                         c.max_hp, c.current_hp, c.temp_hp,
                         c.hit_dice_used, c.exhaustion, c.conditions,
                         r.name as race_name,
@@ -200,7 +203,8 @@ class CharacterRepository(BaseRepository):
                         c.languages, c.selected_tools,
                         c.selected_secondary_weapon, c.selected_other_items, c.coins,
                         c.draconic_ancestry, c.warlock_invocation, c.favored_enemy,
-                        c.personality_trait, c.ideal, c.bond, c.flaw, c.inspiration,
+                        c.sorcerer_origin, c.trinket,
+                        c.inspiration,
                         c.max_hp, c.current_hp, c.temp_hp,
                         c.hit_dice_used, c.exhaustion, c.conditions,
                         r.name as race_name,
@@ -232,7 +236,8 @@ class CharacterRepository(BaseRepository):
             'languages', 'selected_tools',
             'selected_secondary_weapon', 'selected_other_items', 'coins',
             'draconic_ancestry', 'warlock_invocation', 'favored_enemy',
-            'personality_trait', 'ideal', 'bond', 'flaw', 'inspiration',
+            'sorcerer_origin', 'trinket',
+            'inspiration',
             # PHB 2024 — HP/state-трекинг.
             'max_hp', 'current_hp', 'temp_hp', 'hit_dice_used',
             'exhaustion', 'conditions',

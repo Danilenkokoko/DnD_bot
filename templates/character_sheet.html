@@ -1092,36 +1092,8 @@
       </div>
       {% endif %}
 
-      <!-- Черты личности (D&D 5.5e 2024) -->
-      {% if personality and (personality.trait or personality.ideal or personality.bond or personality.flaw) %}
-      <div class="block">
-        <div class="block-title">Черты личности</div>
-        {% if personality.trait %}
-        <div class="sub-section">
-          <div class="sub-title"><i class="fas fa-comment"></i> Черта</div>
-          <p>{{ personality.trait }}</p>
-        </div>
-        {% endif %}
-        {% if personality.ideal %}
-        <div class="sub-section">
-          <div class="sub-title"><i class="fas fa-balance-scale"></i> Идеал</div>
-          <p>{{ personality.ideal }}</p>
-        </div>
-        {% endif %}
-        {% if personality.bond %}
-        <div class="sub-section">
-          <div class="sub-title"><i class="fas fa-link"></i> Привязанность</div>
-          <p>{{ personality.bond }}</p>
-        </div>
-        {% endif %}
-        {% if personality.flaw %}
-        <div class="sub-section">
-          <div class="sub-title"><i class="fas fa-exclamation-triangle"></i> Недостаток</div>
-          <p>{{ personality.flaw }}</p>
-        </div>
-        {% endif %}
-      </div>
-      {% endif %}
+      {# NOTE (этап 1): блок «Черты личности» удалён по запросу владельца проекта.
+         См. docs/migration-notes.md, Этап 1. #}
 
       <!-- История -->
       {% if background_description %}

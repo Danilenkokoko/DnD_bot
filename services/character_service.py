@@ -29,7 +29,6 @@ from dnd_logic import get_class_starting_stats
 from services.auto_choices import (
     get_default_languages_for_background,
     parse_background_tools,
-    generate_personality_traits,
 )
 
 logger = logging.getLogger(__name__)
@@ -495,12 +494,8 @@ class CharacterFinalizationService:
             'draconic_ancestry': state_data.get('draconic_ancestry'),
             'warlock_invocation': state_data.get('warlock_invocation'),
             'favored_enemy': state_data.get('favored_enemy'),
-            # 4 черты личности (D&D 5.5e 2024). Если игрок не ввёл свои —
-            # подставим авто-дефолты (см. ниже после return-словаря).
-            'personality_trait': state_data.get('personality_trait'),
-            'ideal': state_data.get('ideal'),
-            'bond': state_data.get('bond'),
-            'flaw': state_data.get('flaw'),
+            # NOTE (этап 1): черты личности (personality_trait/ideal/bond/flaw)
+            # удалены из flow создания персонажа. См. docs/migration-notes.md.
             'inspiration': bool(state_data.get('inspiration', False)),
             # PHB 2024: новые поля HP/состояния. На L1 max_hp = current_hp = hp,
             # temp_hp/hit_dice_used/exhaustion = 0, conditions — пусто.
@@ -513,23 +508,8 @@ class CharacterFinalizationService:
         }
 
     @staticmethod
-    def _ensure_personality_traits(data: Dict[str, Any]) -> None:
-        """
-        Если хотя бы одна из 4 черт пуста — заполняем все четыре авто-выбором
-        из общего пула. Изменяет data inplace.
-        """
-        keys = ('personality_trait', 'ideal', 'bond', 'flaw')
-        if not all(data.get(k) for k in keys):
-            auto = generate_personality_traits()
-            for k in keys:
-                if not data.get(k):
-                    data[k] = auto[k]
-
-    @staticmethod
     def save_character(character_data: Dict[str, Any]) -> int:
         """Сохраняет персонажа через репозиторий"""
-        # Заполняем 4 черты авто-генерацией, если что-то пустое.
-        CharacterFinalizationService._ensure_personality_traits(character_data)
         repo_data = {
             'user_id': character_data['user_id'],
             'name': character_data['name'],
@@ -582,13 +562,7 @@ class CharacterFinalizationService:
             'draconic_ancestry': character_data.get('draconic_ancestry'),
             'warlock_invocation': character_data.get('warlock_invocation'),
             'favored_enemy': character_data.get('favored_enemy'),
-            # 4 черты личности — пробрасываем как есть; авто-дефолты
-            # уже зашиты в prepare_character_data, поэтому здесь они уже
-            # заполнены строками.
-            'personality_trait': character_data.get('personality_trait'),
-            'ideal': character_data.get('ideal'),
-            'bond': character_data.get('bond'),
-            'flaw': character_data.get('flaw'),
+            # NOTE (этап 1): personality_* поля удалены из flow.
             'inspiration': bool(character_data.get('inspiration', False)),
             # PHB 2024 — расширенный HP/state-трекинг (Stage 5 миграции).
             # Явно прокидываем поля, чтобы не зависеть от fallback в репозитории.

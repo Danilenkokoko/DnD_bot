@@ -113,6 +113,12 @@ def calc_ac(dexterity: int, armor_type: str = "none") -> int:
 # ------------------------------------------------------------
 # 2. Характеристики и бонусы предыстории
 # ------------------------------------------------------------
+@_deprecated(
+    "get_class_starting_stats() устарела (Этап 2). В новом flow характеристики "
+    "назначаются игроком вручную на шаге abilities_assign из стандартного "
+    "массива [15,14,13,12,10,8]. Функция оставлена как fallback для старых "
+    "сессий и обратной совместимости — удалить в Этапе 9 (cleanup)."
+)
 def get_class_starting_stats(class_name: str, variant: Optional[str] = None) -> Dict[str, int]:
     key = f"{class_name}_{variant}" if variant else class_name
     if key in CLASS_STARTING_STATS:

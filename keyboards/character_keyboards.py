@@ -83,6 +83,9 @@ def create_class_equipment_keyboard(class_name: str) -> Optional[InlineKeyboardM
         armor = eq.get('armor', 'нет брони')
         text = BTN_EQUIP_OPTION.format(choice=choice, weapon=weapon, armor=armor)
         buttons.append([InlineKeyboardButton(text=text, callback_data=f"equip_{choice}")])
+    # Этап 3.4: альтернатива — 50 GP вместо набора (PHB 2024).
+    from strings import BTN_EQUIP_GOLD_CLASS
+    buttons.append([InlineKeyboardButton(text=BTN_EQUIP_GOLD_CLASS, callback_data="equip_gold")])
     buttons.append([InlineKeyboardButton(text=BTN_BACK_TO_CLASSES, callback_data="back_to_classes")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -185,9 +188,12 @@ def create_background_equipment_keyboard(background_name: str) -> InlineKeyboard
         return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Ошибка", callback_data="cancel_creation")]])
     equip_a = bg_info.get('equipment_a', 'Нет описания')[:60]
     equip_b = bg_info.get('equipment_b', 'Нет описания')[:60]
+    # Этап 3.4: третий вариант — 50 GP вместо предметного набора.
+    from strings import BTN_EQUIP_GOLD_BG
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"📦 Вариант А: {equip_a}...", callback_data="bg_equip_A")],
         [InlineKeyboardButton(text=f"🎒 Вариант Б: {equip_b}...", callback_data="bg_equip_B")],
+        [InlineKeyboardButton(text=BTN_EQUIP_GOLD_BG, callback_data="bg_equip_gold")],
         [InlineKeyboardButton(text="⬅️ Назад к предыстории", callback_data="back_to_background")]
     ])
 
@@ -346,20 +352,9 @@ def create_tome_picker_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def create_personality_intro_keyboard() -> InlineKeyboardMarkup:
-    """
-    Шаг 4 черт личности (D&D 5.5e 2024). Три варианта:
-    — 🎲 Сгенерировать автоматом (рандом из общего пула)
-    — ✍️ Ввести свои (последовательный ввод 4 текстов)
-    — ⏩ Пропустить (оставить пустыми; при сохранении подставится auto)
-    """
-    buttons = [
-        [InlineKeyboardButton(text="🎲 Сгенерировать автоматом", callback_data="pers_auto")],
-        [InlineKeyboardButton(text="✍️ Ввести свои", callback_data="pers_manual")],
-        [InlineKeyboardButton(text="⏩ Пропустить", callback_data="pers_skip")],
-        [InlineKeyboardButton(text=BTN_CANCEL, callback_data="cancel_creation")],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+# NOTE (этап 9 cleanup): orphan-функция create_personality_intro_keyboard
+# удалена. Она была частью шага «4 черты личности», удалённого в Этапе 1.
+# История кода — в git log <commit-этапа-9>.
 
 
 def create_favored_enemy_keyboard() -> InlineKeyboardMarkup:
@@ -421,3 +416,155 @@ def create_delete_keyboard(characters: List[dict]) -> InlineKeyboardMarkup:
 
 # Алиас для обратной совместимости со старыми импортами
 create_character_list_keyboard = create_character_list_with_webapp_keyboard
+
+
+# =============================================================================
+# ЭТАП 2: Назначение характеристик (стандартный массив 15/14/13/12/10/8)
+# =============================================================================
+# Игрок последовательно назначает 6 значений стандартного массива каждой из
+# 6 характеристик. Текущая характеристика помечается стрелкой; на клавиатуре
+# показываем только свободные числа. Когда все 6 назначены — кнопка
+# «Продолжить» вместо чисел.
+
+# Порядок назначения (последовательный, как в PHB 2024).
+ABILITY_ORDER: List[str] = ["STR", "DEX", "CON", "INT", "WIS", "CHA"]
+
+# Стандартный массив (PHB 2024).
+STANDARD_ARRAY: List[int] = [15, 14, 13, 12, 10, 8]
+
+
+def create_abilities_keyboard(
+    assigned: dict,
+    free_values: List[int],
+    current_ability: Optional[str],
+) -> InlineKeyboardMarkup:
+    """
+    Клавиатура шага назначения характеристик.
+
+    Args:
+        assigned: dict вида {"STR": 15, "DEX": None, ...} — текущее
+                  состояние назначений из state.
+        free_values: список ещё не назначенных чисел из стандартного
+                     массива.
+        current_ability: код характеристики (STR/DEX/...), которой
+                         сейчас назначается значение. None — все назначены.
+
+    Returns:
+        InlineKeyboardMarkup. Callback-формат:
+          "abl_<STAT>_<VALUE>" — назначить значение текущей характеристике
+          "abl_reset"          — сбросить все назначения и начать заново
+          "abl_next"           — перейти к следующему шагу (только когда
+                                  все 6 хар-к назначены)
+          "abilities_back"     — вернуться на выбор набора предыстории
+    """
+    buttons: List[List[InlineKeyboardButton]] = []
+
+    if current_ability is not None and free_values:
+        row: List[InlineKeyboardButton] = []
+        for value in free_values:
+            row.append(InlineKeyboardButton(
+                text=str(value),
+                callback_data=f"abl_{current_ability}_{value}",
+            ))
+            if len(row) == 3:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+    else:
+        buttons.append([InlineKeyboardButton(
+            text="✅ Продолжить",
+            callback_data="abl_next",
+        )])
+
+    bottom_row: List[InlineKeyboardButton] = []
+    if any(v is not None for v in assigned.values()):
+        bottom_row.append(InlineKeyboardButton(
+            text="🔄 Сбросить",
+            callback_data="abl_reset",
+        ))
+    bottom_row.append(InlineKeyboardButton(
+        text="◀️ Назад",
+        callback_data="abilities_back",
+    ))
+    buttons.append(bottom_row)
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# =============================================================================
+# ЭТАП 3: новые клавиатуры PHB 2024
+# =============================================================================
+
+def create_origin_feat_keyboard() -> InlineKeyboardMarkup:
+    """3.3: экран показа Origin Feat — одна кнопка «Принять»."""
+    from strings import BTN_ACCEPT_ORIGIN_FEAT
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=BTN_ACCEPT_ORIGIN_FEAT, callback_data="origin_feat_accept")],
+    ])
+
+
+def create_languages_keyboard(
+    available: List[str],
+    selected: List[str],
+    max_count: int,
+) -> InlineKeyboardMarkup:
+    """3.1: мультиселект языков. Callback: lng_<name>, lng_done."""
+    from strings import BTN_LANGUAGE_READY, BTN_LANGUAGE_READY_DISABLED
+    buttons: List[List[InlineKeyboardButton]] = []
+    for lang in available:
+        mark = "✅" if lang in selected else "🔘"
+        buttons.append([InlineKeyboardButton(
+            text=f"{mark} {lang}",
+            callback_data=f"lng_{lang}",
+        )])
+    if len(selected) == max_count:
+        buttons.append([InlineKeyboardButton(text=BTN_LANGUAGE_READY, callback_data="lng_done")])
+    else:
+        buttons.append([InlineKeyboardButton(
+            text=BTN_LANGUAGE_READY_DISABLED.format(max_count=max_count),
+            callback_data="lng_done_disabled",
+        )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def create_sorcerer_origin_keyboard() -> InlineKeyboardMarkup:
+    """3.5: выбор Sorcerous Origin (4 варианта из PHB 2024)."""
+    from services.auto_choices import SORCERER_ORIGINS
+    buttons: List[List[InlineKeyboardButton]] = []
+    for origin in SORCERER_ORIGINS:
+        buttons.append([InlineKeyboardButton(
+            text=f"✨ {origin['name']}",
+            callback_data=f"sorcorigin_{origin['code']}",
+        )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def create_sorcerer_origin_confirm_keyboard(code: str) -> InlineKeyboardMarkup:
+    """3.5: подтверждение/смена выбранного Sorcerous Origin."""
+    from strings import BTN_SORCERER_ORIGIN_CONFIRM
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=BTN_SORCERER_ORIGIN_CONFIRM,
+                              callback_data=f"sorcorigin_confirm_{code}")],
+        [InlineKeyboardButton(text="◀️ Другое происхождение",
+                              callback_data="sorcorigin_back")],
+    ])
+
+
+def create_trinket_keyboard() -> InlineKeyboardMarkup:
+    """3.2: первичный экран Trinket — кубик или пропуск."""
+    from strings import BTN_TRINKET_ROLL, BTN_TRINKET_SKIP
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=BTN_TRINKET_ROLL, callback_data="trk_roll")],
+        [InlineKeyboardButton(text=BTN_TRINKET_SKIP, callback_data="trk_skip")],
+    ])
+
+
+def create_trinket_rolled_keyboard() -> InlineKeyboardMarkup:
+    """3.2: после броска — кинуть ещё или продолжить."""
+    from strings import BTN_TRINKET_REROLL, BTN_TRINKET_CONTINUE
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=BTN_TRINKET_REROLL, callback_data="trk_roll")],
+        [InlineKeyboardButton(text=BTN_TRINKET_CONTINUE, callback_data="trk_continue")],
+    ])
+
